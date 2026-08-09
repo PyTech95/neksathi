@@ -31,6 +31,12 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 ## Testing
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.
 - iteration_2.json: frontend 100% for the 3 new features (Tags, Cards, Subscriptions dry-run) + regression clean.
+- iteration_3.json: frontend 100% for Live Tracking, Family Invites, Admin Alerts+CSV + regression clean.
+
+## What's been implemented (web) — updated 2026-06 (batch 3)
+- **Live Tracking** `/track/:id`: Leaflet/OSM map with GPS trail, current-speed vs limit stats, "Simulate a drive" (posts pings, triggers overspeed alerts), speed-alert list.
+- **Family Invites**: vehicle detail "Invite family" -> shareable `/invite/:token` link; `/invite/:token` accept page (login-redirect via ?next=); Dashboard "Shared with me" section (GET /shared-vehicles); shared vehicles' alerts fold into /alerts.
+- **Admin Alerts**: filterable feed (type/days/plate) + **CSV export** (auth blob download).
 
 ## What's been implemented (web) — updated 2026-06
 - (all of iteration 1 above) PLUS:
@@ -39,7 +45,13 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - **Subscriptions**: `/subscription` shows seeded Basic (₹99/mo) & Family Pro (₹499/yr) plans with features; Subscribe uses checkout-session → (DRY-RUN) auto-confirm → active banner. Real Stripe key would redirect to hosted checkout.
 - Nav updated: Vehicles / Tags / Cards / Alerts / Plans (+ Admin for admins).
 
-## Backlog / not ported to web (available in original backend, need UI)
+## Backlog / not ported to web
+Original app has ~60 screens; remaining web parity targets:
+- P1: Settings (profile edit, change password, data export, delete account, consent, language/theme), Forgot/Reset password UI.
+- P1: Support (user tickets) + Admin Support tickets; Contact form.
+- P2: Family screen (manage/revoke shares), Nearby help, Analytics dashboard, Onboarding.
+- P2: Admin: Plans CRUD UI, Subscriptions list, Contacts/enquiries, Telco config, Vendors, QR inventory, FAQs; Claim flow (/claim/:serial); Legal (privacy/terms/refund/cookie) + About.
+- Mobile-only (needs Expo job): native camera SOS video, push notifications, accelerometer accident detection, overspeed GPS sensors. (available in original backend, need UI)
 - P1: QR Tags (kids/pets/bags/keys) CRUD + public tag scan page (`/api/tags`, `/api/public/tag/{qr}`).
 - P1: Share Tap digital business cards + vCard (`/api/cards`, `/api/public/card/{qr}/vcf`).
 - P2: Subscriptions/Stripe checkout (DRY-RUN in preview), plans.
