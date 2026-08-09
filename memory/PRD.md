@@ -33,6 +33,17 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - iteration_2.json: frontend 100% for the 3 new features (Tags, Cards, Subscriptions dry-run) + regression clean.
 - iteration_3.json: frontend 100% for Live Tracking, Family Invites, Admin Alerts+CSV + regression clean.
 - iteration_4.json: **Car QR module** — backend 17/17 pytest, frontend 100%, privacy assertions verified (owner phone never exposed on public/call screens).
+- iteration_5.json: **Mobile OTP login** — frontend 100% (6/6), backend OTP verified via curl.
+
+## Mobile OTP login — implemented 2026-06 (batch 5)
+- `/otp-login` 2-step (phone → code). Backend POST /api/auth/otp/request + /api/auth/otp/verify.
+- Twilio Verify when TWILIO_ACCOUNT_SID+TWILIO_AUTH_TOKEN+TWILIO_VERIFY_SERVICE set; else DEV code returned & shown in UI.
+- Auto-creates user by phone (placeholder email {digits}@phone.neksaathi.app). Entry: Login page link + QR claim redirect (/otp-login?next=/claim/:serial).
+
+## GO-LIVE checklist for comms (pending user keys)
+- WhatsApp notify: set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM → notify_whatsapp() auto-goes live.
+- OTP SMS: set TWILIO_VERIFY_SERVICE (+ SID/token) → OTP auto-goes live.
+- Masked call: set TWILIO_ACCOUNT_SID/TOKEN/TWILIO_FROM (Twilio) or EXOTEL_SID/EXOTEL_TOKEN (Exotel) → _telco_provider() switches; note: real IVR/proxy bridge webhook still needs wiring for true two-leg masking.
 
 ## Car QR Code module — implemented 2026-06 (batch 4)
 - **Admin Car-QR** (`/admin/qr`): bulk generate (≤10k), batches, CSV export, printable stickers (`stickers.html`), inventory w/ status filter+search, block/unblock, mark-sold to dealer.
