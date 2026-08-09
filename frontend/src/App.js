@@ -19,6 +19,11 @@ import PublicCard from "@/pages/PublicCard";
 import Subscription from "@/pages/Subscription";
 import Track from "@/pages/Track";
 import Invite from "@/pages/Invite";
+import Claim from "@/pages/Claim";
+import Incidents from "@/pages/Incidents";
+import AdminQR from "@/pages/AdminQR";
+import AdminDealers from "@/pages/AdminDealers";
+import AdminIncidents from "@/pages/AdminIncidents";
 
 function Protected({ children, adminOnly }) {
   const { user, loading } = useAuth();
@@ -43,6 +48,7 @@ function Shell() {
           <Route path="/t/:qrId" element={<PublicTag />} />
           <Route path="/c/:qrId" element={<PublicCard />} />
           <Route path="/invite/:token" element={<Invite />} />
+          <Route path="/claim/:serial" element={<Claim />} />
           <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
           <Route path="/vehicle/:id" element={<Protected><VehicleDetail /></Protected>} />
           <Route path="/track/:id" element={<Protected><Track /></Protected>} />
@@ -52,7 +58,11 @@ function Shell() {
           <Route path="/card/:id" element={<Protected><CardDetail /></Protected>} />
           <Route path="/subscription" element={<Protected><Subscription /></Protected>} />
           <Route path="/alerts" element={<Protected><Alerts /></Protected>} />
+          <Route path="/incidents" element={<Protected><Incidents /></Protected>} />
           <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
+          <Route path="/admin/qr" element={<Protected adminOnly><AdminQR /></Protected>} />
+          <Route path="/admin/dealers" element={<Protected adminOnly><AdminDealers /></Protected>} />
+          <Route path="/admin/incidents" element={<Protected adminOnly><AdminIncidents /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

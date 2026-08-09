@@ -1,0 +1,52 @@
+{
+  "summary": "Full E2E test of the Car QR Code module (admin bulk QR gen/CSV/print/block/mark-sold, dealers, activation/claim + auto-redirect, public scan wrong_parking/accident/theft, cross-context owner respond 'I AM COMING' with 5s polling flip, masked portal call, admin incident dashboard) + light regression. Backend 17/17 pytest PASS. Frontend all critical flows PASS including the PRIVACY assertions (owner phone +919000000001 never appears on any public scan/call screen). Two apparent failures in first Playwright run were test-order artifacts (call-owner-btn hides after owner=coming by design; Admin nav is admin-only) - re-verified in a focused follow-up run: both work correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_car_qr_incidents.py",
+    "/app/test_reports/pytest/car_qr_incidents.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 3,784 lines — the Car-QR + incident subsystem (lines 2411-3635) is cohesive and could be extracted into a dedicated router module (e.g. routers/qr.py, routers/incidents.py) for maintainability; approaching the 700-line-per-module guideline is severely exceeded.",
+    "GET /api/admin/qr/batch/{batch_id}/stickers.html is intentionally public (per code comment) — the random batch_id UUID is the only guard. Acceptable but worth documenting for security review; a stolen batch_id fully enumerates that batch's serial-to-URL mapping.",
+    "PublicScan.jsx: `call_available` on backend is set true for status in ('alert_sent','no_response','call_attempted') OR type in ('accident','theft'). Once owner replies 'coming', the call button vanishes even though the reporter might still want to phone (e.g., if the owner is delayed). Consider keeping the masked-call option available in the 'coming' state too — it's still privacy-safe.",
+    "notify_whatsapp() is MOCK — audit-logged to db.notifications. When live Twilio/Exotel creds are configured, ensure phone numbers are E.164-normalized and rate-limited per-recipient to prevent abuse (someone repeatedly scanning a QR to spam-alert the owner). Current /public/qr/{qr_id}/incident is rate-limited to 20/min per IP only.",
+    "IncidentCreateIn accepts scanner_lat/lng but there is no explicit range validation (-90..90 / -180..180). Minor: add Pydantic Field(ge/le)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_car_qr_incidents.py (new)"
+  ],
+  "success_rate": {"backend": "100% (17/17 pytest)", "frontend": "100% on all requested flows"},
+  "test_credentials": "Admin admin@safeqr.com/admin1234; Owner demo_web@safeqr.com/demo1234",
+  "seed_data_creation": "Created 2 QR batches (5 serials each) via /admin/qr/generate-bulk with labels E2E-*/TEST_*; claimed one serial as vehicle plate E2E2984 (Swift E2E); created 1 dealer (E2E-Dealer-*, contact Rita, +919000000099, Pune); created 5+ incidents (wrong_parking, accident, theft) against qr_id 2f72c63f-… -- some resolved via owner respond+resolve flow.",
+  "verified_endpoints_via_ui_and_pytest": [
+    "POST /api/admin/qr/generate-bulk (200)",
+    "GET /api/admin/qr/batches (200)",
+    "GET /api/admin/qr/inventory + status/batch_id/q filters (200)",
+    "GET /api/admin/qr/batch/{id}/export.csv (200 CSV blob, auth required)",
+    "GET /api/admin/qr/batch/{id}/stickers.html (200 HTML, public)",
+    "POST /api/admin/qr/{serial}/block {blocked:true|false} (200, prev_status round-trip)",
+    "POST /api/admin/qr/mark-sold (200 updated>=1)",
+    "POST /api/admin/vendors + GET /api/admin/vendors + GET /api/admin/vendors/summary (200)",
+    "GET /api/public/claim/{serial} (200 for both pre- and post-assignment)",
+    "POST /api/qr/claim (200 for first claim; 409 on duplicate)",
+    "POST /api/public/qr/{qr_id}/incident wrong_parking/accident/theft (200, 404 on bad qr)",
+    "GET /api/public/incident/{id} (200, status transitions alert_sent → coming → resolved, no owner_phone)",
+    "POST /api/public/incident/{id}/call (200 mock_connected, masked:true, portal_number returned, NO owner phone)",
+    "GET /api/incidents (200 owner visibility scoped by _visible_vehicle_ids)",
+    "POST /api/incidents/{id}/respond {response:coming} (200)",
+    "POST /api/incidents/{id}/resolve (200)",
+    "GET /api/admin/incidents (200 with stats.total/wrong_parking/accident/theft/active/resolved and type/status filters; 403 for non-admin)"
+  ],
+  "privacy_assertions_verified": [
+    "Owner phone +919000000001 does NOT appear in HTML of /scan/<qrId> waiting screen at any lifecycle state",
+    "Owner phone does NOT appear in the call-connecting panel text or dial-portal href (href = tel:+918047180000, the Nek Saathi portal number)",
+    "Public incident poll response contains no owner_phone / owner_number field (verified via pytest introspection of JSON keys)",
+    "Backend stores owner_phone in db.call_records for audit only; masked=true is returned to reporter"
+  ],
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Full lifecycle works end-to-end. Note: call-owner-btn only renders when incident.call_available===true; backend sets that true when status in (alert_sent, no_response, call_attempted) OR type is accident/theft — so click 'call' BEFORE owner responds 'coming' if testing wrong_parking. Cross-context 5s polling on public /scan page reliably flips within ~5-8s after owner clicks coming-<id> on /incidents. To reuse: run `pytest /app/backend/tests/test_car_qr_incidents.py -v` and read /app/frontend/src/pages/PublicScan.jsx around line 176 for the call_available gating.",
+  "rca of the issue": "N/A — no functional bugs found. Two Playwright false-positives in the initial run were resolved by (a) checking call-owner-btn during alert_sent (before owner responds) and (b) recognizing Admin nav is admin-only."
+}

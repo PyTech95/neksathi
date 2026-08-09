@@ -3327,6 +3327,315 @@ async def admin_delete_faq(faq_id: str, _: dict = Depends(require_admin)):
 # App wiring
 # ---------------------------------------------------------------------------
 
+# ===========================================================================
+# CAR-QR INCIDENT SUBSYSTEM  (wrong-parking / accident / theft)
+# Privacy-first: reporters never see owner/family phone numbers. WhatsApp +
+# masked-call run through a MOCK layer that becomes LIVE automatically once
+# telco credentials are present in the environment (see notify_whatsapp /
+# masked_call below). Additive — does not modify existing routes.
+# ===========================================================================
+
+INCIDENT_WINDOW_MIN = 15
+NEK_PORTAL_NUMBER = os.environ.get("NEK_PORTAL_NUMBER", "+91 80 4718 0000")
+
+INCIDENT_TITLES = {
+    "wrong_parking": "🅿️ Wrong parking reported",
+    "accident": "🚨 Accident reported",
+    "theft": "🚨 Theft / suspicious activity",
+}
+
+
+def _whatsapp_live() -> bool:
+    return bool(
+        os.environ.get("TWILIO_WHATSAPP_FROM")
+        and os.environ.get("TWILIO_ACCOUNT_SID")
+        and os.environ.get("TWILIO_AUTH_TOKEN")
+    )
+
+
+async def notify_whatsapp(to: Optional[str], text: str, meta: Optional[dict] = None) -> dict:
+    """Send a WhatsApp message. MOCK unless live Twilio WhatsApp creds exist.
+    Always audit-logs into db.notifications so the flow is testable end-to-end."""
+    if not to:
+        return {"status": "skipped"}
+    live = _whatsapp_live()
+    doc = {
+        "id": new_id(), "channel": "whatsapp", "to": to, "text": text,
+        "status": "sent" if live else "mock", "meta": meta or {}, "created_at": now_utc(),
+    }
+    await db.notifications.insert_one(dict(doc))
+    if live:
+        try:  # pragma: no cover - only runs with real creds
+            from twilio.rest import Client as _TwClient
+            _cli = _TwClient(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
+            _cli.messages.create(
+                from_=f"whatsapp:{os.environ['TWILIO_WHATSAPP_FROM']}",
+                to=f"whatsapp:{to}", body=text,
+            )
+        except Exception as _e:
+            log.warning("whatsapp live send failed: %s", _e)
+    else:
+        log.info("[WHATSAPP MOCK] to=%s :: %s", to, text)
+    return {"status": doc["status"], "id": doc["id"]}
+
+
+async def _incident_recipients(vehicle: dict) -> list[dict]:
+    """Owner + opted-in family contacts (name/phone) for an incident."""
+    out: list[dict] = []
+    owner = await db.users.find_one({"id": vehicle["owner_id"]})
+    if owner and owner.get("phone"):
+        out.append({"name": owner.get("name", "Owner"), "phone": owner["phone"], "role": "owner"})
+    async for c in db.contacts.find({"vehicle_id": vehicle["id"]}):
+        if c.get("phone"):
+            out.append({"name": c.get("name", "Family"), "phone": c["phone"], "role": c.get("relation", "family")})
+    return out
+
+
+def _minutes_left(expires_at: datetime) -> int:
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    delta = (expires_at - now_utc()).total_seconds() / 60
+    return max(0, int(delta + 0.999))
+
+
+def _incident_public(inc: dict) -> dict:
+    """Reporter-facing view — NEVER leaks owner/family numbers."""
+    return {
+        "id": inc["id"],
+        "type": inc["type"],
+        "number_plate": inc["number_plate"],
+        "status": inc["status"],
+        "owner_response": inc.get("owner_response"),
+        "minutes_left": _minutes_left(inc["expires_at"]),
+        "call_available": inc["type"] in ("accident", "theft") or inc["status"] in ("alert_sent", "no_response", "call_attempted"),
+        "portal_number": NEK_PORTAL_NUMBER,
+        "created_at": inc["created_at"],
+    }
+
+
+class IncidentCreateIn(BaseModel):
+    type: Literal["wrong_parking", "accident", "theft"]
+    scanner_note: Optional[str] = Field(default=None, max_length=500)
+    scanner_phone: Optional[str] = Field(default=None, max_length=20)
+    scanner_lat: Optional[float] = None
+    scanner_lng: Optional[float] = None
+
+
+@api.post("/public/qr/{qr_id}/incident")
+@rate_limit("20/minute")
+async def create_incident(request: Request, qr_id: str, payload: IncidentCreateIn):
+    v = await db.vehicles.find_one({"qr_id": qr_id})
+    if not v:
+        raise HTTPException(status_code=404, detail="QR not found or vehicle removed")
+    now = now_utc()
+    inc_id = new_id()
+    incident = {
+        "id": inc_id,
+        "type": payload.type,
+        "qr_id": qr_id,
+        "vehicle_id": v["id"],
+        "number_plate": v["number_plate"],
+        "owner_id": v["owner_id"],
+        "scanner_note": payload.scanner_note,
+        "scanner_phone": payload.scanner_phone,
+        "scanner_lat": payload.scanner_lat,
+        "scanner_lng": payload.scanner_lng,
+        "status": "alert_sent",
+        "owner_response": None,
+        "call_attempted": False,
+        "resolved": False,
+        "created_at": now,
+        "expires_at": now + timedelta(minutes=INCIDENT_WINDOW_MIN),
+    }
+    await db.incidents.insert_one(dict(incident))
+
+    # Mirror into the unified alerts feed so owner /alerts + admin see it.
+    alert_type = "accident_reported" if payload.type == "accident" else payload.type
+    await db.alerts.insert_one({
+        "id": new_id(), "vehicle_id": v["id"], "number_plate": v["number_plate"],
+        "type": alert_type, "scanner_note": payload.scanner_note,
+        "scanner_phone": payload.scanner_phone, "scanner_lat": payload.scanner_lat,
+        "scanner_lng": payload.scanner_lng, "created_at": now,
+        "contact_channels": [], "incident_id": inc_id,
+    })
+
+    # Notify owner + family via WhatsApp (mock-ready) + push.
+    recipients = await _incident_recipients(v)
+    title = INCIDENT_TITLES.get(payload.type, "Vehicle alert")
+    if payload.type == "wrong_parking":
+        body = (f"Your car {v['number_plate']} has been reported for wrong parking. "
+                f"Someone is trying to alert you. Please move within {INCIDENT_WINDOW_MIN} minutes. "
+                f"Open Nek Saathi to respond: 'I am coming'.")
+    elif payload.type == "accident":
+        body = f"An accident involving your car {v['number_plate']} was reported via Nek Saathi. Please respond immediately."
+    else:
+        body = f"Suspicious/theft activity reported on your car {v['number_plate']} via Nek Saathi. Please check immediately."
+    for r in recipients:
+        await notify_whatsapp(r["phone"], body, meta={"incident_id": inc_id, "role": r["role"]})
+    try:
+        await send_push(recipients=[v["owner_id"]], data={"title": title, "message": v["number_plate"], "action_url": "/incidents"}, idempotency_key=inc_id)
+    except Exception as _e:
+        log.warning("push (incident) failed: %s", _e)
+
+    return _incident_public(incident)
+
+
+@api.get("/public/incident/{incident_id}")
+async def public_incident_status(incident_id: str):
+    inc = await db.incidents.find_one({"id": incident_id})
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    # Auto-expire wrong-parking to no_response once the window lapses.
+    if (not inc.get("resolved") and inc["type"] == "wrong_parking"
+            and inc["status"] == "alert_sent" and _minutes_left(inc["expires_at"]) == 0):
+        await db.incidents.update_one({"id": incident_id}, {"$set": {"status": "no_response"}})
+        inc["status"] = "no_response"
+    return _incident_public(inc)
+
+
+class IncidentCallIn(BaseModel):
+    scanner_phone: Optional[str] = Field(default=None, max_length=20)
+
+
+@api.post("/public/incident/{incident_id}/call")
+@rate_limit("10/minute")
+async def public_incident_call(request: Request, incident_id: str, payload: IncidentCallIn):
+    """Privacy-safe masked call. Reporter → NekSathi portal → owner.
+    MOCK unless live telephony creds present. Never returns owner number."""
+    inc = await db.incidents.find_one({"id": incident_id})
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    owner = await db.users.find_one({"id": inc["owner_id"]})
+    owner_phone = owner and owner.get("phone")
+    provider = _telco_provider()
+    live = provider in ("twilio", "exotel")
+    rec = {
+        "id": new_id(), "incident_id": incident_id, "qr_id": inc["qr_id"],
+        "vehicle_id": inc["vehicle_id"], "reporter_phone": payload.scanner_phone,
+        "owner_phone": owner_phone,  # stored for audit only; NOT returned
+        "provider": provider, "portal_number": NEK_PORTAL_NUMBER,
+        "status": "connecting" if live else "mock_connected",
+        "duration_sec": 0, "created_at": now_utc(),
+    }
+    await db.call_records.insert_one(dict(rec))
+    await db.incidents.update_one({"id": incident_id}, {"$set": {"call_attempted": True}})
+    await notify_whatsapp(owner_phone, f"Someone is trying to reach you about your car {inc['number_plate']} via the Nek Saathi portal.", meta={"incident_id": incident_id, "kind": "call"})
+    return {
+        "status": rec["status"],
+        "masked": True,
+        "portal_number": NEK_PORTAL_NUMBER,
+        "note": ("Connecting you to the owner through the Nek Saathi portal — their number stays private."
+                 if not live else "Dial the portal number; our IVR bridges you to the owner privately."),
+        "provider": provider,
+    }
+
+
+# ---- Owner-side incident management ----
+
+@api.get("/incidents")
+async def list_incidents(user: dict = Depends(current_user), status: Optional[str] = None, limit: int = 100):
+    visible = await _visible_vehicle_ids(user["id"])
+    filt: dict = {"vehicle_id": {"$in": visible}} if visible else {"vehicle_id": {"$in": []}}
+    if status:
+        filt["status"] = status
+    out = []
+    async for inc in db.incidents.find(filt).sort("created_at", -1).limit(limit):
+        out.append({
+            "id": inc["id"], "type": inc["type"], "number_plate": inc["number_plate"],
+            "status": inc["status"], "owner_response": inc.get("owner_response"),
+            "scanner_note": inc.get("scanner_note"), "scanner_phone": inc.get("scanner_phone"),
+            "scanner_lat": inc.get("scanner_lat"), "scanner_lng": inc.get("scanner_lng"),
+            "minutes_left": _minutes_left(inc["expires_at"]), "resolved": inc.get("resolved", False),
+            "call_attempted": inc.get("call_attempted", False), "created_at": inc["created_at"],
+        })
+    return {"count": len(out), "results": out}
+
+
+class IncidentRespondIn(BaseModel):
+    response: Literal["coming", "cant"]
+
+
+@api.post("/incidents/{incident_id}/respond")
+async def respond_incident(incident_id: str, payload: IncidentRespondIn, user: dict = Depends(current_user)):
+    inc = await db.incidents.find_one({"id": incident_id})
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    visible = await _visible_vehicle_ids(user["id"])
+    if inc["vehicle_id"] not in visible:
+        raise HTTPException(status_code=403, detail="Not your vehicle")
+    status = "coming" if payload.response == "coming" else "no_response"
+    await db.incidents.update_one(
+        {"id": incident_id},
+        {"$set": {"owner_response": payload.response, "status": status, "acknowledged_at": now_utc()}},
+    )
+    # Notify the reporter (mock WhatsApp) if they left a number.
+    if inc.get("scanner_phone"):
+        msg = ("The vehicle owner has been notified and is coming within 15 minutes. Please wait."
+               if payload.response == "coming"
+               else "The owner is currently unable to respond. You may try the portal call option.")
+        await notify_whatsapp(inc["scanner_phone"], msg, meta={"incident_id": incident_id, "kind": "reporter_update"})
+    return {"ok": True, "status": status}
+
+
+@api.post("/incidents/{incident_id}/resolve")
+async def resolve_incident(incident_id: str, user: dict = Depends(current_user)):
+    inc = await db.incidents.find_one({"id": incident_id})
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    visible = await _visible_vehicle_ids(user["id"])
+    if inc["vehicle_id"] not in visible:
+        raise HTTPException(status_code=403, detail="Not your vehicle")
+    await db.incidents.update_one({"id": incident_id}, {"$set": {"status": "resolved", "resolved": True, "resolved_at": now_utc()}})
+    return {"ok": True, "status": "resolved"}
+
+
+# ---- Admin incident dashboard + block QR ----
+
+@api.get("/admin/incidents")
+async def admin_incidents(_: dict = Depends(require_admin), type: Optional[str] = None, status: Optional[str] = None, days: int = 30, limit: int = 500):
+    filt: dict = {}
+    if type:
+        filt["type"] = type
+    if status:
+        filt["status"] = status
+    if days > 0:
+        filt["created_at"] = {"$gte": now_utc() - timedelta(days=days)}
+    results = []
+    async for inc in db.incidents.find(filt).sort("created_at", -1).limit(limit):
+        results.append({
+            "id": inc["id"], "type": inc["type"], "number_plate": inc["number_plate"],
+            "status": inc["status"], "owner_response": inc.get("owner_response"),
+            "call_attempted": inc.get("call_attempted", False), "resolved": inc.get("resolved", False),
+            "scanner_phone": inc.get("scanner_phone"), "created_at": inc["created_at"],
+        })
+    async def _c(f):
+        return await db.incidents.count_documents(f)
+    stats = {
+        "total": await _c({}),
+        "wrong_parking": await _c({"type": "wrong_parking"}),
+        "accident": await _c({"type": "accident"}),
+        "theft": await _c({"type": "theft"}),
+        "active": await _c({"resolved": False}),
+        "resolved": await _c({"resolved": True}),
+    }
+    return {"count": len(results), "results": results, "stats": stats}
+
+
+@api.post("/admin/qr/{serial_no}/block")
+async def admin_qr_block(serial_no: str, payload: dict, _: dict = Depends(require_admin)):
+    d = await db.qr_inventory.find_one({"serial_no": serial_no})
+    if not d:
+        raise HTTPException(status_code=404, detail="Serial not found")
+    blocked = bool(payload.get("blocked", True))
+    if blocked:
+        await db.qr_inventory.update_one({"serial_no": serial_no}, {"$set": {"prev_status": d["status"], "status": "blocked"}})
+        return {"serial_no": serial_no, "status": "blocked"}
+    restore = d.get("prev_status") or "unclaimed"
+    await db.qr_inventory.update_one({"serial_no": serial_no}, {"$set": {"status": restore}})
+    return {"serial_no": serial_no, "status": restore}
+
+
+
 app.include_router(api)
 app.include_router(push_router, prefix="/api")
 

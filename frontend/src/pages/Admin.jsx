@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter } from "lucide-react";
+import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing } from "lucide-react";
 
 function Stat({ icon, label, value, color }) {
   return (
@@ -58,6 +59,18 @@ export default function Admin() {
       <div className="container-nk">
         <span className="chip">Super admin</span>
         <h1 style={{ fontSize: 34, marginTop: 12, marginBottom: 22 }}>Console <span className="neon">overview</span></h1>
+
+        <div className="grid grid-3" style={{ marginBottom: 26 }}>
+          <Link to="/admin/qr" className="glass glass-hover card-pad" data-testid="link-admin-qr" style={{ textDecoration: "none", color: "inherit" }}>
+            <QrCode size={22} color="#22d3ee" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Car QR management</h3><p className="muted" style={{ fontSize: 13 }}>Generate, distribute, print & block QR stickers</p>
+          </Link>
+          <Link to="/admin/dealers" className="glass glass-hover card-pad" data-testid="link-admin-dealers" style={{ textDecoration: "none", color: "inherit" }}>
+            <Store size={22} color="#8b5cf6" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Dealers</h3><p className="muted" style={{ fontSize: 13 }}>Distributors, orders & outstanding balances</p>
+          </Link>
+          <Link to="/admin/incidents" className="glass glass-hover card-pad" data-testid="link-admin-incidents" style={{ textDecoration: "none", color: "inherit" }}>
+            <BellRing size={22} color="#f5a524" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Incidents</h3><p className="muted" style={{ fontSize: 13 }}>Wrong-parking / accident / theft history</p>
+          </Link>
+        </div>
 
         <div className="grid grid-4" style={{ marginBottom: 16 }}>
           <Stat icon={<Users size={22} />} label="Users" value={stats?.users} color="#22d3ee" />
