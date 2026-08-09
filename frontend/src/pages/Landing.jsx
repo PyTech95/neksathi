@@ -24,12 +24,12 @@ export default function Landing() {
       <section className="container-nk" style={{ padding: "70px 22px 40px" }}>
         <div className="grid grid-2" style={{ alignItems: "center", gap: 40 }}>
           <div className="fade-up">
-            <span className="chip" data-testid="landing-tagline">Har Musibat Mein, Ek Nek Saathi</span>
+            <span className="chip" data-testid="landing-tagline">Har Musibat Mein, Ek Nek Sathi</span>
             <h1 style={{ fontSize: 52, lineHeight: 1.04, margin: "18px 0 16px" }}>
               One QR turns any stranger into a <span className="neon">first-responder</span>.
             </h1>
             <p className="muted" style={{ fontSize: 18, maxWidth: 520, lineHeight: 1.6 }}>
-              Nek Saathi puts a smart safety QR on your vehicle and belongings. Emergency alerts,
+              Nek Sathi puts a smart safety QR on your vehicle and belongings. Emergency alerts,
               accident detection and family tracking — all while your phone number stays private.
             </p>
             <div style={{ display: "flex", gap: 12, marginTop: 28, flexWrap: "wrap" }}>
@@ -95,7 +95,7 @@ export default function Landing() {
           <p className="muted" style={{ fontSize: 17, marginBottom: 26 }}>Create your first QR sticker free. No app install required to scan.</p>
           <Link to="/register" className="btn btn-primary" data-testid="cta-register"><QrCode size={18} /> Get started now</Link>
         </div>
-        <p className="center muted" style={{ marginTop: 40, fontSize: 13 }}>Made with ❤️ in India · Nek Saathi</p>
+        <p className="center muted" style={{ marginTop: 40, fontSize: 13 }}>Made with ❤️ in India · Nek Sathi</p>
       </section>
     </div>
   );

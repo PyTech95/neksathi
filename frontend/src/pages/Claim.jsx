@@ -52,7 +52,7 @@ export default function Claim() {
           {state === "error" && <div className="center" data-testid="claim-error"><h1 style={{ fontSize: 26 }}>QR not found</h1><p className="muted">{err}</p></div>}
 
           {state === "blocked" && (
-            <div className="center" data-testid="claim-blocked"><Ban size={48} color="#ff3b5c" /><h1 style={{ fontSize: 24, marginTop: 12 }}>QR blocked</h1><p className="muted">This QR sticker has been blocked. Contact NekSathi support.</p></div>
+            <div className="center" data-testid="claim-blocked"><Ban size={48} color="#ff3b5c" /><h1 style={{ fontSize: 24, marginTop: 12 }}>QR blocked</h1><p className="muted">This QR sticker has been blocked. Contact Nek Sathi support.</p></div>
           )}
 
           {state === "activate" && (

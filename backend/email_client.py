@@ -34,7 +34,7 @@ def _email_key() -> str:
 
 
 def _from_name() -> str:
-    return os.environ.get("EMAIL_FROM_NAME", "Nek Saathi")
+    return os.environ.get("EMAIL_FROM_NAME", "Nek Sathi")
 
 
 async def send_email(
@@ -99,7 +99,7 @@ def password_reset_html(reset_url: str, expires_minutes: int = 30) -> str:
       </td></tr>
       <tr><td style="padding:16px 32px 8px;">
         <p style="margin:0;color:#A1A1AA;font-size:14px;line-height:1.6;">
-          Someone (hopefully you) asked to reset the password for this Nek Saathi
+          Someone (hopefully you) asked to reset the password for this Nek Sathi
           account. Tap the button below to choose a new password. This link
           expires in <b style="color:#F5F5F7;">{expires_minutes} minutes</b> and
           can only be used once.
@@ -122,7 +122,7 @@ def password_reset_html(reset_url: str, expires_minutes: int = 30) -> str:
           Didn't request this? You can safely ignore this email — your password
           won't change unless you tap the link above.
           <br/><br/>
-          <span style="color:#8B5CF6;font-weight:700;">Har musibat mein, ek Nek Saathi.</span>
+          <span style="color:#8B5CF6;font-weight:700;">Har musibat mein, ek Nek Sathi.</span>
         </p>
       </td></tr>
     </table>

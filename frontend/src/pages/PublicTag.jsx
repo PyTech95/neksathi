@@ -69,7 +69,7 @@ export default function PublicTag() {
           <div className="field"><label>Message / note (optional)</label><textarea className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)} data-testid="tag-note" /></div>
           <div className="field" style={{ marginBottom: 0 }}><label>Your callback number (optional)</label><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="tag-phone" /></div>
         </div>
-        <p className="center muted" style={{ marginTop: 26, fontSize: 12 }}>Powered by Nek Saathi</p>
+        <p className="center muted" style={{ marginTop: 26, fontSize: 12 }}>Powered by Nek Sathi</p>
       </div>
     </div>
   );

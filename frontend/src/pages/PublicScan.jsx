@@ -170,7 +170,7 @@ export default function PublicScan() {
                 <Phone size={40} color="#22d3ee" />
                 <h3 style={{ fontSize: 20, margin: "10px 0 6px" }}>Connecting privately…</h3>
                 <p className="muted" style={{ fontSize: 14 }}>{call.note}</p>
-                <a href={`tel:${(call.portal_number || "").replace(/\s/g, "")}`} className="btn btn-primary" style={{ marginTop: 14 }} data-testid="dial-portal"><Phone size={16} /> Dial NekSathi portal</a>
+                <a href={`tel:${(call.portal_number || "").replace(/\s/g, "")}`} className="btn btn-primary" style={{ marginTop: 14 }} data-testid="dial-portal"><Phone size={16} /> Dial Nek Sathi portal</a>
               </div>
             ) : (
               (incident.status !== "resolved") && (
@@ -179,11 +179,11 @@ export default function PublicScan() {
                 </button>
               )
             )}
-            <p className="center muted" style={{ marginTop: 18, fontSize: 12 }}>Your call is routed through NekSathi — the owner's number is never shown.</p>
+            <p className="center muted" style={{ marginTop: 18, fontSize: 12 }}>Your call is routed through Nek Sathi — the owner's number is never shown.</p>
           </div>
         )}
 
-        <p className="center muted" style={{ marginTop: 26, fontSize: 12 }}>Powered by Nek Saathi · No owner personal data is exposed.</p>
+        <p className="center muted" style={{ marginTop: 26, fontSize: 12 }}>Powered by Nek Sathi · No owner personal data is exposed.</p>
       </div>
     </div>
   );

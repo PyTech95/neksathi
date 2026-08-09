@@ -1,9 +1,9 @@
-"""Printable sticker HTML generator for Nek Saathi bulk QR inventory.
+"""Printable sticker HTML generator for Nek Sathi bulk QR inventory.
 
 Emits a single HTML page containing 1 or many stickers laid out in a
 CSS grid, ready to print (browser's Print → Save as PDF or send to a
 printing shop). Each sticker mimics the CallOwner reference layout but
-with Nek Saathi's purple/cyan neon glassmorphism theme.
+with Nek Sathi's purple/cyan neon glassmorphism theme.
 
 Public surface: ``build_sticker_html(items, variant)`` → HTML string.
 """
@@ -83,8 +83,8 @@ def _sticker_html(serial: str, url: str, palette: dict[str, str]) -> str:
           PHONE NUMBER HIDDEN
         </div>
         <div class="footer">
-          <span class="brand">Nek Saathi</span>
-          <span class="tag">Har musibat mein, ek Nek Saathi</span>
+          <span class="brand">Nek Sathi</span>
+          <span class="tag">Har musibat mein, ek Nek Sathi</span>
         </div>
       </div>
     </div>
@@ -106,7 +106,7 @@ def build_sticker_html(
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Nek Saathi · Sticker Sheet</title>
+<title>Nek Sathi · Sticker Sheet</title>
 <style>
   @page {{ size: A4; margin: 8mm; }}
   * {{ box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
@@ -211,7 +211,7 @@ def build_sticker_html(
 </head>
 <body>
   <div class="toolbar">
-    <h1>Nek Saathi · Printable Sticker Sheet · variant: {variant}</h1>
+    <h1>Nek Sathi · Printable Sticker Sheet · variant: {variant}</h1>
     <button onclick="window.print()">🖨 Print / Save PDF</button>
   </div>
   <div class="sheet">

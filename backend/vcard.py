@@ -114,7 +114,7 @@ def _photo_data_uri(photo_base64: str) -> str:
 
 
 def build_vcard4(c: dict[str, Any]) -> str:
-    """Emit an RFC 6350 vCard 4.0 for a Nek Saathi Share Tap card.
+    """Emit an RFC 6350 vCard 4.0 for a Nek Sathi Share Tap card.
 
     ``c`` is the raw Mongo document (or the CardOut model dumped to dict).
     """
@@ -189,7 +189,7 @@ def build_vcard4(c: dict[str, Any]) -> str:
         lines.append(f"UID:urn:neksaathi:card:{uid}")
     lines.append("REV:" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
     # Client identifier — RFC 6350 §6.9.2. Nice-to-have; helps devs debug.
-    lines.append("PRODID:-//Nek Saathi//ShareTap 1.0//EN")
+    lines.append("PRODID:-//Nek Sathi//ShareTap 1.0//EN")
 
     lines.append("END:VCARD")
 

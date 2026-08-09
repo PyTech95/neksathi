@@ -90,7 +90,7 @@ export default function PublicCard() {
             </form>
           )}
         </div>
-        <p className="center muted" style={{ marginTop: 22, fontSize: 12 }}>Powered by Nek Saathi · Share Tap</p>
+        <p className="center muted" style={{ marginTop: 22, fontSize: 12 }}>Powered by Nek Sathi · Share Tap</p>
       </div>
     </div>
   );

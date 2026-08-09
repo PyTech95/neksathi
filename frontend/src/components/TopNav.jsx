@@ -12,7 +12,7 @@ export default function TopNav() {
     <nav className="topnav" data-testid="top-nav">
       <Link to="/" className="brand" data-testid="brand-link">
         <span className="brand-badge"><QrCode size={20} /></span>
-        Nek<span className="neon">Saathi</span>
+        Nek<span className="neon">&nbsp;Sathi</span>
       </Link>
       <div className="nav-links">
         {user ? (

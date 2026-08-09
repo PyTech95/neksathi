@@ -1,4 +1,4 @@
-"""Nek Saathi – FastAPI backend.
+"""Nek Sathi – FastAPI backend.
 
 All routes are prefixed with /api. Uses MongoDB via Motor. UUID-based IDs so JSON
 serialization never touches Mongo ObjectIds. Auth is email+password with bcrypt +
@@ -55,7 +55,7 @@ if STRIPE_API_KEY:
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 
-app = FastAPI(title="Nek Saathi API")
+app = FastAPI(title="Nek Sathi API")
 api = APIRouter(prefix="/api")
 bearer = HTTPBearer(auto_error=False)
 
@@ -465,7 +465,7 @@ def to_user_out(u: dict) -> UserOut:
 
 @api.get("/")
 async def root():
-    return {"service": "Nek Saathi API", "status": "ok"}
+    return {"service": "Nek Sathi API", "status": "ok"}
 
 
 @api.post("/auth/register", response_model=TokenOut)
@@ -551,7 +551,7 @@ async def export_my_data(user: dict = Depends(current_user)):
     location_pings = await _all(db.locations, {"vehicle_id": {"$in": vehicle_ids}}) if vehicle_ids else []
     return {
         "generated_at": now_utc().isoformat(),
-        "notice": "This bundle contains every document Nek Saathi holds about your account.",
+        "notice": "This bundle contains every document Nek Sathi holds about your account.",
         "user": clean(user),
         "vehicles": vehicles,
         "tags": tags,
@@ -744,7 +744,7 @@ async def forgot_password(request: Request, payload: ForgotPasswordIn):
     try:
         message_id = await send_email(
             to=email,
-            subject="Reset your Nek Saathi password",
+            subject="Reset your Nek Sathi password",
             html=password_reset_html(reset_url, expires_minutes=30),
         )
         email_sent = message_id is not None
@@ -1012,7 +1012,7 @@ async def record_accident(vehicle_id: str, payload: AccidentIn, user: dict = Dep
         "contact_channels": [],
     }
     await db.alerts.insert_one(dict(alert))
-    # Push notify owner + family Nek Saathi accounts on unresolved accident.
+    # Push notify owner + family Nek Sathi accounts on unresolved accident.
     if not payload.resolved:
         try:
             recipients: set[str] = {user["id"]}
@@ -1185,7 +1185,7 @@ async def upload_user_sos_video(payload: UserSOSVideoIn, user: dict = Depends(cu
 
     # Fan-out push to the user themselves (so their other devices see it)
     # and to family contacts of any of their vehicles that have a linked
-    # Nek Saathi account (by phone match). Best-effort — never blocks.
+    # Nek Sathi account (by phone match). Best-effort — never blocks.
     try:
         recipients: set[str] = {user["id"]}
         my_vehicle_ids = [v["id"] async for v in db.vehicles.find({"owner_id": user["id"]}, {"id": 1})]
@@ -1871,7 +1871,7 @@ async def public_card_vcf(qr_id: str, dl: bool = False):
     """RFC 6350 (vCard 4.0) download endpoint for Share Tap cards.
 
     Content-Type of ``text/vcard`` causes iOS/Android to automatically hand
-    off to the Contacts app when opened from a browser — no Nek Saathi
+    off to the Contacts app when opened from a browser — no Nek Sathi
     install required for the scanner.
 
     Query params:
@@ -1939,7 +1939,7 @@ async def public_card_message(request: Request, qr_id: str, payload: CardMessage
 
 
 # ---------------------------------------------------------------------------
-# Unified QR resolver — the app hits this after scanning any Nek Saathi QR
+# Unified QR resolver — the app hits this after scanning any Nek Sathi QR
 # to figure out whether it's a vehicle, tag or card, and then routes the
 # user to the right screen.
 # ---------------------------------------------------------------------------
@@ -2104,13 +2104,13 @@ async def public_bridge(request: Request, qr_id: str, payload: BridgeReqIn):
         return BridgeOut(
             kind="twilio",
             dial_url=f"tel:{os.environ.get('TWILIO_FROM')}",
-            masked_from="Nek Saathi bridge",
+            masked_from="Nek Sathi bridge",
             masked_to=label,
             expires_at=expires,
             note="Dial the number, our IVR routes you to the owner without revealing their real number.",
         )
     # WhatsApp deep-link fallback — safest zero-config bridge.
-    text = f"Hi, I scanned your Nek Saathi QR ({label}). Session {session_id[:8]}."
+    text = f"Hi, I scanned your Nek Sathi QR ({label}). Session {session_id[:8]}."
     dial = f"https://wa.me/{owner_phone.replace('+', '').replace(' ', '')}?text={quote_plus(text)}"
     return BridgeOut(
         kind="whatsapp",
@@ -3465,11 +3465,11 @@ async def create_incident(request: Request, qr_id: str, payload: IncidentCreateI
     if payload.type == "wrong_parking":
         body = (f"Your car {v['number_plate']} has been reported for wrong parking. "
                 f"Someone is trying to alert you. Please move within {INCIDENT_WINDOW_MIN} minutes. "
-                f"Open Nek Saathi to respond: 'I am coming'.")
+                f"Open Nek Sathi to respond: 'I am coming'.")
     elif payload.type == "accident":
-        body = f"An accident involving your car {v['number_plate']} was reported via Nek Saathi. Please respond immediately."
+        body = f"An accident involving your car {v['number_plate']} was reported via Nek Sathi. Please respond immediately."
     else:
-        body = f"Suspicious/theft activity reported on your car {v['number_plate']} via Nek Saathi. Please check immediately."
+        body = f"Suspicious/theft activity reported on your car {v['number_plate']} via Nek Sathi. Please check immediately."
     for r in recipients:
         await notify_whatsapp(r["phone"], body, meta={"incident_id": inc_id, "role": r["role"]})
     try:
@@ -3500,7 +3500,7 @@ class IncidentCallIn(BaseModel):
 @api.post("/public/incident/{incident_id}/call")
 @rate_limit("10/minute")
 async def public_incident_call(request: Request, incident_id: str, payload: IncidentCallIn):
-    """Privacy-safe masked call. Reporter → NekSathi portal → owner.
+    """Privacy-safe masked call. Reporter → Nek Sathi portal → owner.
     MOCK unless live telephony creds present. Never returns owner number."""
     inc = await db.incidents.find_one({"id": incident_id})
     if not inc:
@@ -3519,12 +3519,12 @@ async def public_incident_call(request: Request, incident_id: str, payload: Inci
     }
     await db.call_records.insert_one(dict(rec))
     await db.incidents.update_one({"id": incident_id}, {"$set": {"call_attempted": True}})
-    await notify_whatsapp(owner_phone, f"Someone is trying to reach you about your car {inc['number_plate']} via the Nek Saathi portal.", meta={"incident_id": incident_id, "kind": "call"})
+    await notify_whatsapp(owner_phone, f"Someone is trying to reach you about your car {inc['number_plate']} via the Nek Sathi portal.", meta={"incident_id": incident_id, "kind": "call"})
     return {
         "status": rec["status"],
         "masked": True,
         "portal_number": NEK_PORTAL_NUMBER,
-        "note": ("Connecting you to the owner through the Nek Saathi portal — their number stays private."
+        "note": ("Connecting you to the owner through the Nek Sathi portal — their number stays private."
                  if not live else "Dial the portal number; our IVR bridges you to the owner privately."),
         "provider": provider,
     }
@@ -3723,7 +3723,7 @@ async def otp_verify(request: Request, payload: OtpVerifyIn):
         user = {
             "id": new_id(),
             "email": f"{digits}@phone.neksaathi.app",
-            "name": (payload.name or "NekSathi User").strip(),
+            "name": (payload.name or "Nek Sathi User").strip(),
             "phone": phone, "password_hash": "", "is_admin": False,
             "suspended": False, "auth": "otp", "created_at": now_utc(),
         }
@@ -3789,7 +3789,7 @@ async def _startup():
 
     # Seed default FAQs (idempotent)
     default_faqs = [
-        {"question": "Nek Saathi sticker kya hai?", "answer": "Har vehicle par ek unique QR sticker lagta hai. Koi bhi is QR ko scan karke Emergency ya Wrong Parking alert bhej sakta hai — bina aapke phone number reveal kiye.", "category": "basics", "order": 1},
+        {"question": "Nek Sathi sticker kya hai?", "answer": "Har vehicle par ek unique QR sticker lagta hai. Koi bhi is QR ko scan karke Emergency ya Wrong Parking alert bhej sakta hai — bina aapke phone number reveal kiye.", "category": "basics", "order": 1},
         {"question": "Kaise kaam karta hai emergency alert?", "answer": "Kisi ne QR scan kiya → 'EMERGENCY' button dabaya → aapke aur family ke phone par WhatsApp/SMS deep-link chala jayega jisme vehicle number aur location details hongi.", "category": "basics", "order": 2},
         {"question": "Kya mera phone number scanner ko dikhega?", "answer": "Nahi. Public scan page par sirf vehicle info aur pehla naam hi dikhta hai. Number kabhi expose nahi hota.", "category": "privacy", "order": 3},
         {"question": "Kitne family contacts add kar sakta hoon?", "answer": "Har vehicle ke liye maximum 4 emergency contacts add kar sakte hain. Har contact ke liye alag toggles hote hain (emergency, wrong parking, speed alert).", "category": "features", "order": 4},
@@ -3798,7 +3798,7 @@ async def _startup():
         {"question": "Refund policy kya hai?", "answer": "First 7 days ke andar full refund. Uske baad pro-rated basis par unused months ka refund. Details Refund Policy page par.", "category": "plans", "order": 7},
         {"question": "Sticker kaise milega?", "answer": "Registration ke baad app se aap khud printable QR download kar sakte hain, ya premium plan me hum ready-made weatherproof sticker ghar bhej dete hain.", "category": "basics", "order": 8},
     ]
-    # Nek Saathi rebrand — purge any orphan FAQ rows whose question still
+    # Nek Sathi rebrand — purge any orphan FAQ rows whose question still
     # references the old brand name so the public /api/faqs endpoint stays clean.
     await db.faqs.delete_many({"question": {"$regex": "SafeQR", "$options": "i"}})
 
@@ -3861,7 +3861,7 @@ async def _startup():
         await db.users.insert_one({
             "id": new_id(),
             "email": admin_email,
-            "name": "Nek Saathi Admin",
+            "name": "Nek Sathi Admin",
             "phone": "+910000000000",
             "password_hash": hash_password(admin_password),
             "is_admin": True,
@@ -3875,7 +3875,7 @@ async def _startup():
             await db.users.update_one({"email": admin_email}, {"$set": {"is_admin": True}})
             log.info("Promoted existing user %s to admin", admin_email)
     await _seed_blackspots()
-    log.info("Nek Saathi indexes ensured")
+    log.info("Nek Sathi indexes ensured")
 
 
 @app.on_event("shutdown")
