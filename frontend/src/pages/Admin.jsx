@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox, Mail } from "lucide-react";
+import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox, Mail, Building2 } from "lucide-react";
 
 function Badge({ n }) {
   if (!n) return null;
@@ -84,6 +84,9 @@ export default function Admin() {
           </Link>
           <Link to="/admin/contacts" className="glass glass-hover card-pad" data-testid="link-admin-contacts" style={{ textDecoration: "none", color: "inherit" }}>
             <Mail size={22} color="#f5a524" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Contact enquiries<Badge n={inbox.new_enquiries} /></h3><p className="muted" style={{ fontSize: 13 }}>Messages from the public contact form</p>
+          </Link>
+          <Link to="/admin/orgs" className="glass glass-hover card-pad" data-testid="link-admin-orgs" style={{ textDecoration: "none", color: "inherit" }}>
+            <Building2 size={22} color="#a78bfa" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Organizations</h3><p className="muted" style={{ fontSize: 13 }}>Schools / hospitals / offices & their tag orders</p>
           </Link>
         </div>
 

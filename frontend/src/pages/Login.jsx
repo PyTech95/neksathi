@@ -19,7 +19,7 @@ export default function Login() {
     setBusy(true);
     try {
       const u = await login(email.trim(), password);
-      nav(next || (u?.is_dealer ? "/dealer" : "/dashboard"));
+      nav(next || (u?.is_dealer ? "/dealer" : u?.is_org ? "/org" : "/dashboard"));
     } catch (e) {
       setErr(e?.response?.data?.detail || "Login failed");
     } finally {

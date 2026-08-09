@@ -11,7 +11,8 @@ export default function AdminQR() {
   const [inv, setInv] = useState([]);
   const [statusF, setStatusF] = useState("");
   const [q, setQ] = useState("");
-  const [gen, setGen] = useState({ count: 100, batch_label: "", product_type: "", org_name: "" });
+  const [gen, setGen] = useState({ count: 100, batch_label: "", product_type: "", org_name: "", org_id: "" });
+  const [orgs, setOrgs] = useState([]);
   const [genBusy, setGenBusy] = useState(false);
   const [genResult, setGenResult] = useState(null);
   const [sold, setSold] = useState({ serial_from: "", serial_to: "", vendor_name: "" });
@@ -26,12 +27,12 @@ export default function AdminQR() {
     setInv((await api.get(`/admin/qr/inventory?${p.toString()}`)).data.items);
   }, [statusF, q]);
 
-  useEffect(() => { loadBatches(); loadInv(); }, [loadBatches, loadInv]);
+  useEffect(() => { loadBatches(); loadInv(); api.get("/admin/orgs").then((r) => setOrgs(r.data.results)).catch(() => {}); }, [loadBatches, loadInv]);
 
   const generate = async (e) => {
     e.preventDefault(); setGenBusy(true); setGenResult(null);
     try {
-      const r = await api.post("/admin/qr/generate-bulk", { count: Number(gen.count), batch_label: gen.batch_label || null, product_type: gen.product_type || null, org_name: gen.org_name || null });
+      const r = await api.post("/admin/qr/generate-bulk", { count: Number(gen.count), batch_label: gen.batch_label || null, product_type: gen.product_type || null, org_name: gen.org_name || null, org_id: gen.org_id || null });
       setGenResult(r.data); loadBatches(); loadInv();
     } finally { setGenBusy(false); }
   };
@@ -76,7 +77,15 @@ export default function AdminQR() {
                 </select>
               </div>
               {gen.product_type === "tag" && (
-                <div className="field"><label>Organization (optional)</label><input className="input" value={gen.org_name} onChange={(e) => setGen({ ...gen, org_name: e.target.value })} data-testid="gen-org-name" placeholder="e.g. Delhi Public School" /></div>
+                <>
+                  <div className="field"><label>Assign to organization (optional)</label>
+                    <select className="input" value={gen.org_id} onChange={(e) => setGen({ ...gen, org_id: e.target.value })} data-testid="gen-org-select">
+                      <option value="">— None (free-text below) —</option>
+                      {orgs.map((o) => <option key={o.id} value={o.id}>{o.name} ({o.org_type})</option>)}
+                    </select>
+                  </div>
+                  {!gen.org_id && <div className="field"><label>Organization name (free text)</label><input className="input" value={gen.org_name} onChange={(e) => setGen({ ...gen, org_name: e.target.value })} data-testid="gen-org-name" placeholder="e.g. Delhi Public School" /></div>}
+                </>
               )}
               <button className="btn btn-primary btn-block" disabled={genBusy} data-testid="gen-submit">{genBusy ? <><Loader2 size={16} className="spin" /> Generating…</> : <><Plus size={16} /> Generate</>}</button>
             </form>

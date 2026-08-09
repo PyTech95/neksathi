@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 11 — verified batch 15 (Organization portal + Tag editing + Emergency SMS fallback + Solutions dropdown) end-to-end. Backend pytest 8/8 PASS covering: seed org login (school@nek.dev) → /org/me returns 'Sunrise School' with counts + Riya (4B) listed in /org/tags; require_org gates /org/me from a non-org account (403); admin POST /admin/orgs + POST /admin/orgs/{id}/account creates a fresh org login (is_org=true, org_id stamped, password_hash never leaked); admin POST /admin/qr/generate-bulk with product_type=tag + org_id stamps org_id onto inventory; owner /qr/claim tag branch copies org_id onto the created tag → surfaces in /org/tags and increments org counts; PUT /tags/{id} persists new name/guardian_name/guardian_phone/blood_group and GET returns them; /public/tag/{qr} never leaks guardian_phone; login responses for admin/owner/school never contain password_hash. Frontend Playwright PASS: (a) Solutions dropdown (guest): nav-solutions-btn hover reveals nav-sol-schools/hospitals/offices → each navigates to /for/schools|hospitals|offices. (b) school@nek.dev/school1234 → redirect /org, org-dashboard visible, org-stat-issued=2, org-stat-activated=1, org-stat-unclaimed=1, org-tags-table shows Riya (4B), org-tab-alerts clickable. (c) Access control: org account visiting /dashboard → redirected /org; owner (demo_web) visiting /org → redirected /dashboard. (d) Tag edit: /tags → open Riya (4B) → edit-tag-btn opens tag-edit-modal with edit-tag-name/guardian-name/guardian-phone/blood + save-tag-edit; changed name to 'Riya UI-Edited' and detail page reflected it; reverted to 'Riya (4B)' for cleanup. Emergency SMS fallback: send_sms helper wired into public_tag_alert path for emergency types — in mock/trial mode WhatsApp returns 'mock' so SMS is not fired (expected per spec, not flagged).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_org_and_tag_edit.py",
+    "/app/test_reports/pytest/iter11.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py L4087 require_org correctly gates on is_org AND org_id — no way to bypass with a stale flag.",
+    "server.py L4131-L4139 admin_create_org_account uses hash_password (same bcrypt path as normal register) — reuses /auth/login, no new auth surface. Correctly patches organizations doc with account_email + has_login=True.",
+    "server.py L2732 /qr/claim tag branch copies org_id from inventory doc onto the tag — verified via /org/tags surfacing the newly claimed test tag.",
+    "server.py L1691-L1709 PUT /tags/{id} is owner-scoped (find_one uses owner_id) — safe. Persists all editable fields.",
+    "server.py L4155-L4162 /org/tags DOES NOT return guardian_phone in the org listing (only guardian_name) — good privacy hygiene for B2B portal.",
+    "TopNav.jsx L71-L79 Solutions dropdown uses onMouseEnter/onMouseLeave + click toggle — both work; hover-only nav is acceptable for desktop but could be a mobile UX gap (not tested at mobile viewport).",
+    "server.py is now ~4.3k lines — carry-over recommendation to split into routers still stands."
+  ],
+  "updated_files": ["/app/backend/tests/test_org_and_tag_edit.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (all flows PASS)"},
+  "test_credentials": "admin@safeqr.com/admin1234, demo_web@safeqr.com/demo1234, school@nek.dev/school1234",
+  "seed_data_creation": "Pytest created 1 TEST_Org_<hex> organization + org login (test_org_<hex>@nek.dev), 1 tag batch of 2 serials, 1 activated TEST_Kid_<hex> tag (deleted at end of test). The new org + its unclaimed serial + org login user remain in DB — harmless. UI test edited 'Riya (4B)' name in-place and reverted; no residual UI-created data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "New selectors verified: nav-solutions-btn (guest desktop nav, hover to reveal), nav-sol-schools/hospitals/offices, org-dashboard, org-stat-issued, org-stat-activated, org-stat-unclaimed, org-tags-table, org-tab-alerts, edit-tag-btn, tag-edit-modal, edit-tag-name, edit-tag-guardian-name, edit-tag-guardian-phone, edit-tag-blood, tag-photo-btn, save-tag-edit, open-tag-<name>, gen-org-select (on /admin/qr when product_type=tag), link-admin-orgs, add-org-btn, org-name-input, org-type-input, submit-org, org-login-btn-<id>, org-acct-email, org-acct-password, submit-org-account. Backend endpoints: POST /admin/orgs, GET /admin/orgs, POST /admin/orgs/{id}/account, GET /org/{me,tags,inventory,alerts}, POST /admin/qr/generate-bulk (NOT bulk-generate). /qr/claim payload wraps fields inside 'payload' key with product_type. Twilio/WhatsApp/SMS all mocked — do not assert real delivery.",
+  "rca_of_the_issue": "N/A — no defects. Batch 15 features work as specified. Emergency SMS fallback is coded but not exercised in mock mode by design (WhatsApp returns 'mock' → considered success, no fallback fires); this matches the spec note."
+}

@@ -210,6 +210,8 @@ class UserOut(BaseModel):
     is_admin: bool = False
     is_dealer: bool = False
     vendor_id: Optional[str] = None
+    is_org: bool = False
+    org_id: Optional[str] = None
     suspended: bool = False
     notify_prefs: NotifyPrefs = NotifyPrefs()
     avatar_base64: Optional[str] = None
@@ -483,6 +485,8 @@ def to_user_out(u: dict) -> UserOut:
         is_admin=bool(u.get("is_admin", False)),
         is_dealer=bool(u.get("is_dealer", False)),
         vendor_id=u.get("vendor_id"),
+        is_org=bool(u.get("is_org", False)),
+        org_id=u.get("org_id"),
         suspended=bool(u.get("suspended", False)),
         notify_prefs=NotifyPrefs(**{**NotifyPrefs().model_dump(), **(u.get("notify_prefs") or {})}),
         avatar_base64=u.get("avatar_base64"),
@@ -1798,9 +1802,13 @@ async def public_tag_alert(request: Request, qr_id: str, payload: TagAlertIn):
         body += f" Live location: https://maps.google.com/?q={payload.scanner_lat},{payload.scanner_lng}"
     if emergency or prefs.get("whatsapp"):
         if owner and owner.get("phone"):
-            await notify_whatsapp(owner["phone"], body, meta={"tag_id": t["id"], "role": "owner", "emergency": emergency})
+            wa = await notify_whatsapp(owner["phone"], body, meta={"tag_id": t["id"], "role": "owner", "emergency": emergency})
+            if emergency and wa.get("status") == "failed":
+                await send_sms(owner["phone"], body, meta={"tag_id": t["id"], "role": "owner", "kind": "emergency_fallback"})
         if t.get("guardian_phone"):
-            await notify_whatsapp(t["guardian_phone"], body, meta={"tag_id": t["id"], "role": "guardian", "emergency": emergency})
+            wa = await notify_whatsapp(t["guardian_phone"], body, meta={"tag_id": t["id"], "role": "guardian", "emergency": emergency})
+            if emergency and wa.get("status") == "failed":
+                await send_sms(t["guardian_phone"], body, meta={"tag_id": t["id"], "role": "guardian", "kind": "emergency_fallback"})
     # Push notify owner of tag alert (doorbell / lost pet / lost luggage /
     # child-safety live GPS request).
     try:
@@ -2529,6 +2537,7 @@ class BulkGenerateIn(BaseModel):
     notes: Optional[str] = None
     product_type: Optional[Literal["vehicle", "tag", "card"]] = None
     org_name: Optional[str] = Field(default=None, max_length=120)
+    org_id: Optional[str] = None
 
 
 class ClaimIn(BaseModel):
@@ -2541,6 +2550,12 @@ class ClaimIn(BaseModel):
 async def admin_qr_bulk_generate(body: BulkGenerateIn, admin: dict = Depends(require_admin)):
     batch_id = new_id()
     batch_label = body.batch_label or f"Batch-{now_utc().strftime('%y%m%d-%H%M')}"
+    org_id, org_name = body.org_id, body.org_name
+    if org_id:
+        org = await db.organizations.find_one({"id": org_id})
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        org_name = org["name"]
     last = await db.qr_inventory.find_one(sort=[("seq", -1)])
     start_seq = (last["seq"] + 1) if last else 1
     docs = []
@@ -2550,7 +2565,7 @@ async def admin_qr_bulk_generate(body: BulkGenerateIn, admin: dict = Depends(req
             "id": new_id(), "seq": seq, "serial_no": _next_serial(seq),
             "qr_id": new_id(), "status": "unclaimed",
             "batch_id": batch_id, "batch_label": batch_label, "notes": body.notes,
-            "intended_type": body.product_type, "org_name": (body.org_name or None),
+            "intended_type": body.product_type, "org_name": (org_name or None), "org_id": org_id,
             "assigned_to_user_id": None, "product_type": None, "assigned_at": None,
             "sold_to_vendor": None, "sold_at": None,
             "created_at": now_utc(), "created_by": admin["id"],
@@ -2714,6 +2729,7 @@ async def qr_claim(body: ClaimIn, user: dict = Depends(current_user)):
             "reward_text": p.get("reward_text"),
             "guardian_name": (p.get("guardian_name") or "").strip() or None,
             "guardian_phone": (p.get("guardian_phone") or "").strip() or None,
+            "org_id": d.get("org_id"),
             "lost_mode": bool(p.get("lost_mode", False)),
             "metadata": p.get("metadata", {}), "created_at": now,
         })
@@ -3533,6 +3549,32 @@ async def notify_whatsapp(to: Optional[str], text: str, meta: Optional[dict] = N
     return {"status": doc["status"], "id": doc["id"]}
 
 
+async def send_sms(to: Optional[str], text: str, meta: Optional[dict] = None) -> dict:
+    """Send an SMS. MOCK unless live Twilio SMS creds (TWILIO_FROM) exist.
+    Used as a fallback channel so emergency alerts never get missed."""
+    if not to:
+        return {"status": "skipped"}
+    live = bool(os.environ.get("TWILIO_ACCOUNT_SID") and os.environ.get("TWILIO_AUTH_TOKEN") and os.environ.get("TWILIO_FROM"))
+    doc = {
+        "id": new_id(), "channel": "sms", "to": to, "text": text,
+        "status": "mock", "meta": meta or {}, "created_at": now_utc(),
+    }
+    if live:
+        try:  # pragma: no cover - only runs with real creds
+            from twilio.rest import Client as _TwClient
+            _cli = _TwClient(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
+            _cli.messages.create(from_=os.environ["TWILIO_FROM"], to=to, body=text)
+            doc["status"] = "sent"
+        except Exception as _e:
+            doc["status"] = "failed"
+            doc["error"] = str(_e)[:200]
+            log.warning("sms live send failed: %s", _e)
+    else:
+        log.info("[SMS MOCK] to=%s :: %s", to, text)
+    await db.notifications.insert_one(dict(doc))
+    return {"status": doc["status"], "id": doc["id"]}
+
+
 async def _incident_recipients(vehicle: dict) -> list[dict]:
     """Owner + opted-in family contacts (name/phone) for an incident."""
     out: list[dict] = []
@@ -4027,6 +4069,122 @@ async def dealer_inventory(user: dict = Depends(require_dealer), status: Optiona
         items.append({"id": d["id"], "serial_no": d["serial_no"], "status": d["status"], "sold_at": d.get("sold_at")})
     return {"count": len(items), "items": items}
 
+
+
+# ===========================================================================
+# Organizations (schools / hospitals / offices) — B2B tag customers.
+# Admin creates an org + a login; the org signs in via /auth/login and sees
+# ONLY the tags issued from their own QR batches (scoped by org_id).
+# ===========================================================================
+
+class OrgIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    org_type: Literal["school", "hospital", "office", "other"] = "school"
+    city: Optional[str] = Field(default=None, max_length=80)
+    phone: Optional[str] = Field(default=None, max_length=20)
+
+
+async def require_org(user: dict = Depends(current_user)) -> dict:
+    if not user.get("is_org") or not user.get("org_id"):
+        raise HTTPException(status_code=403, detail="Organization access only")
+    return user
+
+
+async def _org_counts(org_id: str) -> dict:
+    inv = db.qr_inventory
+    issued = await inv.count_documents({"org_id": org_id})
+    activated = await inv.count_documents({"org_id": org_id, "status": "assigned"})
+    unclaimed = await inv.count_documents({"org_id": org_id, "status": {"$in": ["unclaimed", "sold"]}})
+    return {"issued": issued, "activated": activated, "unclaimed": unclaimed}
+
+
+@api.post("/admin/orgs")
+async def admin_create_org(body: OrgIn, _: dict = Depends(require_admin)):
+    doc = {"id": new_id(), **body.model_dump(), "account_email": None, "has_login": False, "created_at": now_utc()}
+    await db.organizations.insert_one(dict(doc))
+    return clean(doc)
+
+
+@api.get("/admin/orgs")
+async def admin_list_orgs(_: dict = Depends(require_admin)):
+    out = []
+    async for o in db.organizations.find({}).sort("created_at", -1):
+        c = await _org_counts(o["id"])
+        out.append({**clean(o), "counts": c})
+    return {"count": len(out), "results": out}
+
+
+class OrgAccountIn(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=6, max_length=128)
+    name: Optional[str] = Field(default=None, max_length=80)
+
+
+@api.post("/admin/orgs/{org_id}/account", response_model=UserOut)
+async def admin_create_org_account(org_id: str, payload: OrgAccountIn, _: dict = Depends(require_admin)):
+    org = await db.organizations.find_one({"id": org_id})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    email = payload.email.lower().strip()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="Email already in use")
+    user = {
+        "id": new_id(), "email": email,
+        "name": (payload.name or org.get("name") or "Organization").strip(),
+        "phone": org.get("phone") or "-", "password_hash": hash_password(payload.password),
+        "is_admin": False, "is_dealer": False, "is_org": True, "org_id": org_id,
+        "suspended": False, "created_at": now_utc(),
+    }
+    await db.users.insert_one(dict(user))
+    await db.organizations.update_one({"id": org_id}, {"$set": {"account_email": email, "has_login": True}})
+    return to_user_out(user)
+
+
+@api.get("/org/me")
+async def org_me(user: dict = Depends(require_org)):
+    org = await db.organizations.find_one({"id": user["org_id"]})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return {"org": clean(org), "counts": await _org_counts(org["id"])}
+
+
+@api.get("/org/tags")
+async def org_tags(user: dict = Depends(require_org), limit: int = 500):
+    """Activated tags issued from this org's batches (owner PII masked)."""
+    out = []
+    async for t in db.tags.find({"org_id": user["org_id"]}).sort("created_at", -1).limit(limit):
+        out.append({
+            "id": t["id"], "name": t.get("name"), "tag_type": t.get("tag_type"),
+            "guardian_name": t.get("guardian_name"), "blood_group": t.get("blood_group"),
+            "lost_mode": bool(t.get("lost_mode")), "qr_id": t.get("qr_id"),
+            "created_at": t.get("created_at"),
+        })
+    return {"count": len(out), "results": out}
+
+
+@api.get("/org/inventory")
+async def org_inventory(user: dict = Depends(require_org), limit: int = 500):
+    """Unclaimed serials still to be handed out for this org."""
+    out = []
+    async for d in db.qr_inventory.find({"org_id": user["org_id"], "status": {"$in": ["unclaimed", "sold"]}}).sort("serial_no", 1).limit(limit):
+        out.append({"serial_no": d["serial_no"], "status": d["status"]})
+    return {"count": len(out), "results": out}
+
+
+@api.get("/org/alerts")
+async def org_alerts(user: dict = Depends(require_org), limit: int = 100):
+    """Recent scan alerts across this org's tags."""
+    tag_ids = [t["id"] async for t in db.tags.find({"org_id": user["org_id"]}, {"id": 1})]
+    if not tag_ids:
+        return {"count": 0, "results": []}
+    out = []
+    async for a in db.alerts.find({"tag_id": {"$in": tag_ids}}).sort("created_at", -1).limit(limit):
+        out.append({
+            "id": a["id"], "tag_id": a.get("tag_id"), "type": a.get("type"),
+            "note": a.get("scanner_note"), "created_at": a.get("created_at"),
+            "lat": a.get("scanner_lat"), "lng": a.get("scanner_lng"),
+        })
+    return {"count": len(out), "results": out}
 
 
 app.include_router(api)

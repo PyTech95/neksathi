@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { QrCode, LogOut } from "lucide-react";
+import { QrCode, LogOut, ChevronDown, School, HeartPulse, Briefcase } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
@@ -10,6 +10,7 @@ export default function TopNav() {
   const nav = useNavigate();
   const isActive = (p) => loc.pathname === p;
   const [inboxTotal, setInboxTotal] = useState(0);
+  const [solOpen, setSolOpen] = useState(false);
 
   useEffect(() => {
     if (user?.is_admin) {
@@ -26,7 +27,14 @@ export default function TopNav() {
         Nek<span className="neon">&nbsp;Sathi</span>
       </Link>
       <div className="nav-links">
-        {user && user.is_dealer ? (
+        {user && user.is_org ? (
+          <>
+            <Link to="/org" className="nav-link active" data-testid="nav-org">Organization portal</Link>
+            <button className="btn btn-ghost btn-sm" data-testid="logout-btn" onClick={() => { logout(); nav("/"); }}>
+              <LogOut size={15} /> Logout
+            </button>
+          </>
+        ) : user && user.is_dealer ? (
           <>
             <Link to="/dealer" className="nav-link active" data-testid="nav-dealer">Dealer portal</Link>
             <button className="btn btn-ghost btn-sm" data-testid="logout-btn" onClick={() => { logout(); nav("/"); }}>
@@ -60,6 +68,18 @@ export default function TopNav() {
           </>
         ) : (
           <>
+            <div style={{ position: "relative" }} onMouseEnter={() => setSolOpen(true)} onMouseLeave={() => setSolOpen(false)} data-testid="nav-solutions">
+              <button className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer" }} onClick={() => setSolOpen((s) => !s)} data-testid="nav-solutions-btn">
+                Solutions <ChevronDown size={14} />
+              </button>
+              {solOpen && (
+                <div className="glass" style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 240, padding: 8, zIndex: 80, borderRadius: 14 }}>
+                  <Link to="/for/schools" className="nav-link" data-testid="nav-sol-schools" style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 10 }} onClick={() => setSolOpen(false)}><School size={16} /> For Schools</Link>
+                  <Link to="/for/hospitals" className="nav-link" data-testid="nav-sol-hospitals" style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 10 }} onClick={() => setSolOpen(false)}><HeartPulse size={16} /> For Hospitals</Link>
+                  <Link to="/for/offices" className="nav-link" data-testid="nav-sol-offices" style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 10 }} onClick={() => setSolOpen(false)}><Briefcase size={16} /> For Offices</Link>
+                </div>
+              )}
+            </div>
             <Link to="/login" className="nav-link" data-testid="nav-login">Login</Link>
             <Link to="/register" className="btn btn-primary btn-sm" data-testid="nav-register">Get Started</Link>
           </>

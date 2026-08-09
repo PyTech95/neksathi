@@ -33,14 +33,18 @@ import Contact from "@/pages/Contact";
 import AdminContacts from "@/pages/AdminContacts";
 import Settings from "@/pages/Settings";
 import PersonaLanding from "@/pages/PersonaLanding";
+import OrgDashboard from "@/pages/OrgDashboard";
+import AdminOrgs from "@/pages/AdminOrgs";
 
-function Protected({ children, adminOnly, dealerOnly }) {
+function Protected({ children, adminOnly, dealerOnly, orgOnly }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="spinner" data-testid="auth-loading" />;
   if (!user) return <Navigate to="/login" replace />;
   if (adminOnly && !user.is_admin) return <Navigate to="/dashboard" replace />;
   if (dealerOnly && !user.is_dealer) return <Navigate to="/dashboard" replace />;
+  if (orgOnly && !user.is_org) return <Navigate to="/dashboard" replace />;
   if (user.is_dealer && !dealerOnly) return <Navigate to="/dealer" replace />;
+  if (user.is_org && !orgOnly) return <Navigate to="/org" replace />;
   return children;
 }
 
@@ -65,6 +69,7 @@ function Shell() {
           <Route path="/claim/:serial" element={<Claim />} />
           <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
           <Route path="/dealer" element={<Protected dealerOnly><DealerDashboard /></Protected>} />
+          <Route path="/org" element={<Protected orgOnly><OrgDashboard /></Protected>} />
           <Route path="/vehicle/:id" element={<Protected><VehicleDetail /></Protected>} />
           <Route path="/track/:id" element={<Protected><Track /></Protected>} />
           <Route path="/tags" element={<Protected><Tags /></Protected>} />
@@ -83,6 +88,7 @@ function Shell() {
           <Route path="/admin/plans" element={<Protected adminOnly><AdminPlans /></Protected>} />
           <Route path="/admin/support" element={<Protected adminOnly><AdminSupport /></Protected>} />
           <Route path="/admin/contacts" element={<Protected adminOnly><AdminContacts /></Protected>} />
+          <Route path="/admin/orgs" element={<Protected adminOnly><AdminOrgs /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
