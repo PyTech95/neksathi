@@ -212,6 +212,7 @@ class UserOut(BaseModel):
     vendor_id: Optional[str] = None
     suspended: bool = False
     notify_prefs: NotifyPrefs = NotifyPrefs()
+    avatar_base64: Optional[str] = None
 
 
 class TokenOut(BaseModel):
@@ -342,6 +343,7 @@ class ProfileUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=80)
     phone: Optional[str] = Field(default=None, min_length=6, max_length=20)
     notify_prefs: Optional[NotifyPrefs] = None
+    avatar_base64: Optional[str] = Field(default=None, max_length=1_500_000)
 
 
 class ChangePasswordIn(BaseModel):
@@ -474,6 +476,7 @@ def to_user_out(u: dict) -> UserOut:
         vendor_id=u.get("vendor_id"),
         suspended=bool(u.get("suspended", False)),
         notify_prefs=NotifyPrefs(**{**NotifyPrefs().model_dump(), **(u.get("notify_prefs") or {})}),
+        avatar_base64=u.get("avatar_base64"),
     )
 
 
@@ -707,6 +710,8 @@ async def update_me(payload: ProfileUpdate, user: dict = Depends(current_user)):
         update["phone"] = payload.phone.strip()
     if payload.notify_prefs is not None:
         update["notify_prefs"] = payload.notify_prefs.model_dump()
+    if payload.avatar_base64 is not None:
+        update["avatar_base64"] = payload.avatar_base64 or None
     if update:
         await db.users.update_one({"id": user["id"]}, {"$set": update})
         user.update(update)

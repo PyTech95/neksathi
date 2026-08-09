@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { IdCard, Plus, Trash2, ChevronRight, X } from "lucide-react";
 
 export const ACCENTS = {
@@ -12,6 +13,7 @@ export const ACCENTS = {
 const SOCIAL_KEYS = ["twitter", "linkedin", "instagram", "github", "whatsapp"];
 
 export default function Cards() {
+  const { user } = useAuth();
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [show, setShow] = useState(false);
@@ -26,7 +28,7 @@ export default function Cards() {
     e.preventDefault(); setErr(""); setBusy(true);
     try {
       const socials = Object.fromEntries(Object.entries(form.socials).filter(([, v]) => v));
-      await api.post("/cards", { ...form, socials });
+      await api.post("/cards", { ...form, socials, photo_base64: form.photo_base64 || user?.avatar_base64 || null });
       setShow(false);
       setForm({ display_name: "", title: "", company: "", bio: "", phone: "", email: "", website: "", address: "", accent: "neon", socials: {} });
       load();
@@ -81,6 +83,7 @@ export default function Cards() {
             </div>
             <form onSubmit={add}>
               <div className="field"><label>Display name</label><input className="input" value={form.display_name} onChange={set("display_name")} required data-testid="card-name" placeholder="Aarav Sharma" /></div>
+              {user?.avatar_base64 && <p className="muted" style={{ fontSize: 12, marginTop: -6, marginBottom: 12 }} data-testid="card-avatar-note">Your profile photo will appear on this card.</p>}
               <div className="grid grid-2">
                 <div className="field"><label>Title</label><input className="input" value={form.title} onChange={set("title")} data-testid="card-title" placeholder="Founder" /></div>
                 <div className="field"><label>Company</label><input className="input" value={form.company} onChange={set("company")} data-testid="card-company" placeholder="Nek Labs" /></div>

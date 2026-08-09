@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound } from "lucide-react";
+import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2 } from "lucide-react";
 
 const DEFAULT_PREFS = { whatsapp: true, email: true, push: true, incident_alerts: true, speed_alerts: true, marketing: false };
 
@@ -28,10 +28,12 @@ export default function Settings() {
   const { user, setUser } = useAuth();
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "");
+  const [avatar, setAvatar] = useState(user?.avatar_base64 || "");
   const [prefs, setPrefs] = useState({ ...DEFAULT_PREFS, ...(user?.notify_prefs || {}) });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [err, setErr] = useState("");
+  const fileRef = useRef(null);
 
   const [pwd, setPwd] = useState({ old_password: "", new_password: "" });
   const [pwdBusy, setPwdBusy] = useState(false);
@@ -40,10 +42,32 @@ export default function Settings() {
 
   const togglePref = (k) => setPrefs((p) => ({ ...p, [k]: !p[k] }));
 
+  const pickAvatar = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErr("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 256;
+        const canvas = document.createElement("canvas");
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        setAvatar(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const save = async (e) => {
     e.preventDefault(); setBusy(true); setNotice(""); setErr("");
     try {
-      const r = await api.put("/auth/me", { name: name.trim(), phone: phone.trim(), notify_prefs: prefs });
+      const r = await api.put("/auth/me", { name: name.trim(), phone: phone.trim(), notify_prefs: prefs, avatar_base64: avatar || "" });
       setUser(r.data);
       setNotice("Profile updated.");
     } catch (e) { setErr(e?.response?.data?.detail || "Could not save your changes."); }
@@ -68,6 +92,17 @@ export default function Settings() {
 
         <form onSubmit={save} className="glass card-pad" style={{ padding: 26, marginBottom: 18 }}>
           <h2 style={{ fontSize: 20, marginBottom: 14 }}>Your details</h2>
+          <div style={{ display: "flex", gap: 18, alignItems: "center", marginBottom: 18 }}>
+            <div data-testid="avatar-preview" style={{ width: 84, height: 84, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#22d3ee)", display: "grid", placeItems: "center", overflow: "hidden", fontFamily: "Chakra Petch", fontSize: 34, fontWeight: 700, flexShrink: 0, border: "2px solid rgba(255,255,255,.15)" }}>
+              {avatar ? <img src={avatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (name?.[0] || user?.name?.[0] || "?")}
+            </div>
+            <div>
+              <input ref={fileRef} type="file" accept="image/*" onChange={pickAvatar} style={{ display: "none" }} data-testid="avatar-input" />
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileRef.current?.click()} data-testid="upload-avatar-btn"><Camera size={15} /> {avatar ? "Change photo" : "Add photo"}</button>
+              {avatar && <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={() => setAvatar("")} data-testid="remove-avatar-btn"><Trash2 size={14} color="#ff3b5c" /> Remove</button>}
+              <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Shown on your account and used on your Share-Tap cards.</p>
+            </div>
+          </div>
           <div className="grid grid-2">
             <div className="field"><label>Full name</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} data-testid="settings-name" /></div>
             <div className="field"><label>Phone</label><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} required data-testid="settings-phone" placeholder="+91 …" /></div>

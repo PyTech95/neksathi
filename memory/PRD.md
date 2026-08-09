@@ -52,6 +52,11 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - Backend: added `NotifyPrefs` model, extended `UserOut` + `to_user_out` + `ProfileUpdate`, and `PUT /auth/me` now persists `notify_prefs`. Reused existing `POST /auth/change-password`. AuthContext user refreshed after save.
 - Verified via curl (GET defaults → PUT name/phone/prefs → GET persists) and screenshot (page renders, toggles reflect saved state, nav link present). Demo user restored to clean defaults.
 
+## Profile photo / avatar — 2026-06 (batch 12, this fork)
+- Owners can now add an avatar in Settings: file picker → client-side downscale to 256px JPEG → stored as `avatar_base64` on the user (backend: added to UserOut/ProfileUpdate/update_me, ~1.5MB cap). Preview circle + Change/Remove buttons.
+- Avatar shows in the top nav next to "Settings" (nav-avatar), and new Share-Tap cards default their photo to the owner's avatar so public shared cards feel personal (PublicCard already renders photo_base64).
+- Verified via curl (avatar persists on /auth/me; card create stores photo) and screenshot (Settings avatar UI + nav avatar). Test data cleaned; demo user reset.
+
 ## Testing
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.
