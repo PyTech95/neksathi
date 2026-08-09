@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend E2E testing of 3 new features (Live Tracking, Family Invites, Admin Alerts + CSV) plus light regression. All flows PASS end-to-end against the public preview URL.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Track.jsx: draw() reads mapObj.current inside a useEffect that depends on `track`, but the map-init effect uses [] deps — first draw is triggered inside then() which is fine, but if track updates before Leaflet resolves, no early re-draw is scheduled. Currently benign but could be tightened by triggering draw() when mapObj becomes ready.",
+    "Admin.jsx exportCSV: uses window URL.createObjectURL and does not call a.remove() nor append to DOM; works in Chromium but for Safari append/remove is safer.",
+    "Invite.jsx: on logged-out click of accept-invite-btn the redirect target is /login?next=/invite/<token>; verify Login.jsx honours the `next` query param (not directly tested here — optional per request)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100%"},
+  "test_credentials": "Owner demo_web@safeqr.com/demo1234; Admin admin@safeqr.com/admin1234; new user registered inline (relative_<rand>@safeqr.com/demo1234).",
+  "seed_data_creation": "Registered ephemeral relative_<rand>@safeqr.com; accepted invite for one shared vehicle. Simulated 8 GPS pings on vehicle PQRA265 (id c3c56df0-...), producing 2 overspeed alerts.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Test flow that works: (1) login demo_web -> dashboard, wait for a[href^='/vehicle/'] before clicking; (2) invite-family-btn shows invite-url-box with data-testid=invite-url; (3) live-tracking-link -> /track/:id; simulate posts 8 sequential requests — WAIT AT LEAST 12-15s after clicking simulate-drive-btn (10s was insufficient in first attempt because 8 sequential axios calls + reload took ~11s). Expect GPS pings=8, speed_alerts=2, current speed=40. (4) Register new user (register-name/email/phone/password testids, then register-submit) auto-logs-in and redirects to /dashboard. (5) Visit invite URL, click accept-invite-btn -> invite-accepted; then /dashboard shows shared-section with shared-card-<plate>. (6) Admin: /admin has admin-alerts-section; alert-type-filter select_option reloads; export-csv-btn triggers download of neksaathi-alerts-<days>d.csv.",
+  "verified_endpoints_via_ui": [
+    "POST /api/auth/login (200) owner + admin",
+    "POST /api/auth/register (200)",
+    "GET /api/vehicles (200)",
+    "GET /api/vehicles/:id (200)",
+    "GET /api/vehicles/:id/track?limit=100 (200)",
+    "POST /api/vehicles/:id/location (200) x8",
+    "GET /api/alerts (200)",
+    "POST /api/vehicles/:id/invites (200)",
+    "GET /api/invites/:token (200)",
+    "POST /api/invites/:token/accept (200)",
+    "GET /api/shared-vehicles (200)",
+    "GET /api/admin/alerts?type&days&q (200)",
+    "GET /api/admin/alerts/export (200, CSV blob)"
+  ],
+  "rca of the issue": "N/A — no functional issues. Note: intermittent flakiness only if simulate reload race is not awaited long enough."
+}

@@ -17,6 +17,8 @@ import Cards from "@/pages/Cards";
 import CardDetail from "@/pages/CardDetail";
 import PublicCard from "@/pages/PublicCard";
 import Subscription from "@/pages/Subscription";
+import Track from "@/pages/Track";
+import Invite from "@/pages/Invite";
 
 function Protected({ children, adminOnly }) {
   const { user, loading } = useAuth();
@@ -40,8 +42,10 @@ function Shell() {
           <Route path="/scan/:qrId" element={<PublicScan />} />
           <Route path="/t/:qrId" element={<PublicTag />} />
           <Route path="/c/:qrId" element={<PublicCard />} />
+          <Route path="/invite/:token" element={<Invite />} />
           <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
           <Route path="/vehicle/:id" element={<Protected><VehicleDetail /></Protected>} />
+          <Route path="/track/:id" element={<Protected><Track /></Protected>} />
           <Route path="/tags" element={<Protected><Tags /></Protected>} />
           <Route path="/tag/:id" element={<Protected><TagDetail /></Protected>} />
           <Route path="/cards" element={<Protected><Cards /></Protected>} />

@@ -9,6 +9,7 @@ const VEHICLE_TYPES = ["car", "bike", "tractor", "commercial", "other"];
 export default function Dashboard() {
   const { user } = useAuth();
   const [vehicles, setVehicles] = useState([]);
+  const [shared, setShared] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ number_plate: "", vehicle_type: "car", make_model: "", color: "", speed_limit_kmh: 80 });
@@ -18,8 +19,9 @@ export default function Dashboard() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await api.get("/vehicles");
-      setVehicles(r.data);
+      const [rv, rs] = await Promise.all([api.get("/vehicles"), api.get("/shared-vehicles")]);
+      setVehicles(rv.data);
+      setShared(rs.data);
     } finally {
       setLoading(false);
     }
@@ -91,6 +93,23 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {shared.length > 0 && (
+          <div style={{ marginTop: 40 }} data-testid="shared-section">
+            <h2 style={{ fontSize: 24, marginBottom: 4 }}>Shared <span className="neon">with me</span></h2>
+            <p className="muted" style={{ marginBottom: 16 }}>Vehicles family members invited you to follow.</p>
+            <div className="grid grid-3">
+              {shared.map((v) => (
+                <div key={v.id} className="glass card-pad" data-testid={`shared-card-${v.number_plate}`}>
+                  <div className="brand-badge" style={{ borderRadius: 12 }}><Car size={18} /></div>
+                  <h3 style={{ fontSize: 22, margin: "14px 0 4px" }}>{v.number_plate}</h3>
+                  <p className="muted" style={{ fontSize: 14, textTransform: "capitalize" }}>{v.vehicle_type}{v.make_model ? ` · ${v.make_model}` : ""}</p>
+                  <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>Owner: {v.owner_name || "—"} · role {v.role}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

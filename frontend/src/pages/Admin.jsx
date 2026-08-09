@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2 } from "lucide-react";
+import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter } from "lucide-react";
 
 function Stat({ icon, label, value, color }) {
   return (
@@ -16,11 +16,37 @@ export default function Admin() {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [q, setQ] = useState("");
+  const [alerts, setAlerts] = useState([]);
+  const [aType, setAType] = useState("");
+  const [aDays, setADays] = useState(30);
+  const [aq, setAq] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   const loadStats = async () => setStats((await api.get("/admin/stats")).data);
   const loadUsers = async (query = "") => setUsers((await api.get(`/admin/users${query ? `?q=${encodeURIComponent(query)}` : ""}`)).data.results);
+  const loadAlerts = async (type = aType, days = aDays, query = aq) => {
+    const params = new URLSearchParams();
+    if (type) params.set("type", type);
+    params.set("days", days);
+    if (query) params.set("q", query);
+    setAlerts((await api.get(`/admin/alerts?${params.toString()}`)).data.results);
+  };
 
-  useEffect(() => { loadStats(); loadUsers(); }, []);
+  useEffect(() => { loadStats(); loadUsers(); loadAlerts(); }, []);
+
+  const exportCSV = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (aType) params.set("type", aType);
+      params.set("days", aDays);
+      const res = await api.get(`/admin/alerts/export?${params.toString()}`, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "text/csv" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = `neksaathi-alerts-${aDays}d.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } finally { setExporting(false); }
+  };
 
   const toggleSuspend = async (u) => {
     await api.post(`/admin/users/${u.id}/suspend`, { suspended: !u.suspended });
@@ -78,6 +104,56 @@ export default function Admin() {
                         </button>
                       )}
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="glass card-pad" style={{ padding: 24, marginTop: 18 }} data-testid="admin-alerts-section">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+            <h2 style={{ fontSize: 22 }}><Bell size={18} style={{ verticalAlign: "-3px" }} /> Alerts</h2>
+            <button className="btn btn-primary btn-sm" onClick={exportCSV} disabled={exporting} data-testid="export-csv-btn"><Download size={15} /> {exporting ? "Exporting…" : "Export CSV"}</button>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+            <Filter size={16} className="muted" />
+            <select className="input" style={{ maxWidth: 180 }} value={aType} onChange={(e) => { setAType(e.target.value); loadAlerts(e.target.value, aDays, aq); }} data-testid="alert-type-filter">
+              <option value="">All types</option>
+              <option value="emergency">Emergency</option>
+              <option value="wrong_parking">Wrong parking</option>
+              <option value="theft">Theft</option>
+              <option value="fire">Fire</option>
+              <option value="towing">Towing</option>
+              <option value="speed_alert">Overspeed</option>
+              <option value="accident">Accident</option>
+              <option value="sos_video">SOS video</option>
+              <option value="found">Tag found</option>
+              <option value="card_message">Card message</option>
+            </select>
+            <select className="input" style={{ maxWidth: 140 }} value={aDays} onChange={(e) => { setADays(Number(e.target.value)); loadAlerts(aType, Number(e.target.value), aq); }} data-testid="alert-days-filter">
+              <option value={1}>Last 24h</option>
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+              <option value={0}>All time</option>
+            </select>
+            <input className="input" style={{ maxWidth: 200 }} placeholder="Search plate" value={aq} onChange={(e) => { setAq(e.target.value); loadAlerts(aType, aDays, e.target.value); }} data-testid="alert-plate-filter" />
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+              <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}>
+                <th style={th}>Plate</th><th style={th}>Type</th><th style={th}>Note</th><th style={th}>When</th><th style={th}>Notified</th>
+              </tr></thead>
+              <tbody>
+                {alerts.length === 0 && <tr><td style={td} colSpan={5}><span className="muted">No alerts for this filter.</span></td></tr>}
+                {alerts.map((a) => (
+                  <tr key={a.id} data-testid={`admin-alert-${a.id}`} style={{ borderTop: "1px solid rgba(124,58,237,.12)" }}>
+                    <td style={td}>{a.number_plate}</td>
+                    <td style={td}><span className="chip" style={{ padding: "2px 8px", fontSize: 11 }}>{a.type}</span></td>
+                    <td style={td} className="muted">{a.scanner_note || "—"}</td>
+                    <td style={td} className="muted">{new Date(a.created_at).toLocaleString()}</td>
+                    <td style={td}>{a.contact_channels_count}</td>
                   </tr>
                 ))}
               </tbody>

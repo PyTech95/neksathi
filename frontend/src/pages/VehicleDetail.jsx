@@ -44,6 +44,20 @@ export default function VehicleDetail() {
     setV(r.data);
   };
 
+  const createInvite = async () => {
+    setInviteBusy(true);
+    try {
+      const r = await api.post(`/vehicles/${id}/invites`);
+      setInviteUrl(r.data.join_url);
+    } finally { setInviteBusy(false); }
+  };
+
+  const copyInvite = () => {
+    navigator.clipboard.writeText(inviteUrl);
+    setInviteCopied(true);
+    setTimeout(() => setInviteCopied(false), 1600);
+  };
+
   const addContact = async (e) => {
     e.preventDefault();
     setCErr("");
@@ -99,6 +113,21 @@ export default function VehicleDetail() {
             <button className={`btn btn-block ${v.lost_mode ? "btn-danger" : "btn-ghost"}`} style={{ marginTop: 10 }} onClick={toggleLost} data-testid="toggle-lost-mode">
               <ShieldAlert size={16} /> {v.lost_mode ? "Lost mode ON — turn off" : "Enable lost mode"}
             </button>
+            <Link to={`/track/${id}`} className="btn btn-ghost btn-block" style={{ marginTop: 10 }} data-testid="live-tracking-link">
+              <Navigation size={16} /> Live tracking & speed
+            </Link>
+            <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={createInvite} disabled={inviteBusy} data-testid="invite-family-btn">
+              <Users size={16} /> {inviteBusy ? "Generating…" : "Invite family"}
+            </button>
+            {inviteUrl && (
+              <div className="glass" style={{ marginTop: 10, padding: 12 }} data-testid="invite-url-box">
+                <p className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Share this link — relatives who accept see this vehicle's alerts:</p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input className="input" readOnly value={inviteUrl} data-testid="invite-url" style={{ fontSize: 12 }} />
+                  <button className="btn btn-primary btn-sm" onClick={copyInvite} data-testid="copy-invite-btn">{inviteCopied ? <Check size={14} /> : <Copy size={14} />}</button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Contacts panel */}
