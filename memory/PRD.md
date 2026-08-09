@@ -40,6 +40,13 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - **Support Inbox**: user `Support.jsx` (`/support`, nav link) to create tickets + view replies/status; admin `AdminSupport.jsx` (`/admin/support`) inbox with status filter, threaded replies, and status changes (open/in_progress/resolved/closed). Uses existing `/support/tickets`, `/support/tickets/me`, `/admin/support/tickets` (+PATCH). Linked from Admin hub card.
 - Verified: admin plans list/create/update/archive and full ticket lifecycle (user create → admin reply+resolve → user sees reply) all pass via curl; Admin Plans UI verified via screenshot. Frontend compiles clean (only a pre-existing Admin.jsx eslint warning).
 
+## Contact enquiries + ticket badge + plan highlight + reporter resolve — 2026-06 (batch 10, this fork)
+- **Contact Enquiries**: public `Contact.jsx` (`/contact`, linked from landing footer) posts to `POST /contact`; admin `AdminContacts.jsx` (`/admin/contacts`) lists enquiries with status filter and one-tap status actions via new `PATCH /admin/contacts/{id}` (new|in_progress|replied|closed).
+- **Ticket / Enquiry Badge**: new `GET /admin/inbox/summary` ({open_tickets, new_enquiries, total}). TopNav shows a red badge on the admin "Admin" link (nav-admin-badge = total); Admin hub cards show per-section counts (hub-badge) on Support inbox and Contact enquiries.
+- **Plan Highlight**: `popular` flag added to PlanIn/PlanOut; POST/PUT `/admin/plans` enforce a single popular plan (setting one clears the rest). AdminPlans editor has a "Most popular" toggle + card chip; user Plans page (`Subscription.jsx`) now highlights `p.popular` (replaced the hardcoded family_pro check).
+- **Reporter Live Status**: `resolve_incident` now sends the reporter a WhatsApp "owner resolved / arriving" follow-up (mock via notify_whatsapp; audit-logged, swallowed on trial).
+- Verified: all backend flows via curl (single-popular enforcement, contact submit + status PATCH, inbox summary, reporter-resolved notification audit) and **testing_agent frontend run — 19/19 flows PASS, no bugs** (iteration_8.json). Demo left clean (family_pro sole popular plan).
+
 ## Testing
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.
