@@ -30,6 +30,14 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 
 ## Testing
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.
+- iteration_2.json: frontend 100% for the 3 new features (Tags, Cards, Subscriptions dry-run) + regression clean.
+
+## What's been implemented (web) — updated 2026-06
+- (all of iteration 1 above) PLUS:
+- **QR Tags**: `/tags` list+create (kid/pet/bag/luggage/keys/phone/laptop/door/other, med info for people, reward text), `/tag/:id` detail (QR, copy/download, lost mode), public `/t/:qrId` scan with Found/Emergency/Theft/Damage/Contact actions + med badge.
+- **Digital Cards (Share Tap)**: `/cards` list+create (title/company/bio/contact/socials/accent), `/card/:id` detail (QR), public `/c/:qrId` profile with call/email/web tiles, **Save Contact vCard** download (`/api/public/card/{qr}/vcf?dl=1`), social chips, and a contact-message form.
+- **Subscriptions**: `/subscription` shows seeded Basic (₹99/mo) & Family Pro (₹499/yr) plans with features; Subscribe uses checkout-session → (DRY-RUN) auto-confirm → active banner. Real Stripe key would redirect to hosted checkout.
+- Nav updated: Vehicles / Tags / Cards / Alerts / Plans (+ Admin for admins).
 
 ## Backlog / not ported to web (available in original backend, need UI)
 - P1: QR Tags (kids/pets/bags/keys) CRUD + public tag scan page (`/api/tags`, `/api/public/tag/{qr}`).
