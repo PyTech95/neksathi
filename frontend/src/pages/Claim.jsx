@@ -29,7 +29,7 @@ export default function Claim() {
 
   const activate = async (e) => {
     e.preventDefault();
-    if (!user) { nav(`/login?next=${encodeURIComponent(`/claim/${serial}`)}`); return; }
+    if (!user) { nav(`/otp-login?next=${encodeURIComponent(`/claim/${serial}`)}`); return; }
     setErr(""); setBusy(true);
     try {
       const r = await api.post(`/qr/claim`, {

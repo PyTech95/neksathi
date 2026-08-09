@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { LogIn } from "lucide-react";
+import { LogIn, Smartphone } from "lucide-react";
 
 export default function Login() {
   const { login } = useAuth();
@@ -47,6 +47,9 @@ export default function Login() {
               <LogIn size={17} /> {busy ? "Signing in…" : "Sign in"}
             </button>
           </form>
+          <Link to="/otp-login" className="btn btn-ghost btn-block" style={{ marginTop: 12 }} data-testid="otp-login-link">
+            <Smartphone size={16} /> Login with mobile OTP
+          </Link>
           <p className="muted center" style={{ marginTop: 18, fontSize: 14 }}>
             No account? <Link to="/register" className="neon" style={{ fontWeight: 700 }}>Create one</Link>
           </p>

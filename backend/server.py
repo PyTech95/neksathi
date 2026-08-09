@@ -3636,6 +3636,105 @@ async def admin_qr_block(serial_no: str, payload: dict, _: dict = Depends(requir
 
 
 
+# ===========================================================================
+# MOBILE OTP LOGIN  (Twilio Verify; dev-mock fallback for preview)
+# Customers activating a QR sticker can sign in with phone + OTP. When
+# TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_VERIFY_SERVICE are set the
+# OTP is sent/verified via Twilio Verify; otherwise a dev code is issued and
+# returned so the flow is fully testable in preview.
+# ===========================================================================
+
+import random as _random
+
+OTP_TTL_MIN = 10
+
+
+def _twilio_verify_ready() -> bool:
+    return bool(
+        os.environ.get("TWILIO_ACCOUNT_SID")
+        and os.environ.get("TWILIO_AUTH_TOKEN")
+        and os.environ.get("TWILIO_VERIFY_SERVICE")
+    )
+
+
+def _norm_phone(p: str) -> str:
+    return p.strip().replace(" ", "")
+
+
+class OtpRequestIn(BaseModel):
+    phone: str = Field(min_length=6, max_length=20)
+
+
+class OtpVerifyIn(BaseModel):
+    phone: str = Field(min_length=6, max_length=20)
+    code: str = Field(min_length=4, max_length=8)
+    name: Optional[str] = Field(default=None, max_length=80)
+
+
+@api.post("/auth/otp/request")
+@rate_limit("5/minute")
+async def otp_request(request: Request, payload: OtpRequestIn):
+    phone = _norm_phone(payload.phone)
+    if _twilio_verify_ready():
+        try:  # pragma: no cover - live path
+            from twilio.rest import Client as _Tw
+            _cli = _Tw(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
+            _cli.verify.v2.services(os.environ["TWILIO_VERIFY_SERVICE"]).verifications.create(to=phone, channel="sms")
+            return {"ok": True, "channel": "sms", "dev_code": None, "live": True}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Could not send OTP: {e}")
+    # DEV / MOCK fallback
+    code = f"{_random.randint(0, 999999):06d}"
+    await db.otp_codes.update_one(
+        {"phone": phone},
+        {"$set": {"phone": phone, "code": code, "expires_at": now_utc() + timedelta(minutes=OTP_TTL_MIN), "created_at": now_utc()}},
+        upsert=True,
+    )
+    log.info("[OTP MOCK] %s -> %s", phone, code)
+    return {"ok": True, "channel": "mock", "dev_code": code, "live": False}
+
+
+@api.post("/auth/otp/verify", response_model=TokenOut)
+@rate_limit("10/minute")
+async def otp_verify(request: Request, payload: OtpVerifyIn):
+    phone = _norm_phone(payload.phone)
+    ok = False
+    if _twilio_verify_ready():
+        try:  # pragma: no cover - live path
+            from twilio.rest import Client as _Tw
+            _cli = _Tw(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
+            chk = _cli.verify.v2.services(os.environ["TWILIO_VERIFY_SERVICE"]).verification_checks.create(to=phone, code=payload.code)
+            ok = chk.status == "approved"
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"OTP verify failed: {e}")
+    else:
+        row = await db.otp_codes.find_one({"phone": phone})
+        if row:
+            exp = row["expires_at"]
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            ok = row.get("code") == payload.code and exp >= now_utc()
+    if not ok:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+    await db.otp_codes.delete_many({"phone": phone})
+    user = await db.users.find_one({"phone": phone})
+    if not user:
+        digits = "".join(ch for ch in phone if ch.isdigit()) or new_id()[:10]
+        user = {
+            "id": new_id(),
+            "email": f"{digits}@phone.neksaathi.app",
+            "name": (payload.name or "NekSathi User").strip(),
+            "phone": phone, "password_hash": "", "is_admin": False,
+            "suspended": False, "auth": "otp", "created_at": now_utc(),
+        }
+        await db.users.insert_one(dict(user))
+    if user.get("suspended"):
+        raise HTTPException(status_code=403, detail="Account suspended")
+    token = create_access_token(user["id"])
+    return TokenOut(access_token=token, user=to_user_out(user))
+
+
+
 app.include_router(api)
 app.include_router(push_router, prefix="/api")
 

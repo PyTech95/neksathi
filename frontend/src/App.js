@@ -24,6 +24,7 @@ import Incidents from "@/pages/Incidents";
 import AdminQR from "@/pages/AdminQR";
 import AdminDealers from "@/pages/AdminDealers";
 import AdminIncidents from "@/pages/AdminIncidents";
+import OtpLogin from "@/pages/OtpLogin";
 
 function Protected({ children, adminOnly }) {
   const { user, loading } = useAuth();
@@ -43,6 +44,7 @@ function Shell() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/otp-login" element={<OtpLogin />} />
           <Route path="/register" element={<Register />} />
           <Route path="/scan/:qrId" element={<PublicScan />} />
           <Route path="/t/:qrId" element={<PublicTag />} />

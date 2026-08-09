@@ -39,8 +39,14 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const loginWithToken = (token, u) => {
+    localStorage.setItem("nk_token", token);
+    setUser(u);
+    return u;
+  };
+
   return (
-    <AuthCtx.Provider value={{ user, loading, login, register, logout, setUser }}>
+    <AuthCtx.Provider value={{ user, loading, login, register, logout, loginWithToken, setUser }}>
       {children}
     </AuthCtx.Provider>
   );
