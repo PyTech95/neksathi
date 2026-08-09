@@ -842,7 +842,7 @@ def to_vehicle_out(v: dict) -> VehicleOut:
 
 @api.get("/vehicles", response_model=List[VehicleOut])
 async def list_vehicles(user: dict = Depends(current_user)):
-    cursor = db.vehicles.find({"owner_id": user["id"]}).sort("created_at", -1)
+    cursor = db.vehicles.find({"owner_id": user["id"]}).sort("created_at", -1).limit(100)
     items = [to_vehicle_out(clean(v)) async for v in cursor]
     return items
 
@@ -1654,7 +1654,7 @@ class TagAlertIn(BaseModel):
 
 @api.get("/tags", response_model=List[TagOut])
 async def list_tags(user: dict = Depends(current_user)):
-    out = [TagOut(**clean(t)) async for t in db.tags.find({"owner_id": user["id"]}).sort("created_at", -1)]
+    out = [TagOut(**clean(t)) async for t in db.tags.find({"owner_id": user["id"]}).sort("created_at", -1).limit(500)]
     return out
 
 
@@ -1938,7 +1938,7 @@ class CardMessageIn(BaseModel):
 
 @api.get("/cards", response_model=List[CardOut])
 async def list_cards(user: dict = Depends(current_user)):
-    return [CardOut(**clean(c)) async for c in db.cards.find({"owner_id": user["id"]}).sort("created_at", -1)]
+    return [CardOut(**clean(c)) async for c in db.cards.find({"owner_id": user["id"]}).sort("created_at", -1).limit(100)]
 
 
 @api.post("/cards", response_model=CardOut)

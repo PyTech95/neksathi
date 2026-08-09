@@ -71,6 +71,14 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - **Persona Landing Pages**: `/for/schools`, `/for/hospitals`, `/for/offices` (PersonaLanding.jsx) — tailored hero + imagery, 4 benefit cards, "how the bulk order works" steps, and Register/Contact CTAs. Landing persona cards link to them via "Learn more →". Invalid persona redirects home.
 - Verified via curl + **testing_agent (iteration_10.json): backend 7/7 pytest, frontend 100%, no defects**. Guardian phone never leaked; emergency notifies both parties. Test data cleaned.
 
+## Organization portal + go-live hardening — 2026-06 (batch 15)
+- **Organization portal**: admin creates schools/hospitals/offices + a login (/admin/orgs); org logs in via normal /login and lands on /org showing issued/activated/pending tag counts, the activated tag list, and scan alerts across their tags. New role flags is_org/org_id (mirrors dealer pattern, reuses existing bcrypt+JWT, verified no password_hash leak, require_org 403 gating). Tag batches linked to org via /admin/qr org dropdown; claim stamps org_id onto the tag.
+- **Tag editing**: TagDetail edit modal — update name/type/description, guardian, medical info & photo (client-downscaled). Uses existing PUT /tags/{id} (owner-scoped).
+- **Emergency SMS fallback**: send_sms() helper; if a live WhatsApp emergency send fails, SMS fires to guardian (mock on trial, graceful).
+- **Solutions nav dropdown**: guest top-nav links to /for/schools|hospitals|offices.
+- **Go-live hardening**: deployment_agent scan = PASS (no blockers — no hardcoded secrets/URLs, env-driven, /api-prefixed, CORS ok). Added .limit() guards to /vehicles(100), /tags(500), /cards(100) per recommendation.
+- Verified: **testing_agent iteration_11 — backend 8/8 pytest, frontend 100%, no defects**. Demo org 'Sunrise School' (school@nek.dev/school1234) retained.
+
 ## Testing
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.
