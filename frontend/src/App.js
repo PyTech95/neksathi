@@ -26,6 +26,9 @@ import AdminDealers from "@/pages/AdminDealers";
 import AdminIncidents from "@/pages/AdminIncidents";
 import OtpLogin from "@/pages/OtpLogin";
 import DealerDashboard from "@/pages/DealerDashboard";
+import Support from "@/pages/Support";
+import AdminPlans from "@/pages/AdminPlans";
+import AdminSupport from "@/pages/AdminSupport";
 
 function Protected({ children, adminOnly, dealerOnly }) {
   const { user, loading } = useAuth();
@@ -65,10 +68,13 @@ function Shell() {
           <Route path="/subscription" element={<Protected><Subscription /></Protected>} />
           <Route path="/alerts" element={<Protected><Alerts /></Protected>} />
           <Route path="/incidents" element={<Protected><Incidents /></Protected>} />
+          <Route path="/support" element={<Protected><Support /></Protected>} />
           <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
           <Route path="/admin/qr" element={<Protected adminOnly><AdminQR /></Protected>} />
           <Route path="/admin/dealers" element={<Protected adminOnly><AdminDealers /></Protected>} />
           <Route path="/admin/incidents" element={<Protected adminOnly><AdminIncidents /></Protected>} />
+          <Route path="/admin/plans" element={<Protected adminOnly><AdminPlans /></Protected>} />
+          <Route path="/admin/support" element={<Protected adminOnly><AdminSupport /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

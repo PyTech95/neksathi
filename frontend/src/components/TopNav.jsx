@@ -30,6 +30,7 @@ export default function TopNav() {
             <Link to="/alerts" className={`nav-link ${isActive("/alerts") ? "active" : ""}`} data-testid="nav-alerts">Alerts</Link>
             <Link to="/incidents" className={`nav-link ${isActive("/incidents") ? "active" : ""}`} data-testid="nav-incidents">Incidents</Link>
             <Link to="/subscription" className={`nav-link ${isActive("/subscription") ? "active" : ""}`} data-testid="nav-plans">Plans</Link>
+            <Link to="/support" className={`nav-link ${isActive("/support") ? "active" : ""}`} data-testid="nav-support">Support</Link>
             {user.is_admin && (
               <Link to="/admin" className={`nav-link ${isActive("/admin") ? "active" : ""}`} data-testid="nav-admin">Admin</Link>
             )}

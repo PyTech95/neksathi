@@ -33,6 +33,13 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - **E2E live verification (iteration_7.json): PASS.** Backend 39/39 pytest green. Frontend all flows PASS: public scan → wrong-parking/accident/theft incident creation, masked call transitions to call-connecting with NO owner phone leaked, admin/owner/dealer logins + dashboards, QR claim (fresh serial claim + 409 double-claim). No open issues.
 - **Masked voice call is now REAL** (batch 6/7 update): Twilio trial voice number +19412394367 wired (TWILIO_FROM set); trial dials only to Twilio-verified numbers, otherwise DEMO simulated "connecting". Owner number never exposed.
 
+## Admin Plans Editor + Support Inbox + refresh-safe scan — 2026-06 (batch 9, this fork)
+- **Refresh-Safe Waiting**: already implemented — PublicScan appends `?incident=<id>` to the URL on alert and restores the waiting/"owner is coming" state on reload (PublicScan.jsx lines 28-35, 56).
+- **Reporter WhatsApp Updates**: already implemented — when the owner taps "I AM COMING", backend `respond_incident` (server.py ~3626) sends the reporter a WhatsApp update (mock via notify_whatsapp; live when Twilio WhatsApp creds set).
+- **Admin Plans Editor** (`/admin/plans`, `AdminPlans.jsx`): create/edit/archive/reactivate subscription plans (code, name, price ₹→paise, interval, vehicle_limit, features, active) via existing `/admin/plans` CRUD. Active plans flow straight to the user Plans page. Linked from Admin hub card.
+- **Support Inbox**: user `Support.jsx` (`/support`, nav link) to create tickets + view replies/status; admin `AdminSupport.jsx` (`/admin/support`) inbox with status filter, threaded replies, and status changes (open/in_progress/resolved/closed). Uses existing `/support/tickets`, `/support/tickets/me`, `/admin/support/tickets` (+PATCH). Linked from Admin hub card.
+- Verified: admin plans list/create/update/archive and full ticket lifecycle (user create → admin reply+resolve → user sees reply) all pass via curl; Admin Plans UI verified via screenshot. Frontend compiles clean (only a pre-existing Admin.jsx eslint warning).
+
 ## Testing
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.

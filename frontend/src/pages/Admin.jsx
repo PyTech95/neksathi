@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing } from "lucide-react";
+import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox } from "lucide-react";
 
 function Stat({ icon, label, value, color }) {
   return (
@@ -69,6 +69,12 @@ export default function Admin() {
           </Link>
           <Link to="/admin/incidents" className="glass glass-hover card-pad" data-testid="link-admin-incidents" style={{ textDecoration: "none", color: "inherit" }}>
             <BellRing size={22} color="#f5a524" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Incidents</h3><p className="muted" style={{ fontSize: 13 }}>Wrong-parking / accident / theft history</p>
+          </Link>
+          <Link to="/admin/plans" className="glass glass-hover card-pad" data-testid="link-admin-plans" style={{ textDecoration: "none", color: "inherit" }}>
+            <CreditCard size={22} color="#34d399" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Plans</h3><p className="muted" style={{ fontSize: 13 }}>Create & edit subscription plans and prices</p>
+          </Link>
+          <Link to="/admin/support" className="glass glass-hover card-pad" data-testid="link-admin-support" style={{ textDecoration: "none", color: "inherit" }}>
+            <Inbox size={22} color="#22d3ee" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Support inbox</h3><p className="muted" style={{ fontSize: 13 }}>Reply to user tickets & manage status</p>
           </Link>
         </div>
 
