@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft } from "lucide-react";
 
@@ -9,6 +9,7 @@ const geo = (setC) => {
 
 export default function PublicScan() {
   const { qrId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [vehicle, setVehicle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -24,7 +25,16 @@ export default function PublicScan() {
   useEffect(() => {
     api.get(`/public/qr/${qrId}`).then((r) => setVehicle(r.data)).catch(() => setNotFound(true)).finally(() => setLoading(false));
     geo(setCoords);
+    const existing = searchParams.get("incident");
+    if (existing) {
+      api.get(`/public/incident/${existing}`).then((r) => {
+        setIncident(r.data);
+        setScreen("waiting");
+        startPolling(existing);
+      }).catch(() => {});
+    }
     return () => { if (poll.current) clearInterval(poll.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qrId]);
 
   const startPolling = (id) => {
@@ -43,6 +53,7 @@ export default function PublicScan() {
       });
       setIncident(r.data);
       setScreen("waiting");
+      setSearchParams({ incident: r.data.id }, { replace: true });
       startPolling(r.data.id);
     } catch (e) { alert(e?.response?.data?.detail || "Could not send"); } finally { setBusy(false); }
   };
