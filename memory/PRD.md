@@ -28,7 +28,13 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - Alerts feed: typed icons, note, callback phone, map link.
 - Admin console: stats cards + users table with search + suspend/reactivate.
 
+## Landing overhaul + E2E live test — 2026-06 (batch 8, this fork)
+- Rewrote `/app/frontend/src/pages/Landing.jsx`: hero with live-scan demo link (/scan/45805f3a-f10a-4534-bc7d-29699029b2cf), stat band, 3 emergency-action cards (Wrong Parking / Accident / Theft), wrong-parking 15-min timeline, factory→family lifecycle, features grid, privacy band, FAQ (details/summary), CTA. All data-testids present. Verified via screenshot — renders clean, no console errors.
+- **E2E live verification (iteration_7.json): PASS.** Backend 39/39 pytest green. Frontend all flows PASS: public scan → wrong-parking/accident/theft incident creation, masked call transitions to call-connecting with NO owner phone leaked, admin/owner/dealer logins + dashboards, QR claim (fresh serial claim + 409 double-claim). No open issues.
+- **Masked voice call is now REAL** (batch 6/7 update): Twilio trial voice number +19412394367 wired (TWILIO_FROM set); trial dials only to Twilio-verified numbers, otherwise DEMO simulated "connecting". Owner number never exposed.
+
 ## Testing
+- iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.
 - iteration_2.json: frontend 100% for the 3 new features (Tags, Cards, Subscriptions dry-run) + regression clean.
 - iteration_3.json: frontend 100% for Live Tracking, Family Invites, Admin Alerts+CSV + regression clean.
