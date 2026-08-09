@@ -465,6 +465,15 @@ async def require_admin(user: dict = Depends(current_user)) -> dict:
     return user
 
 
+def _prefs(u: Optional[dict]) -> dict:
+    """Notification preferences for a user doc, merged with defaults."""
+    base = NotifyPrefs().model_dump()
+    if u:
+        base.update(u.get("notify_prefs") or {})
+    return base
+
+
+
 def to_user_out(u: dict) -> UserOut:
     return UserOut(
         id=u["id"],
@@ -977,17 +986,19 @@ async def push_location(vehicle_id: str, payload: LocationIn, user: dict = Depen
             "contact_channels": [],
         }
         await db.alerts.insert_one(dict(alert_doc))
-        # Fire-and-forget push notify the owner about overspeed.
+        # Fire-and-forget push notify the owner about overspeed (pref-gated).
+        _p = _prefs(user)
         try:
-            await send_push(
-                recipients=[user["id"]],
-                data={
-                    "title": "⚡ Overspeed alert",
-                    "message": f"{v['number_plate']} @ {payload.speed_kmh:.0f} km/h (limit {limit})",
-                    "action_url": "/alerts",
-                },
-                idempotency_key=alert_doc["id"],
-            )
+            if _p.get("push") and _p.get("speed_alerts"):
+                await send_push(
+                    recipients=[user["id"]],
+                    data={
+                        "title": "⚡ Overspeed alert",
+                        "message": f"{v['number_plate']} @ {payload.speed_kmh:.0f} km/h (limit {limit})",
+                        "action_url": "/alerts",
+                    },
+                    idempotency_key=alert_doc["id"],
+                )
         except Exception as _e:
             log.warning("push (speed alert) failed: %s", _e)
 
@@ -1581,13 +1592,16 @@ TAG_TYPES = ("person", "kid", "pet", "bag", "luggage", "keys", "phone", "laptop"
 
 class TagIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    tag_type: Literal["person", "kid", "pet", "bag", "luggage", "keys", "phone", "laptop", "door", "other"] = "bag"
+    tag_type: Literal["person", "kid", "patient", "staff", "pet", "bag", "luggage", "keys", "phone", "laptop", "door", "other"] = "bag"
     description: Optional[str] = Field(default=None, max_length=280)
     photo_base64: Optional[str] = None
     # Optional med / owner hints shown on public scan for kids / people.
     blood_group: Optional[str] = Field(default=None, max_length=12)
     medical_notes: Optional[str] = Field(default=None, max_length=280)
     reward_text: Optional[str] = Field(default=None, max_length=140)
+    # Emergency guardian / next-of-kin contact (privacy-safe masked call).
+    guardian_name: Optional[str] = Field(default=None, max_length=80)
+    guardian_phone: Optional[str] = Field(default=None, max_length=20)
 
 
 class TagOut(BaseModel):
@@ -1600,6 +1614,8 @@ class TagOut(BaseModel):
     blood_group: Optional[str] = None
     medical_notes: Optional[str] = None
     reward_text: Optional[str] = None
+    guardian_name: Optional[str] = None
+    guardian_phone: Optional[str] = None
     qr_id: str
     lost_mode: bool
     created_at: datetime
@@ -1614,6 +1630,8 @@ class PublicTagOut(BaseModel):
     blood_group: Optional[str] = None
     medical_notes: Optional[str] = None
     reward_text: Optional[str] = None
+    guardian_name: Optional[str] = None
+    has_guardian: bool = False
     lost_mode: bool
     owner_first_name: str
 
@@ -1648,6 +1666,8 @@ async def create_tag(payload: TagIn, user: dict = Depends(current_user)):
         "blood_group": (payload.blood_group or "").strip() or None,
         "medical_notes": payload.medical_notes,
         "reward_text": payload.reward_text,
+        "guardian_name": (payload.guardian_name or "").strip() or None,
+        "guardian_phone": (payload.guardian_phone or "").strip() or None,
         "qr_id": new_id(),
         "lost_mode": False,
         "created_at": now_utc(),
@@ -1677,6 +1697,8 @@ async def update_tag(tag_id: str, payload: TagIn, user: dict = Depends(current_u
         "blood_group": (payload.blood_group or "").strip() or None,
         "medical_notes": payload.medical_notes,
         "reward_text": payload.reward_text,
+        "guardian_name": (payload.guardian_name or "").strip() or None,
+        "guardian_phone": (payload.guardian_phone or "").strip() or None,
     }
     await db.tags.update_one({"id": tag_id}, {"$set": updates})
     t.update(updates)
@@ -1729,6 +1751,8 @@ async def public_tag_lookup(qr_id: str):
         blood_group=t.get("blood_group"),
         medical_notes=t.get("medical_notes"),
         reward_text=t.get("reward_text"),
+        guardian_name=t.get("guardian_name"),
+        has_guardian=bool(t.get("guardian_phone") or (owner and owner.get("phone"))),
         lost_mode=bool(t.get("lost_mode")),
         owner_first_name=first_name,
     )
@@ -1761,10 +1785,23 @@ async def public_tag_alert(request: Request, qr_id: str, payload: TagAlertIn):
         "contact_channels": channels,
     }
     await db.alerts.insert_one(dict(alert))
+    prefs = _prefs(owner)
+    # WhatsApp fan-out to owner + guardian (privacy-safe, mock-ready, gated by prefs).
+    tag_title = {"kid_help": "KID NEEDS HELP", "sos": "SOS", "emergency": "Emergency"}.get(payload.type, "scanned")
+    body = f"Your Nek Sathi tag '{t['name']}' was {tag_title} via a QR scan."
+    if payload.scanner_note:
+        body += f" Note: {payload.scanner_note[:100]}"
+    if payload.scanner_lat is not None and payload.scanner_lng is not None:
+        body += f" Location: https://maps.google.com/?q={payload.scanner_lat},{payload.scanner_lng}"
+    if prefs.get("whatsapp"):
+        if owner and owner.get("phone"):
+            await notify_whatsapp(owner["phone"], body, meta={"tag_id": t["id"], "role": "owner"})
+        if t.get("guardian_phone"):
+            await notify_whatsapp(t["guardian_phone"], body, meta={"tag_id": t["id"], "role": "guardian"})
     # Push notify owner of tag alert (doorbell / lost pet / lost luggage /
     # child-safety live GPS request).
     try:
-        if t.get("owner_id"):
+        if t.get("owner_id") and prefs.get("push"):
             type_titles = {
                 "doorbell": "🔔 Someone's at your door",
                 "door":     "🔔 Someone's at your door",
@@ -1799,6 +1836,56 @@ async def public_tag_alert(request: Request, qr_id: str, payload: TagAlertIn):
         log.warning("push (tag alert) failed: %s", _e)
     # Never leak owner phone / contact_channels to anonymous scanners.
     return {"ok": True}
+
+
+class TagCallIn(BaseModel):
+    scanner_phone: Optional[str] = Field(default=None, max_length=20)
+
+
+@api.post("/public/tag/{qr_id}/call")
+@rate_limit("10/minute")
+async def public_tag_call(request: Request, qr_id: str, payload: TagCallIn):
+    """Privacy-safe masked call for person/kid/patient tags: connects the
+    scanner to the guardian (or owner) through the Nek Sathi portal. The
+    guardian/owner number is NEVER returned to the scanner."""
+    t = await db.tags.find_one({"qr_id": qr_id})
+    if not t:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    owner = await db.users.find_one({"id": t.get("owner_id")})
+    target_phone = t.get("guardian_phone") or (owner and owner.get("phone"))
+    reporter_phone = (payload.scanner_phone or "").strip()
+    twilio_from = os.environ.get("TWILIO_FROM")
+    live = bool(twilio_from and os.environ.get("TWILIO_ACCOUNT_SID") and os.environ.get("TWILIO_AUTH_TOKEN"))
+    status = "mock_connected"
+    note = "Connecting you to the guardian through the Nek Sathi portal — their number stays private."
+
+    if live and reporter_phone and target_phone:
+        try:  # pragma: no cover - live path
+            from twilio.rest import Client as _Tw
+            _cli = _Tw(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
+            twiml = ("<?xml version='1.0' encoding='UTF-8'?><Response>"
+                     "<Say voice='alice'>Connecting you privately to the guardian via Nek Sathi. Please hold.</Say>"
+                     f"<Dial callerId='{twilio_from}' timeout='25'>{target_phone}</Dial></Response>")
+            _cli.calls.create(to=reporter_phone, from_=twilio_from, twiml=twiml, method="POST")
+            status = "calling"
+            note = "We're calling you now — pick up and we'll connect you privately to the guardian."
+        except Exception as e:
+            status = "connecting"
+            note = "Connecting you privately via the Nek Sathi portal. (Demo: live dialing needs a verified/upgraded Twilio number.)"
+            log.warning("tag masked call failed, demo fallback: %s", e)
+    elif live and not reporter_phone:
+        status = "need_phone"
+        note = "Enter your callback number so we can connect you privately (your number stays hidden)."
+
+    await db.call_records.insert_one({
+        "id": new_id(), "tag_id": t["id"], "qr_id": qr_id,
+        "reporter_phone": reporter_phone or None, "target_phone": target_phone,  # audit only
+        "provider": "twilio" if live else "mock", "portal_number": NEK_PORTAL_NUMBER,
+        "status": status, "kind": "tag_guardian", "created_at": now_utc(),
+    })
+    if _prefs(owner).get("whatsapp") and target_phone:
+        await notify_whatsapp(target_phone, f"Someone scanned your Nek Sathi tag '{t['name']}' and is trying to reach you via the portal.", meta={"tag_id": t["id"], "kind": "call"})
+    return {"status": status, "masked": True, "portal_number": NEK_PORTAL_NUMBER, "note": note, "provider": "twilio" if live else "mock"}
 
 
 # ---------------------------------------------------------------------------
@@ -3512,8 +3599,10 @@ async def create_incident(request: Request, qr_id: str, payload: IncidentCreateI
         "contact_channels": [], "incident_id": inc_id,
     })
 
-    # Notify owner + family via WhatsApp (mock-ready) + push.
+    # Notify owner + family via WhatsApp (mock-ready) + push (owner channel pref-gated).
     recipients = await _incident_recipients(v)
+    owner_doc = await db.users.find_one({"id": v["owner_id"]})
+    op = _prefs(owner_doc)
     title = INCIDENT_TITLES.get(payload.type, "Vehicle alert")
     if payload.type == "wrong_parking":
         body = (f"Your car {v['number_plate']} has been reported for wrong parking. "
@@ -3524,9 +3613,13 @@ async def create_incident(request: Request, qr_id: str, payload: IncidentCreateI
     else:
         body = f"Suspicious/theft activity reported on your car {v['number_plate']} via Nek Sathi. Please check immediately."
     for r in recipients:
+        # Family contacts always get alerted; the owner's own channel honours their prefs.
+        if r["role"] == "owner" and not (op.get("whatsapp") and op.get("incident_alerts")):
+            continue
         await notify_whatsapp(r["phone"], body, meta={"incident_id": inc_id, "role": r["role"]})
     try:
-        await send_push(recipients=[v["owner_id"]], data={"title": title, "message": v["number_plate"], "action_url": "/incidents"}, idempotency_key=inc_id)
+        if op.get("push") and op.get("incident_alerts"):
+            await send_push(recipients=[v["owner_id"]], data={"title": title, "message": v["number_plate"], "action_url": "/incidents"}, idempotency_key=inc_id)
     except Exception as _e:
         log.warning("push (incident) failed: %s", _e)
 

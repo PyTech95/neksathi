@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { Tag, Plus, Trash2, ChevronRight, X, Baby, PawPrint, Briefcase, Luggage, KeyRound, Smartphone, Laptop, DoorOpen, User, Package } from "lucide-react";
+import { Tag, Plus, Trash2, ChevronRight, X, Baby, PawPrint, Briefcase, Luggage, KeyRound, Smartphone, Laptop, DoorOpen, User, Package, HeartPulse, IdCard } from "lucide-react";
 
 export const TAG_META = {
   person: { icon: <User size={18} />, label: "Person" },
-  kid: { icon: <Baby size={18} />, label: "Kid" },
+  kid: { icon: <Baby size={18} />, label: "School kid" },
+  patient: { icon: <HeartPulse size={18} />, label: "Patient / Elderly" },
+  staff: { icon: <IdCard size={18} />, label: "Office / Staff" },
   pet: { icon: <PawPrint size={18} />, label: "Pet" },
   bag: { icon: <Briefcase size={18} />, label: "Bag" },
   luggage: { icon: <Luggage size={18} />, label: "Luggage" },
@@ -21,7 +23,7 @@ export default function Tags() {
   const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(true);
   const [show, setShow] = useState(false);
-  const [form, setForm] = useState({ name: "", tag_type: "bag", description: "", blood_group: "", medical_notes: "", reward_text: "" });
+  const [form, setForm] = useState({ name: "", tag_type: "bag", description: "", blood_group: "", medical_notes: "", reward_text: "", guardian_name: "", guardian_phone: "" });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -36,7 +38,7 @@ export default function Tags() {
     try {
       await api.post("/tags", { ...form });
       setShow(false);
-      setForm({ name: "", tag_type: "bag", description: "", blood_group: "", medical_notes: "", reward_text: "" });
+      setForm({ name: "", tag_type: "bag", description: "", blood_group: "", medical_notes: "", reward_text: "", guardian_name: "", guardian_phone: "" });
       load();
     } catch (e) { setErr(e?.response?.data?.detail || "Could not add tag"); } finally { setBusy(false); }
   };
@@ -47,7 +49,7 @@ export default function Tags() {
   };
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-  const isPerson = form.tag_type === "kid" || form.tag_type === "person";
+  const isPerson = ["kid", "person", "patient"].includes(form.tag_type);
 
   return (
     <div className="page" data-testid="tags-page">
@@ -56,7 +58,7 @@ export default function Tags() {
           <div>
             <span className="chip">Smart tags</span>
             <h1 style={{ fontSize: 34, marginTop: 12 }}>Your <span className="neon">QR tags</span></h1>
-            <p className="muted">Kids, pets, bags, keys, luggage & devices — recoverable with one scan.</p>
+            <p className="muted">School kids, patients & elderly, staff, pets, bags, keys & devices — safe & recoverable with one scan.</p>
           </div>
           <button className="btn btn-primary" onClick={() => setShow(true)} data-testid="add-tag-btn"><Plus size={18} /> Add tag</button>
         </div>
@@ -107,10 +109,20 @@ export default function Tags() {
               </div>
               <div className="field"><label>Description (optional)</label><input className="input" value={form.description} onChange={set("description")} data-testid="tag-desc" /></div>
               {isPerson && (
-                <div className="grid grid-2">
-                  <div className="field"><label>Blood group</label><input className="input" value={form.blood_group} onChange={set("blood_group")} placeholder="O+" data-testid="tag-blood" /></div>
-                  <div className="field"><label>Medical notes</label><input className="input" value={form.medical_notes} onChange={set("medical_notes")} data-testid="tag-medical" /></div>
-                </div>
+                <>
+                  <div className="grid grid-2">
+                    <div className="field"><label>Blood group</label><input className="input" value={form.blood_group} onChange={set("blood_group")} placeholder="O+" data-testid="tag-blood" /></div>
+                    <div className="field"><label>Allergies / medical notes</label><input className="input" value={form.medical_notes} onChange={set("medical_notes")} placeholder="e.g. Asthma, penicillin allergy" data-testid="tag-medical" /></div>
+                  </div>
+                  <div className="glass" style={{ padding: 14, marginBottom: 14, borderColor: "rgba(34,211,238,.3)" }}>
+                    <p className="muted" style={{ fontSize: 12, marginBottom: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em" }}>Emergency guardian (ICE)</p>
+                    <div className="grid grid-2" style={{ marginBottom: 0 }}>
+                      <div className="field" style={{ marginBottom: 0 }}><label>Guardian name</label><input className="input" value={form.guardian_name} onChange={set("guardian_name")} placeholder="Parent / next of kin" data-testid="tag-guardian-name" /></div>
+                      <div className="field" style={{ marginBottom: 0 }}><label>Guardian phone</label><input className="input" value={form.guardian_phone} onChange={set("guardian_phone")} placeholder="+91 …" data-testid="tag-guardian-phone" /></div>
+                    </div>
+                    <p className="muted" style={{ fontSize: 11, marginTop: 8 }}>Scanners can reach the guardian through a private masked call — the number stays hidden.</p>
+                  </div>
+                </>
               )}
               <div className="field"><label>Reward text (optional)</label><input className="input" value={form.reward_text} onChange={set("reward_text")} placeholder="Reward for safe return" data-testid="tag-reward" /></div>
               {err && <p style={{ color: "var(--danger)", fontSize: 14, marginBottom: 12 }} data-testid="add-tag-error">{err}</p>}

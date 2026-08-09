@@ -34,6 +34,20 @@ const parkingSteps = [
   { icon: <Phone size={18} />, t: "Private call", d: "Still stuck? Call the owner — number stays hidden." },
 ];
 
+const personas = [
+  { img: "https://images.unsplash.com/photo-1630830844072-b7ad174db3bc?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "School kids", title: "Safe to & from school", desc: "An ID tag with guardian contact and medical info. A teacher or stranger can privately reach a parent, or tap 'Kid needs help'." },
+  { img: "https://images.unsplash.com/photo-1586324304780-c9a5031a3599?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Patients & elderly", title: "Emergency ICE profile", desc: "Blood group, allergies and a one-tap masked call to the guardian — so first-responders can act in seconds." },
+  { img: "https://images.unsplash.com/photo-1690378820474-b468b8ee64d3?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Office & workplace", title: "Staff ID & lost-and-found", desc: "Staff badges, laptops and access cards become traceable — found items reach the owner without exposing anyone." },
+  { img: "https://images.unsplash.com/photo-1534361960057-19889db9621e?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Pets", title: "Bring them home", desc: "A collar QR lets any finder reach you instantly and share the pet's live location." },
+  { img: "https://images.unsplash.com/photo-1532968899863-5b52ef155913?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Travel & luggage", title: "Never lose a bag", desc: "Tag suitcases, backpacks and gadgets — a finder pings you, no personal details revealed." },
+];
+
+const testimonials = [
+  { quote: "My son's school bag has a Nek Sathi tag. When he got lost at a fair, a volunteer scanned it and called me in seconds — without ever seeing my number.", name: "Priya, parent", place: "Pune" },
+  { quote: "We put ICE tags on every elderly patient. Paramedics instantly see blood group and reach the family. It has genuinely saved time in emergencies.", name: "Dr. Mehta", place: "City Care Hospital" },
+  { quote: "Lost my laptop bag at the airport. Someone scanned the tag and I had it back the same evening. Brilliant.", name: "Arjun", place: "Bengaluru" },
+];
+
 const faqs = [
   { q: "Does the person scanning see my phone number?", a: "Never. All alerts and calls are routed through the Nek Sathi portal, so your number (and your family's) stays completely private." },
   { q: "Do people need to install an app to report an issue?", a: "No. Anyone can scan the QR and report wrong-parking, accident or theft straight from their browser — no login, no install." },
@@ -53,8 +67,9 @@ export default function Landing() {
               One QR turns any stranger into a <span className="neon">first-responder</span>.
             </h1>
             <p className="muted" style={{ fontSize: 18, maxWidth: 520, lineHeight: 1.6 }}>
-              Nek Sathi puts a smart safety QR on your vehicle and belongings. Wrong-parking alerts,
-              accident & theft response, live tracking and family safety — all while your phone number stays private.
+              Nek Sathi puts a smart safety QR on the people and things you love — school kids,
+              patients & elderly, staff, pets, bags and vehicles. Emergencies, lost-and-found and
+              private contact — all while your phone number stays hidden.
             </p>
             <div style={{ display: "flex", gap: 12, marginTop: 28, flexWrap: "wrap" }}>
               <Link to="/register" className="btn btn-primary" data-testid="hero-get-started"><QrCode size={18} /> Create your QR</Link>
@@ -86,6 +101,31 @@ export default function Landing() {
           {[["10,000+", "QR / batch"], ["3 taps", "to report & help"], ["0", "numbers exposed"], ["15 min", "response window"]].map(([n, l], i) => (
             <div key={i} data-testid={`stat-band-${i}`}><div className="stat-num neon">{n}</div><div className="muted" style={{ fontSize: 13 }}>{l}</div></div>
           ))}
+        </div>
+      </section>
+
+      {/* BUILT FOR EVERYONE */}
+      <section className="container-nk" style={{ padding: "40px 22px" }}>
+        <h2 style={{ fontSize: 34, marginBottom: 6 }}>Not just cars — <span className="neon">built for everyone</span></h2>
+        <p className="muted" style={{ marginBottom: 26, fontSize: 16 }}>One smart QR for the people and things you care about most.</p>
+        <div className="grid grid-3">
+          {personas.map((p, i) => (
+            <div key={i} className="glass glass-hover fade-up" data-testid={`persona-${i}`} style={{ overflow: "hidden", animationDelay: `${i * 0.06}s` }}>
+              <div style={{ height: 168, background: "#0d0d1a", position: "relative" }}>
+                <img src={p.img} alt={p.tag} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.92 }} />
+                <span className="chip" style={{ position: "absolute", left: 12, top: 12, background: "rgba(3,3,8,.6)", backdropFilter: "blur(6px)" }}>{p.tag}</span>
+              </div>
+              <div className="card-pad" style={{ padding: 20 }}>
+                <h3 style={{ fontSize: 19, marginBottom: 6 }}>{p.title}</h3>
+                <p className="muted" style={{ fontSize: 14, lineHeight: 1.55 }}>{p.desc}</p>
+              </div>
+            </div>
+          ))}
+          <div className="glass card-pad fade-up" data-testid="persona-vehicles" style={{ display: "flex", flexDirection: "column", justifyContent: "center", animationDelay: ".3s" }}>
+            <div style={{ color: "#22d3ee", marginBottom: 12 }}><Car size={34} /></div>
+            <h3 style={{ fontSize: 19, marginBottom: 6 }}>Cars, bikes & more</h3>
+            <p className="muted" style={{ fontSize: 14, lineHeight: 1.55 }}>Wrong-parking, accident and theft response with a private masked call and live tracking.</p>
+          </div>
         </div>
       </section>
 
@@ -158,6 +198,21 @@ export default function Landing() {
             <h2 style={{ fontSize: 28, marginBottom: 6 }}>Privacy is the <span className="neon">whole point</span></h2>
             <p className="muted" style={{ fontSize: 15.5, lineHeight: 1.6 }}>Reporters never see your number, address, or family details. Every call is bridged through the Nek Sathi portal, and every alert shows only what's needed to help your vehicle.</p>
           </div>
+        </div>
+      </section>
+
+      {/* TESTIMONIALS */}
+      <section className="container-nk" style={{ padding: "40px 22px" }}>
+        <h2 style={{ fontSize: 34, marginBottom: 6 }}>Trusted by <span className="neon">families & teams</span></h2>
+        <p className="muted" style={{ marginBottom: 26, fontSize: 16 }}>Real moments where one scan made all the difference.</p>
+        <div className="grid grid-3">
+          {testimonials.map((t, i) => (
+            <div key={i} className="glass card-pad fade-up" data-testid={`testimonial-${i}`} style={{ padding: 24, animationDelay: `${i * 0.06}s` }}>
+              <div style={{ color: "#22d3ee", fontSize: 34, fontFamily: "Chakra Petch", lineHeight: 1, marginBottom: 8 }}>&ldquo;</div>
+              <p style={{ fontSize: 15, lineHeight: 1.6 }}>{t.quote}</p>
+              <p className="muted" style={{ fontSize: 13, marginTop: 14 }}><b style={{ color: "#d9c9ff" }}>{t.name}</b> · {t.place}</p>
+            </div>
+          ))}
         </div>
       </section>
 
