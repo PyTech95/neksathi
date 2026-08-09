@@ -40,6 +40,13 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - Twilio Verify when TWILIO_ACCOUNT_SID+TWILIO_AUTH_TOKEN+TWILIO_VERIFY_SERVICE set; else DEV code returned & shown in UI.
 - Auto-creates user by phone (placeholder email {digits}@phone.neksaathi.app). Entry: Login page link + QR claim redirect (/otp-login?next=/claim/:serial).
 
+## Live comms — Twilio wired 2026-06 (batch 6)
+- Twilio account "Neksathi" (**Trial**). Env set in backend/.env: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_VERIFY_SERVICE (VA…, auto-created), TWILIO_WHATSAPP_FROM=+14155238886 (sandbox), NEK_PORTAL_NUMBER.
+- **OTP SMS: LIVE** via Twilio Verify. Trial limit: only sends to numbers verified in Twilio console until account is upgraded (unverified → 403 shown in UI). Dev-code path no longer shows once Verify is configured.
+- **WhatsApp: LIVE** via sandbox — recipient must join the sandbox (send the join code) to receive; send failures are swallowed & audit-logged in db.notifications (status sent/failed), so incident flow never breaks.
+- **Masked call: still MOCK** — trial account has no voice number (TWILIO_FROM unset → _telco_provider()=='whatsapp'). Buy a Twilio voice number + set TWILIO_FROM (and a public voice webhook/IVR) to bridge for real.
+- To fully unlock: upgrade Twilio from Trial (or verify test numbers), join WhatsApp sandbox, purchase a voice number.
+
 ## GO-LIVE checklist for comms (pending user keys)
 - WhatsApp notify: set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM → notify_whatsapp() auto-goes live.
 - OTP SMS: set TWILIO_VERIFY_SERVICE (+ SID/token) → OTP auto-goes live.

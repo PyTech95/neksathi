@@ -3361,9 +3361,8 @@ async def notify_whatsapp(to: Optional[str], text: str, meta: Optional[dict] = N
     live = _whatsapp_live()
     doc = {
         "id": new_id(), "channel": "whatsapp", "to": to, "text": text,
-        "status": "sent" if live else "mock", "meta": meta or {}, "created_at": now_utc(),
+        "status": "mock", "meta": meta or {}, "created_at": now_utc(),
     }
-    await db.notifications.insert_one(dict(doc))
     if live:
         try:  # pragma: no cover - only runs with real creds
             from twilio.rest import Client as _TwClient
@@ -3372,10 +3371,14 @@ async def notify_whatsapp(to: Optional[str], text: str, meta: Optional[dict] = N
                 from_=f"whatsapp:{os.environ['TWILIO_WHATSAPP_FROM']}",
                 to=f"whatsapp:{to}", body=text,
             )
+            doc["status"] = "sent"
         except Exception as _e:
+            doc["status"] = "failed"
+            doc["error"] = str(_e)[:200]
             log.warning("whatsapp live send failed: %s", _e)
     else:
         log.info("[WHATSAPP MOCK] to=%s :: %s", to, text)
+    await db.notifications.insert_one(dict(doc))
     return {"status": doc["status"], "id": doc["id"]}
 
 
