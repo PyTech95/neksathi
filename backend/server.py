@@ -1786,22 +1786,25 @@ async def public_tag_alert(request: Request, qr_id: str, payload: TagAlertIn):
     }
     await db.alerts.insert_one(dict(alert))
     prefs = _prefs(owner)
-    # WhatsApp fan-out to owner + guardian (privacy-safe, mock-ready, gated by prefs).
+    # Emergency scans (kid needs help / SOS / emergency) ALWAYS broadcast to
+    # both guardian and owner regardless of notification prefs — safety override.
+    emergency = payload.type in ("kid_help", "sos", "emergency")
+    # WhatsApp fan-out to owner + guardian (privacy-safe, mock-ready, gated by prefs unless emergency).
     tag_title = {"kid_help": "KID NEEDS HELP", "sos": "SOS", "emergency": "Emergency"}.get(payload.type, "scanned")
-    body = f"Your Nek Sathi tag '{t['name']}' was {tag_title} via a QR scan."
+    body = (f"🚨 EMERGENCY — {tag_title}: " if emergency else "") + f"Your Nek Sathi tag '{t['name']}' was {tag_title} via a QR scan."
     if payload.scanner_note:
         body += f" Note: {payload.scanner_note[:100]}"
     if payload.scanner_lat is not None and payload.scanner_lng is not None:
-        body += f" Location: https://maps.google.com/?q={payload.scanner_lat},{payload.scanner_lng}"
-    if prefs.get("whatsapp"):
+        body += f" Live location: https://maps.google.com/?q={payload.scanner_lat},{payload.scanner_lng}"
+    if emergency or prefs.get("whatsapp"):
         if owner and owner.get("phone"):
-            await notify_whatsapp(owner["phone"], body, meta={"tag_id": t["id"], "role": "owner"})
+            await notify_whatsapp(owner["phone"], body, meta={"tag_id": t["id"], "role": "owner", "emergency": emergency})
         if t.get("guardian_phone"):
-            await notify_whatsapp(t["guardian_phone"], body, meta={"tag_id": t["id"], "role": "guardian"})
+            await notify_whatsapp(t["guardian_phone"], body, meta={"tag_id": t["id"], "role": "guardian", "emergency": emergency})
     # Push notify owner of tag alert (doorbell / lost pet / lost luggage /
     # child-safety live GPS request).
     try:
-        if t.get("owner_id") and prefs.get("push"):
+        if t.get("owner_id") and (emergency or prefs.get("push")):
             type_titles = {
                 "doorbell": "🔔 Someone's at your door",
                 "door":     "🔔 Someone's at your door",
@@ -2524,6 +2527,8 @@ class BulkGenerateIn(BaseModel):
     count: int = Field(ge=1, le=10000)
     batch_label: Optional[str] = None
     notes: Optional[str] = None
+    product_type: Optional[Literal["vehicle", "tag", "card"]] = None
+    org_name: Optional[str] = Field(default=None, max_length=120)
 
 
 class ClaimIn(BaseModel):
@@ -2545,6 +2550,7 @@ async def admin_qr_bulk_generate(body: BulkGenerateIn, admin: dict = Depends(req
             "id": new_id(), "seq": seq, "serial_no": _next_serial(seq),
             "qr_id": new_id(), "status": "unclaimed",
             "batch_id": batch_id, "batch_label": batch_label, "notes": body.notes,
+            "intended_type": body.product_type, "org_name": (body.org_name or None),
             "assigned_to_user_id": None, "product_type": None, "assigned_at": None,
             "sold_to_vendor": None, "sold_at": None,
             "created_at": now_utc(), "created_by": admin["id"],
@@ -2673,6 +2679,8 @@ async def public_claim_preview(serial_no: str):
     return {
         "status": d["status"], "serial_no": d["serial_no"],
         "batch_label": d.get("batch_label"),
+        "intended_type": d.get("intended_type"),
+        "org_name": d.get("org_name"),
     }
 
 
@@ -2699,7 +2707,13 @@ async def qr_claim(body: ClaimIn, user: dict = Depends(current_user)):
     elif body.product_type == "tag":
         await db.tags.insert_one({
             "id": new_doc_id, "owner_id": user["id"], "qr_id": new_qr,
-            "name": p.get("name", "My Tag"), "tag_type": p.get("type_", "pet"),
+            "name": p.get("name", "My Tag"), "tag_type": p.get("tag_type") or p.get("type_", "pet"),
+            "description": p.get("description"),
+            "blood_group": (p.get("blood_group") or "").strip() or None,
+            "medical_notes": p.get("medical_notes"),
+            "reward_text": p.get("reward_text"),
+            "guardian_name": (p.get("guardian_name") or "").strip() or None,
+            "guardian_phone": (p.get("guardian_phone") or "").strip() or None,
             "lost_mode": bool(p.get("lost_mode", False)),
             "metadata": p.get("metadata", {}), "created_at": now,
         })

@@ -11,7 +11,7 @@ export default function AdminQR() {
   const [inv, setInv] = useState([]);
   const [statusF, setStatusF] = useState("");
   const [q, setQ] = useState("");
-  const [gen, setGen] = useState({ count: 100, batch_label: "" });
+  const [gen, setGen] = useState({ count: 100, batch_label: "", product_type: "", org_name: "" });
   const [genBusy, setGenBusy] = useState(false);
   const [genResult, setGenResult] = useState(null);
   const [sold, setSold] = useState({ serial_from: "", serial_to: "", vendor_name: "" });
@@ -31,7 +31,7 @@ export default function AdminQR() {
   const generate = async (e) => {
     e.preventDefault(); setGenBusy(true); setGenResult(null);
     try {
-      const r = await api.post("/admin/qr/generate-bulk", { count: Number(gen.count), batch_label: gen.batch_label || null });
+      const r = await api.post("/admin/qr/generate-bulk", { count: Number(gen.count), batch_label: gen.batch_label || null, product_type: gen.product_type || null, org_name: gen.org_name || null });
       setGenResult(r.data); loadBatches(); loadInv();
     } finally { setGenBusy(false); }
   };
@@ -67,6 +67,17 @@ export default function AdminQR() {
             <form onSubmit={generate}>
               <div className="field"><label>How many (max 10,000)</label><input className="input" type="number" min={1} max={10000} value={gen.count} onChange={(e) => setGen({ ...gen, count: e.target.value })} data-testid="gen-count" /></div>
               <div className="field"><label>Batch label (optional)</label><input className="input" value={gen.batch_label} onChange={(e) => setGen({ ...gen, batch_label: e.target.value })} data-testid="gen-label" placeholder="Diwali-2026" /></div>
+              <div className="field"><label>Product type</label>
+                <select className="input" value={gen.product_type} onChange={(e) => setGen({ ...gen, product_type: e.target.value })} data-testid="gen-product-type">
+                  <option value="">Any (customer chooses)</option>
+                  <option value="vehicle">Vehicle QR</option>
+                  <option value="tag">ID Tag (school / hospital / office)</option>
+                  <option value="card">Digital card</option>
+                </select>
+              </div>
+              {gen.product_type === "tag" && (
+                <div className="field"><label>Organization (optional)</label><input className="input" value={gen.org_name} onChange={(e) => setGen({ ...gen, org_name: e.target.value })} data-testid="gen-org-name" placeholder="e.g. Delhi Public School" /></div>
+              )}
               <button className="btn btn-primary btn-block" disabled={genBusy} data-testid="gen-submit">{genBusy ? <><Loader2 size={16} className="spin" /> Generating…</> : <><Plus size={16} /> Generate</>}</button>
             </form>
             {genResult && <p style={{ color: "#22d3ee", marginTop: 12, fontSize: 14 }} data-testid="gen-result">✅ {genResult.count} QR codes: {genResult.first_serial} → {genResult.last_serial}</p>}

@@ -32,6 +32,7 @@ import AdminSupport from "@/pages/AdminSupport";
 import Contact from "@/pages/Contact";
 import AdminContacts from "@/pages/AdminContacts";
 import Settings from "@/pages/Settings";
+import PersonaLanding from "@/pages/PersonaLanding";
 
 function Protected({ children, adminOnly, dealerOnly }) {
   const { user, loading } = useAuth();
@@ -57,6 +58,7 @@ function Shell() {
           <Route path="/register" element={<Register />} />
           <Route path="/scan/:qrId" element={<PublicScan />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/for/:persona" element={<PersonaLanding />} />
           <Route path="/t/:qrId" element={<PublicTag />} />
           <Route path="/c/:qrId" element={<PublicCard />} />
           <Route path="/invite/:token" element={<Invite />} />

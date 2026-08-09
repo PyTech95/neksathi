@@ -35,9 +35,9 @@ const parkingSteps = [
 ];
 
 const personas = [
-  { img: "https://images.unsplash.com/photo-1630830844072-b7ad174db3bc?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "School kids", title: "Safe to & from school", desc: "An ID tag with guardian contact and medical info. A teacher or stranger can privately reach a parent, or tap 'Kid needs help'." },
-  { img: "https://images.unsplash.com/photo-1586324304780-c9a5031a3599?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Patients & elderly", title: "Emergency ICE profile", desc: "Blood group, allergies and a one-tap masked call to the guardian — so first-responders can act in seconds." },
-  { img: "https://images.unsplash.com/photo-1690378820474-b468b8ee64d3?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Office & workplace", title: "Staff ID & lost-and-found", desc: "Staff badges, laptops and access cards become traceable — found items reach the owner without exposing anyone." },
+  { img: "https://images.unsplash.com/photo-1630830844072-b7ad174db3bc?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "School kids", title: "Safe to & from school", desc: "An ID tag with guardian contact and medical info. A teacher or stranger can privately reach a parent, or tap 'Kid needs help'.", link: "/for/schools" },
+  { img: "https://images.unsplash.com/photo-1586324304780-c9a5031a3599?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Patients & elderly", title: "Emergency ICE profile", desc: "Blood group, allergies and a one-tap masked call to the guardian — so first-responders can act in seconds.", link: "/for/hospitals" },
+  { img: "https://images.unsplash.com/photo-1690378820474-b468b8ee64d3?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Office & workplace", title: "Staff ID & lost-and-found", desc: "Staff badges, laptops and access cards become traceable — found items reach the owner without exposing anyone.", link: "/for/offices" },
   { img: "https://images.unsplash.com/photo-1534361960057-19889db9621e?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Pets", title: "Bring them home", desc: "A collar QR lets any finder reach you instantly and share the pet's live location." },
   { img: "https://images.unsplash.com/photo-1532968899863-5b52ef155913?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Travel & luggage", title: "Never lose a bag", desc: "Tag suitcases, backpacks and gadgets — a finder pings you, no personal details revealed." },
 ];
@@ -118,6 +118,7 @@ export default function Landing() {
               <div className="card-pad" style={{ padding: 20 }}>
                 <h3 style={{ fontSize: 19, marginBottom: 6 }}>{p.title}</h3>
                 <p className="muted" style={{ fontSize: 14, lineHeight: 1.55 }}>{p.desc}</p>
+                {p.link && <Link to={p.link} className="neon" data-testid={`persona-link-${i}`} style={{ display: "inline-block", marginTop: 12, fontSize: 14, textDecoration: "none", fontWeight: 600 }}>Learn more →</Link>}
               </div>
             </div>
           ))}
