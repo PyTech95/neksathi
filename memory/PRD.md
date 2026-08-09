@@ -65,6 +65,12 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - **Notification preferences honoured**: incident create, overspeed alerts and tag alerts now respect the owner's `notify_prefs` (whatsapp/push channels + incident_alerts/speed_alerts) via `_prefs()` helper. Family contacts on incidents are always alerted; the owner's own channel honours their toggles.
 - Verified via curl (guardian create/read with phone never leaked, masked call, has_guardian correctness) and **testing_agent (iteration_9.json): 20+ flows PASS, no defects**.
 
+## Bulk tag orders + emergency broadcast + persona pages — 2026-06 (batch 14, this fork)
+- **Bulk Tag Orders**: admins can pre-designate a QR batch as `product_type=tag` for an organization (`org_name`) in /admin/qr. Scanning an unclaimed tag serial opens `/claim/{serial}` which now branches to a TAG registration form (name, type, and medical + guardian fields for person/kid/patient/staff) — mirroring the car claim flow. Backend: BulkGenerateIn(product_type, org_name) → stored as intended_type/org_name; /public/claim returns them; /qr/claim tag branch persists guardian/medical.
+- **Emergency Broadcast**: `kid_help`/`sos`/`emergency` tag scans now ALWAYS alert BOTH guardian and owner (bypassing notification prefs) with a live Google-Maps location link. Non-emergency scans still honour prefs.
+- **Persona Landing Pages**: `/for/schools`, `/for/hospitals`, `/for/offices` (PersonaLanding.jsx) — tailored hero + imagery, 4 benefit cards, "how the bulk order works" steps, and Register/Contact CTAs. Landing persona cards link to them via "Learn more →". Invalid persona redirects home.
+- Verified via curl + **testing_agent (iteration_10.json): backend 7/7 pytest, frontend 100%, no defects**. Guardian phone never leaked; emergency notifies both parties. Test data cleaned.
+
 ## Testing
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.
