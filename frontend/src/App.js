@@ -29,6 +29,8 @@ import DealerDashboard from "@/pages/DealerDashboard";
 import Support from "@/pages/Support";
 import AdminPlans from "@/pages/AdminPlans";
 import AdminSupport from "@/pages/AdminSupport";
+import Contact from "@/pages/Contact";
+import AdminContacts from "@/pages/AdminContacts";
 
 function Protected({ children, adminOnly, dealerOnly }) {
   const { user, loading } = useAuth();
@@ -53,6 +55,7 @@ function Shell() {
           <Route path="/otp-login" element={<OtpLogin />} />
           <Route path="/register" element={<Register />} />
           <Route path="/scan/:qrId" element={<PublicScan />} />
+          <Route path="/contact" element={<Contact />} />
           <Route path="/t/:qrId" element={<PublicTag />} />
           <Route path="/c/:qrId" element={<PublicCard />} />
           <Route path="/invite/:token" element={<Invite />} />
@@ -75,6 +78,7 @@ function Shell() {
           <Route path="/admin/incidents" element={<Protected adminOnly><AdminIncidents /></Protected>} />
           <Route path="/admin/plans" element={<Protected adminOnly><AdminPlans /></Protected>} />
           <Route path="/admin/support" element={<Protected adminOnly><AdminSupport /></Protected>} />
+          <Route path="/admin/contacts" element={<Protected adminOnly><AdminContacts /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

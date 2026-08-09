@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox } from "lucide-react";
+import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox, Mail } from "lucide-react";
+
+function Badge({ n }) {
+  if (!n) return null;
+  return <span data-testid="hub-badge" style={{ marginLeft: 8, background: "#ff3b5c", color: "#fff", borderRadius: 999, padding: "1px 8px", fontSize: 12, fontWeight: 700 }}>{n}</span>;
+}
 
 function Stat({ icon, label, value, color }) {
   return (
@@ -22,6 +27,7 @@ export default function Admin() {
   const [aDays, setADays] = useState(30);
   const [aq, setAq] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [inbox, setInbox] = useState({ open_tickets: 0, new_enquiries: 0 });
 
   const loadStats = async () => setStats((await api.get("/admin/stats")).data);
   const loadUsers = async (query = "") => setUsers((await api.get(`/admin/users${query ? `?q=${encodeURIComponent(query)}` : ""}`)).data.results);
@@ -33,7 +39,7 @@ export default function Admin() {
     setAlerts((await api.get(`/admin/alerts?${params.toString()}`)).data.results);
   };
 
-  useEffect(() => { loadStats(); loadUsers(); loadAlerts(); }, []);
+  useEffect(() => { loadStats(); loadUsers(); loadAlerts(); api.get("/admin/inbox/summary").then((r) => setInbox(r.data)).catch(() => {}); }, []);
 
   const exportCSV = async () => {
     setExporting(true);
@@ -74,7 +80,10 @@ export default function Admin() {
             <CreditCard size={22} color="#34d399" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Plans</h3><p className="muted" style={{ fontSize: 13 }}>Create & edit subscription plans and prices</p>
           </Link>
           <Link to="/admin/support" className="glass glass-hover card-pad" data-testid="link-admin-support" style={{ textDecoration: "none", color: "inherit" }}>
-            <Inbox size={22} color="#22d3ee" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Support inbox</h3><p className="muted" style={{ fontSize: 13 }}>Reply to user tickets & manage status</p>
+            <Inbox size={22} color="#22d3ee" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Support inbox<Badge n={inbox.open_tickets} /></h3><p className="muted" style={{ fontSize: 13 }}>Reply to user tickets & manage status</p>
+          </Link>
+          <Link to="/admin/contacts" className="glass glass-hover card-pad" data-testid="link-admin-contacts" style={{ textDecoration: "none", color: "inherit" }}>
+            <Mail size={22} color="#f5a524" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Contact enquiries<Badge n={inbox.new_enquiries} /></h3><p className="muted" style={{ fontSize: 13 }}>Messages from the public contact form</p>
           </Link>
         </div>
 

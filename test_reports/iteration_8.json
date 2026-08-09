@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 8 — frontend-only validation of the four new admin/support features (Public Contact form, Admin Contact enquiries, Admin/Nav inbox badges, Admin Plans editor with single-popular enforcement, User Support tickets + Admin Support replies) plus regression on /scan and logins. All 19 tested flows PASS. Single-popular constraint is correctly enforced end-to-end (backend + admin UI + /subscription page). Demo left in a clean state: family_pro is the only 'popular' plan and the ephemeral TEST_ plan was archived.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor: Admin.jsx hub-badges are driven by a fire-and-forget api.get('/admin/inbox/summary') in useEffect with no loading indicator — badges pop in a few hundred ms after mount. Not a bug (nav-admin-badge behaves the same and testing confirmed both settle to correct counts), but consider a subtle skeleton/placeholder on the two hub cards while inbox summary is in-flight.",
+    "AdminPlans.reactivate() reuses p.popular unchanged — good; but a reactivated plan that was popular before archival will silently become popular again, potentially producing two popular plans if another one has since been marked. Consider forcing popular=false on reactivate, or having the server re-run the single-popular constraint on any PUT that sets popular=true (which it already does — so this is only a concern if archive/reactivate leaves stale popular flags. Verified in this test that server enforces single-popular on PUT, so effectively safe).",
+    "Contact.jsx uses phone: form.phone.trim() || null — fine; keep as-is.",
+    "server.py is still ~4k lines (carry-over from iter 7) — split into routers for maintainability. Non-blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only this run; previously 100%)", "frontend": "100% (19/19 flows)"},
+  "test_credentials": "Admin admin@safeqr.com/admin1234; Owner demo_web@safeqr.com/demo1234; Dealer dealera@nek.dev/dealer1234; Demo QR 45805f3a-f10a-4534-bc7d-29699029b2cf.",
+  "seed_data_creation": "Two anonymous contact enquiries submitted (subject prefix TEST_ENQ_ / TEST_ENQ2_), one moved to status=replied; two support tickets created by demo_web (TEST_TICKET_/TEST_TKT2_), one resolved with an admin reply; one temporary plan (code test_pl_<ts>) created then ARCHIVED. Popular flag was flipped to the test plan then restored to family_pro — final state: family_pro is the ONLY popular plan.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All new features are wired correctly. Selectors verified: landing-contact-link, contact-page, contact-name/email/phone/subject/message, submit-contact, contact-success; link-admin-contacts, admin-contacts-page, enquiry-<id>, enquiry-status-<id>, set-<status>-<id>, contacts-status-filter; link-admin-plans, admin-plans-page, plan-card-<code>, add-plan-btn, plan-code/name/description/price/interval/vehicle-limit/currency/features/active, plan-popular-toggle, submit-plan, edit-plan-<code>, archive-plan-<code>, reactivate-plan-<code>, plan-popular-<code>; link-admin-support (Support inbox card with Badge for open_tickets), hub-badge, nav-admin-badge (sum), admin-support-page, admin-ticket-<id>, admin-reply-body, admin-reply-status, send-reply-btn, detail-status, quick-resolve, quick-close; nav-support, support-page, new-ticket-btn, ticket-subject/body/priority, submit-ticket, ticket-<id>, ticket-status-<id>. On /subscription 'Most popular' chip renders for the popular plan (currently family_pro).",
+  "test_scenarios_executed": {
+    "public_contact_form": "PASS — navigated via landing footer landing-contact-link → /contact, filled name/email/subject/message (phone left blank), submit-contact clicked, contact-success rendered",
+    "admin_contact_list": "PASS — enquiry TEST_ENQ_<ts> visible in /admin/contacts",
+    "admin_contact_status_change": "PASS — set-replied-<id> updates enquiry-status-<id> chip to 'replied'",
+    "admin_contact_status_filter": "PASS — selecting 'new' in contacts-status-filter hides the just-replied enquiry",
+    "nav_admin_badge": "PASS — TopNav 'Admin' link shows red data-testid='nav-admin-badge' with count 2 (1 open ticket + 1 new enquiry)",
+    "admin_hub_badges": "PASS — /admin renders two data-testid='hub-badge' spans (Support inbox=1, Contact enquiries=1) once /admin/inbox/summary resolves (~<1s)",
+    "plans_render": "PASS — plan-card-basic and plan-card-family_pro visible",
+    "plan_create": "PASS — add-plan-btn opens modal, submit-plan creates new plan-card-<code>",
+    "plan_edit": "PASS — edit-plan-basic price changed to 199 and persisted",
+    "plan_archive": "PASS — archive-plan-<code> hides card into archived state and shows reactivate-plan-<code>",
+    "plan_reactivate": "PASS — reactivate-plan-<code> re-activates plan and shows archive-plan-<code> again",
+    "plan_popular_single_enforced_admin": "PASS — after toggling plan-popular-toggle on new plan, only ONE plan-popular-<code> chip exists on the admin cards; toggling back to family_pro leaves only plan-popular-family_pro",
+    "plan_popular_user_facing_subscription": "PASS — /subscription shows 'Most popular' chip on the featured plan card",
+    "owner_support_ticket_create": "PASS — /support new-ticket-btn opens modal, submit-ticket creates ticket-<id> in list with priority=high",
+    "admin_support_open_and_reply": "PASS — admin-ticket-<id> opens ticket-detail; admin-reply-body + admin-reply-status='resolved' + send-reply-btn → detail-status becomes 'resolved'",
+    "owner_sees_reply_and_resolved_status": "PASS — after admin reply, owner /support shows the admin's reply text and ticket-status-<id>='resolved'",
+    "regression_public_scan": "PASS — /scan/45805f3a-f10a-4534-bc7d-29699029b2cf loads with DL01AB9767 · Honda City and 3 emergency options",
+    "regression_admin_login": "PASS",
+    "regression_owner_login": "PASS"
+  },
+  "rca_of_the_issue": "N/A — no defects found. Only observation: hub-badges on /admin depend on an async /admin/inbox/summary call and are absent for <~1s after mount; my initial query saw 0 elements. After a 3-second wait the badges rendered correctly (1 + 1) alongside nav-admin-badge=2. Consider a placeholder while inbox summary is loading; non-blocking."
+}

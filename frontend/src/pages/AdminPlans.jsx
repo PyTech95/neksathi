@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { CreditCard, Plus, ArrowLeft, X, Pencil, Ban, CheckCircle2 } from "lucide-react";
+import { CreditCard, Plus, ArrowLeft, X, Pencil, Ban, CheckCircle2, Star } from "lucide-react";
 
 const rupee = (paise) => `₹${((paise || 0) / 100).toLocaleString()}`;
-const empty = { code: "", name: "", description: "", price_rupees: "", currency: "INR", interval: "month", vehicle_limit: 1, features: "", active: true };
+const empty = { code: "", name: "", description: "", price_rupees: "", currency: "INR", interval: "month", vehicle_limit: 1, features: "", active: true, popular: false };
 
 export default function AdminPlans() {
   const [plans, setPlans] = useState([]);
@@ -24,7 +24,7 @@ export default function AdminPlans() {
       code: p.code, name: p.name, description: p.description || "",
       price_rupees: String((p.price_cents || 0) / 100), currency: p.currency || "INR",
       interval: p.interval || "month", vehicle_limit: p.vehicle_limit || 1,
-      features: (p.features || []).join("\n"), active: p.active,
+      features: (p.features || []).join("\n"), active: p.active, popular: !!p.popular,
     });
     setErr(""); setShow(true);
   };
@@ -36,7 +36,7 @@ export default function AdminPlans() {
       code: form.code.trim(), name: form.name.trim(), description: form.description.trim() || null,
       price_cents: Math.round(Number(form.price_rupees || 0) * 100), currency: form.currency,
       interval: form.interval, vehicle_limit: Number(form.vehicle_limit) || 1,
-      features: form.features.split("\n").map((f) => f.trim()).filter(Boolean), active: form.active,
+      features: form.features.split("\n").map((f) => f.trim()).filter(Boolean), active: form.active, popular: form.popular,
     };
     try {
       if (editing) await api.put(`/admin/plans/${editing.id}`, payload);
@@ -52,7 +52,7 @@ export default function AdminPlans() {
   };
   const reactivate = async (p) => { await api.put(`/admin/plans/${p.id}`, {
     code: p.code, name: p.name, description: p.description || null, price_cents: p.price_cents,
-    currency: p.currency, interval: p.interval, vehicle_limit: p.vehicle_limit, features: p.features || [], active: true,
+    currency: p.currency, interval: p.interval, vehicle_limit: p.vehicle_limit, features: p.features || [], active: true, popular: !!p.popular,
   }); load(); };
 
   return (
@@ -67,11 +67,12 @@ export default function AdminPlans() {
         <div className="grid grid-3">
           {plans.length === 0 && <p className="muted">No plans yet. Create your first one.</p>}
           {plans.map((p) => (
-            <div key={p.id} className="glass card-pad" data-testid={`plan-card-${p.code}`} style={{ opacity: p.active ? 1 : 0.55 }}>
+            <div key={p.id} className="glass card-pad" data-testid={`plan-card-${p.code}`} style={{ opacity: p.active ? 1 : 0.55, borderColor: p.popular ? "rgba(34,211,238,.5)" : undefined }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span className="chip">{p.code}</span>
                 {p.active ? <span style={{ color: "#22d3ee", fontSize: 12, fontWeight: 700 }}>Active</span> : <span style={{ color: "#f5a524", fontSize: 12, fontWeight: 700 }}>Archived</span>}
               </div>
+              {p.popular && <span className="chip" style={{ marginTop: 10, color: "#22d3ee" }} data-testid={`plan-popular-${p.code}`}><Star size={12} /> Most popular</span>}
               <h3 style={{ fontSize: 20, margin: "12px 0 4px" }}>{p.name}</h3>
               <div className="stat-num neon" style={{ fontSize: 28 }}>{rupee(p.price_cents)}<span className="muted" style={{ fontSize: 14 }}> / {p.interval}</span></div>
               {p.description && <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>{p.description}</p>}
@@ -116,9 +117,13 @@ export default function AdminPlans() {
                 <div className="field"><label>Currency</label><input className="input" value={form.currency} onChange={set("currency")} data-testid="plan-currency" /></div>
               </div>
               <div className="field"><label>Features (one per line)</label><textarea className="input" rows={4} value={form.features} onChange={set("features")} data-testid="plan-features" placeholder={"Live tracking\nFamily circle\nPriority support"} /></div>
-              <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14, cursor: "pointer" }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, cursor: "pointer" }}>
                 <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} data-testid="plan-active" />
                 <span className="muted" style={{ fontSize: 14 }}>Active (offered to users)</span>
+              </label>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14, cursor: "pointer" }}>
+                <input type="checkbox" checked={form.popular} onChange={(e) => setForm({ ...form, popular: e.target.checked })} data-testid="plan-popular-toggle" />
+                <span className="muted" style={{ fontSize: 14 }}>Mark as "Most popular" (highlighted on the Plans page — only one plan can hold this)</span>
               </label>
               {err && <p style={{ color: "var(--danger)", fontSize: 13, marginBottom: 10 }} data-testid="plan-error">{err}</p>}
               <button className="btn btn-primary btn-block" disabled={busy} data-testid="submit-plan">{busy ? "Saving…" : editing ? "Save changes" : "Create plan"}</button>

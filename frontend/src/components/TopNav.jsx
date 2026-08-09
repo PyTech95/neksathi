@@ -1,12 +1,23 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { QrCode, LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import api from "@/lib/api";
 
 export default function TopNav() {
   const { user, logout } = useAuth();
   const loc = useLocation();
   const nav = useNavigate();
   const isActive = (p) => loc.pathname === p;
+  const [inboxTotal, setInboxTotal] = useState(0);
+
+  useEffect(() => {
+    if (user?.is_admin) {
+      api.get("/admin/inbox/summary").then((r) => setInboxTotal(r.data.total || 0)).catch(() => {});
+    } else {
+      setInboxTotal(0);
+    }
+  }, [user, loc.pathname]);
 
   return (
     <nav className="topnav" data-testid="top-nav">
@@ -32,7 +43,10 @@ export default function TopNav() {
             <Link to="/subscription" className={`nav-link ${isActive("/subscription") ? "active" : ""}`} data-testid="nav-plans">Plans</Link>
             <Link to="/support" className={`nav-link ${isActive("/support") ? "active" : ""}`} data-testid="nav-support">Support</Link>
             {user.is_admin && (
-              <Link to="/admin" className={`nav-link ${isActive("/admin") ? "active" : ""}`} data-testid="nav-admin">Admin</Link>
+              <Link to="/admin" className={`nav-link ${isActive("/admin") ? "active" : ""}`} data-testid="nav-admin" style={{ display: "inline-flex", alignItems: "center" }}>
+                Admin
+                {inboxTotal > 0 && <span data-testid="nav-admin-badge" style={{ marginLeft: 6, background: "#ff3b5c", color: "#fff", borderRadius: 999, padding: "0 7px", fontSize: 11, fontWeight: 700, lineHeight: "18px" }}>{inboxTotal}</span>}
+              </Link>
             )}
             <button className="btn btn-ghost btn-sm" data-testid="logout-btn" onClick={() => { logout(); nav("/"); }}>
               <LogOut size={15} /> Logout

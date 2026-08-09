@@ -61,7 +61,7 @@ export default function Subscription() {
           <div className="grid grid-2" style={{ marginTop: 24 }}>
             {plans.map((p, i) => {
               const isCurrent = current?.status === "active" && current?.plan_code === p.code;
-              const featured = p.code === "family_pro";
+              const featured = !!p.popular;
               return (
                 <div key={p.id} className="glass glass-hover card-pad fade-up" data-testid={`plan-${p.code}`}
                   style={{ padding: 28, borderColor: featured ? "rgba(34,211,238,.5)" : undefined, animationDelay: `${i * 0.06}s` }}>

@@ -184,7 +184,9 @@ export default function Landing() {
             <Link to={DEMO_SCAN} className="btn btn-ghost" data-testid="cta-try-scan"><ShieldCheck size={17} /> Try a live scan</Link>
           </div>
         </div>
-        <p className="center muted" style={{ marginTop: 40, fontSize: 13 }}>Made with ❤️ in India · Nek Sathi</p>
+        <p className="center muted" style={{ marginTop: 40, fontSize: 13 }}>
+          Made with ❤️ in India · Nek Sathi · <Link to="/contact" className="neon" data-testid="landing-contact-link" style={{ textDecoration: "none" }}>Contact us</Link>
+        </p>
       </section>
     </div>
   );

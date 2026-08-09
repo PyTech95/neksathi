@@ -358,6 +358,7 @@ class PlanOut(BaseModel):
     vehicle_limit: int
     features: List[str] = []
     active: bool = True
+    popular: bool = False
 
 
 class PlanIn(BaseModel):
@@ -370,6 +371,7 @@ class PlanIn(BaseModel):
     vehicle_limit: int = Field(default=1, ge=1, le=999)
     features: List[str] = []
     active: bool = True
+    popular: bool = False
 
 
 class CheckoutIn(BaseModel):
@@ -2986,6 +2988,7 @@ def plan_out(p: dict) -> PlanOut:
         vehicle_limit=p.get("vehicle_limit", 1),
         features=p.get("features", []),
         active=bool(p.get("active", True)),
+        popular=bool(p.get("popular", False)),
     )
 
 
@@ -3144,6 +3147,8 @@ async def admin_create_plan(payload: PlanIn, _: dict = Depends(require_admin)):
     if existing:
         raise HTTPException(status_code=409, detail="Plan code already exists")
     doc = {"id": new_id(), "created_at": now_utc(), **payload.model_dump()}
+    if payload.popular:
+        await db.plans.update_many({}, {"$set": {"popular": False}})
     await db.plans.insert_one(dict(doc))
     return plan_out(doc)
 
@@ -3154,6 +3159,8 @@ async def admin_update_plan(plan_id: str, payload: PlanIn, _: dict = Depends(req
     if not row:
         raise HTTPException(status_code=404, detail="Plan not found")
     update = payload.model_dump()
+    if payload.popular:
+        await db.plans.update_many({"id": {"$ne": plan_id}}, {"$set": {"popular": False}})
     await db.plans.update_one({"id": plan_id}, {"$set": update})
     row.update(update)
     return plan_out(clean(row))
@@ -3287,6 +3294,26 @@ async def admin_list_contacts(_: dict = Depends(require_admin), limit: int = 200
     async for c in db.contact_enquiries.find({}).sort("created_at", -1).limit(limit):
         items.append(clean(c))
     return {"count": len(items), "results": items}
+
+
+class ContactStatusIn(BaseModel):
+    status: Literal["new", "in_progress", "replied", "closed"]
+
+
+@api.patch("/admin/contacts/{enquiry_id}")
+async def admin_update_contact(enquiry_id: str, payload: ContactStatusIn, _: dict = Depends(require_admin)):
+    r = await db.contact_enquiries.update_one({"id": enquiry_id}, {"$set": {"status": payload.status, "updated_at": now_utc()}})
+    if r.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+    return {"ok": True, "status": payload.status}
+
+
+@api.get("/admin/inbox/summary")
+async def admin_inbox_summary(_: dict = Depends(require_admin)):
+    """Lightweight counts for the admin nav badge: open tickets + new enquiries."""
+    open_tickets = await db.support_tickets.count_documents({"status": {"$in": ["open", "in_progress"]}})
+    new_enquiries = await db.contact_enquiries.count_documents({"status": {"$in": ["new", "in_progress"]}})
+    return {"open_tickets": open_tickets, "new_enquiries": new_enquiries, "total": open_tickets + new_enquiries}
 
 
 # ---------------------------------------------------------------------------
@@ -3640,6 +3667,13 @@ async def resolve_incident(incident_id: str, user: dict = Depends(current_user))
     if inc["vehicle_id"] not in visible:
         raise HTTPException(status_code=403, detail="Not your vehicle")
     await db.incidents.update_one({"id": incident_id}, {"$set": {"status": "resolved", "resolved": True, "resolved_at": now_utc()}})
+    # Let the reporter know the outcome so they're never left waiting.
+    if inc.get("scanner_phone"):
+        await notify_whatsapp(
+            inc["scanner_phone"],
+            f"Update on {inc['number_plate']}: the owner has resolved this and is on the way / has handled it. Thank you for using Nek Sathi.",
+            meta={"incident_id": incident_id, "kind": "reporter_resolved"},
+        )
     return {"ok": True, "status": "resolved"}
 
 
