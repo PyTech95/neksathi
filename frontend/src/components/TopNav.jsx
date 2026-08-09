@@ -1,0 +1,38 @@
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { QrCode, LogOut } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+
+export default function TopNav() {
+  const { user, logout } = useAuth();
+  const loc = useLocation();
+  const nav = useNavigate();
+  const isActive = (p) => loc.pathname === p;
+
+  return (
+    <nav className="topnav" data-testid="top-nav">
+      <Link to="/" className="brand" data-testid="brand-link">
+        <span className="brand-badge"><QrCode size={20} /></span>
+        Nek<span className="neon">Saathi</span>
+      </Link>
+      <div className="nav-links">
+        {user ? (
+          <>
+            <Link to="/dashboard" className={`nav-link ${isActive("/dashboard") ? "active" : ""}`} data-testid="nav-dashboard">Dashboard</Link>
+            <Link to="/alerts" className={`nav-link ${isActive("/alerts") ? "active" : ""}`} data-testid="nav-alerts">Alerts</Link>
+            {user.is_admin && (
+              <Link to="/admin" className={`nav-link ${isActive("/admin") ? "active" : ""}`} data-testid="nav-admin">Admin</Link>
+            )}
+            <button className="btn btn-ghost btn-sm" data-testid="logout-btn" onClick={() => { logout(); nav("/"); }}>
+              <LogOut size={15} /> Logout
+            </button>
+          </>
+        ) : (
+          <>
+            <Link to="/login" className="nav-link" data-testid="nav-login">Login</Link>
+            <Link to="/register" className="btn btn-primary btn-sm" data-testid="nav-register">Get Started</Link>
+          </>
+        )}
+      </div>
+    </nav>
+  );
+}
