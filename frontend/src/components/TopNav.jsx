@@ -42,6 +42,7 @@ export default function TopNav() {
             <Link to="/incidents" className={`nav-link ${isActive("/incidents") ? "active" : ""}`} data-testid="nav-incidents">Incidents</Link>
             <Link to="/subscription" className={`nav-link ${isActive("/subscription") ? "active" : ""}`} data-testid="nav-plans">Plans</Link>
             <Link to="/support" className={`nav-link ${isActive("/support") ? "active" : ""}`} data-testid="nav-support">Support</Link>
+            <Link to="/settings" className={`nav-link ${isActive("/settings") ? "active" : ""}`} data-testid="nav-settings">Settings</Link>
             {user.is_admin && (
               <Link to="/admin" className={`nav-link ${isActive("/admin") ? "active" : ""}`} data-testid="nav-admin" style={{ display: "inline-flex", alignItems: "center" }}>
                 Admin

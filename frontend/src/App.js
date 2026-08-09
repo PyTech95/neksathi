@@ -31,6 +31,7 @@ import AdminPlans from "@/pages/AdminPlans";
 import AdminSupport from "@/pages/AdminSupport";
 import Contact from "@/pages/Contact";
 import AdminContacts from "@/pages/AdminContacts";
+import Settings from "@/pages/Settings";
 
 function Protected({ children, adminOnly, dealerOnly }) {
   const { user, loading } = useAuth();
@@ -72,6 +73,7 @@ function Shell() {
           <Route path="/alerts" element={<Protected><Alerts /></Protected>} />
           <Route path="/incidents" element={<Protected><Incidents /></Protected>} />
           <Route path="/support" element={<Protected><Support /></Protected>} />
+          <Route path="/settings" element={<Protected><Settings /></Protected>} />
           <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
           <Route path="/admin/qr" element={<Protected adminOnly><AdminQR /></Protected>} />
           <Route path="/admin/dealers" element={<Protected adminOnly><AdminDealers /></Protected>} />

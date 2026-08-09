@@ -47,6 +47,11 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - **Reporter Live Status**: `resolve_incident` now sends the reporter a WhatsApp "owner resolved / arriving" follow-up (mock via notify_whatsapp; audit-logged, swallowed on trial).
 - Verified: all backend flows via curl (single-popular enforcement, contact submit + status PATCH, inbox summary, reporter-resolved notification audit) and **testing_agent frontend run — 19/19 flows PASS, no bugs** (iteration_8.json). Demo left clean (family_pro sole popular plan).
 
+## Owner Settings (profile & notification preferences) — 2026-06 (batch 11, this fork)
+- New `Settings.jsx` (`/settings`, nav link `nav-settings`): owners edit name & phone, toggle 6 notification preferences (WhatsApp / Push / Email / Incident alerts / Overspeed alerts / Offers), and change password.
+- Backend: added `NotifyPrefs` model, extended `UserOut` + `to_user_out` + `ProfileUpdate`, and `PUT /auth/me` now persists `notify_prefs`. Reused existing `POST /auth/change-password`. AuthContext user refreshed after save.
+- Verified via curl (GET defaults → PUT name/phone/prefs → GET persists) and screenshot (page renders, toggles reflect saved state, nav link present). Demo user restored to clean defaults.
+
 ## Testing
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.

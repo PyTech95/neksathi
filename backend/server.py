@@ -193,6 +193,15 @@ class LoginIn(BaseModel):
     password: str
 
 
+class NotifyPrefs(BaseModel):
+    whatsapp: bool = True
+    email: bool = True
+    push: bool = True
+    incident_alerts: bool = True
+    speed_alerts: bool = True
+    marketing: bool = False
+
+
 class UserOut(BaseModel):
     id: str
     email: EmailStr
@@ -202,6 +211,7 @@ class UserOut(BaseModel):
     is_dealer: bool = False
     vendor_id: Optional[str] = None
     suspended: bool = False
+    notify_prefs: NotifyPrefs = NotifyPrefs()
 
 
 class TokenOut(BaseModel):
@@ -331,6 +341,7 @@ class SOSVideoMeta(BaseModel):
 class ProfileUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=80)
     phone: Optional[str] = Field(default=None, min_length=6, max_length=20)
+    notify_prefs: Optional[NotifyPrefs] = None
 
 
 class ChangePasswordIn(BaseModel):
@@ -462,6 +473,7 @@ def to_user_out(u: dict) -> UserOut:
         is_dealer=bool(u.get("is_dealer", False)),
         vendor_id=u.get("vendor_id"),
         suspended=bool(u.get("suspended", False)),
+        notify_prefs=NotifyPrefs(**{**NotifyPrefs().model_dump(), **(u.get("notify_prefs") or {})}),
     )
 
 
@@ -693,6 +705,8 @@ async def update_me(payload: ProfileUpdate, user: dict = Depends(current_user)):
         update["name"] = payload.name.strip()
     if payload.phone is not None:
         update["phone"] = payload.phone.strip()
+    if payload.notify_prefs is not None:
+        update["notify_prefs"] = payload.notify_prefs.model_dump()
     if update:
         await db.users.update_one({"id": user["id"]}, {"$set": update})
         user.update(update)
