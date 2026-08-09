@@ -79,6 +79,10 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - **Go-live hardening**: deployment_agent scan = PASS (no blockers — no hardcoded secrets/URLs, env-driven, /api-prefixed, CORS ok). Added .limit() guards to /vehicles(100), /tags(500), /cards(100) per recommendation.
 - Verified: **testing_agent iteration_11 — backend 8/8 pytest, frontend 100%, no defects**. Demo org 'Sunrise School' (school@nek.dev/school1234) retained.
 
+## Chunked SOS upload + WhatsApp Business wiring — 2026-06 (batch 16)
+- **Resumable chunked SOS video upload** (mobile long clips): POST /user/sos-video/init → /chunk (≤5MB each, idempotent per index) → GET /status/{upload_id} (missing indexes for resume) → POST /complete (assembles in order, alerts + pushes family, clears chunks; 400 if incomplete, 413 if >~60MB). Indexes added on sos_chunks/sos_uploads. Curl-verified incl. out-of-order + resume + early-complete-400.
+- **WhatsApp Business wiring**: notify_whatsapp() + _whatsapp_live() now support an approved WhatsApp Business **Messaging Service** via TWILIO_WHATSAPP_MESSAGING_SID (falls back to TWILIO_WHATSAPP_FROM). Env-driven, production-ready — awaiting the user's approved sender/MSID to flip off sandbox. MOBILE_API.md updated with the chunked endpoints.
+
 ## Testing
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.

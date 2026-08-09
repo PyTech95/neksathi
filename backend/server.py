@@ -1277,6 +1277,148 @@ async def list_user_sos_videos(user: dict = Depends(current_user), limit: int = 
 
 
 # ---------------------------------------------------------------------------
+# Resumable CHUNKED SOS video upload — for long clips on mobile that would
+# otherwise blow past the ingress request-size limit. Flow:
+#   1. POST /user/sos-video/init      -> {upload_id, chunk_max_bytes}
+#   2. POST /user/sos-video/chunk     {upload_id, index, data_base64}  (repeat)
+#      (idempotent per index; safe to retry after a dropped connection)
+#   3. GET  /user/sos-video/status/{upload_id}  -> {received:[...], total}
+#      (mobile uses this to resume — only re-send missing indexes)
+#   4. POST /user/sos-video/complete  {upload_id}  -> assembles + SOSVideoMeta
+# Chunks are stored per-index; assembly concatenates base64 in order.
+# ---------------------------------------------------------------------------
+
+CHUNK_MAX_BYTES = 5 * 1024 * 1024          # ~5 MB base64 per chunk
+SOS_ASSEMBLED_MAX_BYTES = 80 * 1024 * 1024  # ~60 MB decoded ceiling
+
+
+class SOSInitIn(BaseModel):
+    total_chunks: int = Field(ge=1, le=2000)
+    duration_ms: int = 0
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    vehicle_id: Optional[str] = None
+
+
+class SOSChunkIn(BaseModel):
+    upload_id: str
+    index: int = Field(ge=0)
+    data_base64: str = Field(min_length=1, max_length=CHUNK_MAX_BYTES + 1024)
+
+
+class SOSCompleteIn(BaseModel):
+    upload_id: str
+
+
+@api.post("/user/sos-video/init")
+async def sos_video_init(payload: SOSInitIn, user: dict = Depends(current_user)):
+    vehicle_id = None
+    if payload.vehicle_id:
+        v = await db.vehicles.find_one({"id": payload.vehicle_id, "owner_id": user["id"]})
+        if v:
+            vehicle_id = v["id"]
+    upload_id = new_id()
+    await db.sos_uploads.insert_one({
+        "id": upload_id, "user_id": user["id"], "vehicle_id": vehicle_id,
+        "total_chunks": payload.total_chunks, "duration_ms": payload.duration_ms,
+        "latitude": payload.latitude, "longitude": payload.longitude,
+        "status": "uploading", "created_at": now_utc(),
+    })
+    return {"upload_id": upload_id, "chunk_max_bytes": CHUNK_MAX_BYTES, "total_chunks": payload.total_chunks}
+
+
+@api.post("/user/sos-video/chunk")
+async def sos_video_chunk(payload: SOSChunkIn, user: dict = Depends(current_user)):
+    sess = await db.sos_uploads.find_one({"id": payload.upload_id, "user_id": user["id"]})
+    if not sess:
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    if sess.get("status") == "completed":
+        raise HTTPException(status_code=409, detail="Upload already completed")
+    if payload.index >= sess["total_chunks"]:
+        raise HTTPException(status_code=400, detail="Chunk index out of range")
+    # Idempotent upsert — retrying the same index is safe (resume support).
+    await db.sos_chunks.update_one(
+        {"upload_id": payload.upload_id, "index": payload.index},
+        {"$set": {"upload_id": payload.upload_id, "index": payload.index,
+                   "data_base64": payload.data_base64, "user_id": user["id"], "created_at": now_utc()}},
+        upsert=True,
+    )
+    received = await db.sos_chunks.count_documents({"upload_id": payload.upload_id})
+    return {"received": received, "total": sess["total_chunks"], "index": payload.index}
+
+
+@api.get("/user/sos-video/status/{upload_id}")
+async def sos_video_status(upload_id: str, user: dict = Depends(current_user)):
+    sess = await db.sos_uploads.find_one({"id": upload_id, "user_id": user["id"]})
+    if not sess:
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    received = sorted([c["index"] async for c in db.sos_chunks.find({"upload_id": upload_id}, {"index": 1})])
+    missing = [i for i in range(sess["total_chunks"]) if i not in set(received)]
+    return {"upload_id": upload_id, "status": sess.get("status"),
+            "total": sess["total_chunks"], "received": received, "missing": missing}
+
+
+@api.post("/user/sos-video/complete", response_model=SOSVideoMeta)
+async def sos_video_complete(payload: SOSCompleteIn, user: dict = Depends(current_user)):
+    sess = await db.sos_uploads.find_one({"id": payload.upload_id, "user_id": user["id"]})
+    if not sess:
+        raise HTTPException(status_code=404, detail="Upload session not found")
+    total = sess["total_chunks"]
+    chunks = [c async for c in db.sos_chunks.find({"upload_id": payload.upload_id}).sort("index", 1)]
+    if len(chunks) != total:
+        have = {c["index"] for c in chunks}
+        missing = [i for i in range(total) if i not in have]
+        raise HTTPException(status_code=400, detail=f"Missing chunks: {missing[:20]}")
+    video_base64 = "".join(c["data_base64"] for c in chunks)
+    size = len(video_base64)
+    if size > SOS_ASSEMBLED_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Assembled video exceeds size limit")
+
+    vehicle_id = sess.get("vehicle_id")
+    number_plate = None
+    if vehicle_id:
+        v = await db.vehicles.find_one({"id": vehicle_id, "owner_id": user["id"]})
+        number_plate = v["number_plate"] if v else None
+
+    vid_id, now = new_id(), now_utc()
+    await db.sos_videos.insert_one({
+        "id": vid_id, "user_id": user["id"], "vehicle_id": vehicle_id,
+        "video_base64": video_base64, "duration_ms": sess.get("duration_ms", 0), "size_bytes": size,
+        "latitude": sess.get("latitude"), "longitude": sess.get("longitude"), "created_at": now,
+    })
+    alert_id = new_id()
+    await db.alerts.insert_one({
+        "id": alert_id, "vehicle_id": vehicle_id, "user_id": user["id"],
+        "number_plate": number_plate or user.get("name", "SOS"), "type": "sos_video",
+        "scanner_note": f"Auto SOS recording ({sess.get('duration_ms', 0) / 1000:.1f}s, {size // 1024} KB, chunked)",
+        "scanner_lat": sess.get("latitude"), "scanner_lng": sess.get("longitude"),
+        "created_at": now, "contact_channels": [],
+    })
+    await db.sos_uploads.update_one({"id": payload.upload_id}, {"$set": {"status": "completed", "video_id": vid_id, "completed_at": now}})
+    await db.sos_chunks.delete_many({"upload_id": payload.upload_id})  # free storage
+
+    try:
+        recipients: set[str] = {user["id"]}
+        my_vehicle_ids = [v["id"] async for v in db.vehicles.find({"owner_id": user["id"]}, {"id": 1})]
+        if my_vehicle_ids:
+            phones = {c["phone"] async for c in db.contacts.find({"vehicle_id": {"$in": my_vehicle_ids}}, {"phone": 1}) if c.get("phone")}
+            if phones:
+                async for u in db.users.find({"phone": {"$in": list(phones)}}, {"id": 1}):
+                    recipients.add(u["id"])
+        await send_push(recipients=list(recipients), data={
+            "title": "🚨 SOS from " + (user.get("name") or "family member"),
+            "message": f"{sess.get('duration_ms', 0) / 1000:.0f}s video captured", "action_url": "/alerts",
+        }, idempotency_key=alert_id)
+    except Exception as _e:
+        log.warning("push (chunked sos-video) failed: %s", _e)
+
+    return SOSVideoMeta(id=vid_id, vehicle_id=vehicle_id, duration_ms=sess.get("duration_ms", 0),
+                        size_bytes=size, latitude=sess.get("latitude"), longitude=sess.get("longitude"), created_at=now)
+
+
+
+
+# ---------------------------------------------------------------------------
 # Alerts routes (owner activity log — includes shared vehicles)
 # ---------------------------------------------------------------------------
 
@@ -3514,7 +3656,7 @@ INCIDENT_TITLES = {
 
 def _whatsapp_live() -> bool:
     return bool(
-        os.environ.get("TWILIO_WHATSAPP_FROM")
+        (os.environ.get("TWILIO_WHATSAPP_FROM") or os.environ.get("TWILIO_WHATSAPP_MESSAGING_SID"))
         and os.environ.get("TWILIO_ACCOUNT_SID")
         and os.environ.get("TWILIO_AUTH_TOKEN")
     )
@@ -3522,6 +3664,8 @@ def _whatsapp_live() -> bool:
 
 async def notify_whatsapp(to: Optional[str], text: str, meta: Optional[dict] = None) -> dict:
     """Send a WhatsApp message. MOCK unless live Twilio WhatsApp creds exist.
+    Supports either a direct sender (TWILIO_WHATSAPP_FROM) or an approved
+    WhatsApp Business Messaging Service (TWILIO_WHATSAPP_MESSAGING_SID).
     Always audit-logs into db.notifications so the flow is testable end-to-end."""
     if not to:
         return {"status": "skipped"}
@@ -3534,10 +3678,13 @@ async def notify_whatsapp(to: Optional[str], text: str, meta: Optional[dict] = N
         try:  # pragma: no cover - only runs with real creds
             from twilio.rest import Client as _TwClient
             _cli = _TwClient(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
-            _cli.messages.create(
-                from_=f"whatsapp:{os.environ['TWILIO_WHATSAPP_FROM']}",
-                to=f"whatsapp:{to}", body=text,
-            )
+            kwargs = {"to": f"whatsapp:{to}", "body": text}
+            msid = os.environ.get("TWILIO_WHATSAPP_MESSAGING_SID")
+            if msid:
+                kwargs["messaging_service_sid"] = msid
+            else:
+                kwargs["from_"] = f"whatsapp:{os.environ['TWILIO_WHATSAPP_FROM']}"
+            _cli.messages.create(**kwargs)
             doc["status"] = "sent"
         except Exception as _e:
             doc["status"] = "failed"
@@ -4209,6 +4356,8 @@ async def _startup():
     await db.alerts.create_index([("vehicle_id", 1), ("created_at", -1)])
     await db.sos_videos.create_index([("vehicle_id", 1), ("created_at", -1)])
     await db.sos_videos.create_index([("user_id", 1), ("created_at", -1)])
+    await db.sos_chunks.create_index([("upload_id", 1), ("index", 1)], unique=True)
+    await db.sos_uploads.create_index("user_id")
     await db.password_resets.create_index("token", unique=True)
     await db.password_resets.create_index("expires_at", expireAfterSeconds=0)
     await db.plans.create_index("code", unique=True)

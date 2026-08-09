@@ -39,9 +39,20 @@ All endpoints below are LIVE and curl-verified (2026-06). CORS = `*` (native + w
 
 ## SOS video (panic recording)
 - POST /api/user/sos-video   {video_base64, duration_ms, latitude?, longitude?, vehicle_id?}
-  base64 cap ~28MB (~20MB video). Pushes user + family. (For big files prefer chunked upload.)
+  base64 cap ~28MB (~20MB video). Pushes user + family. (For big files use CHUNKED below.)
 - POST /api/vehicles/{id}/sos-video  {video_base64,duration_ms,latitude?,longitude?}
 - GET  /api/user/sos-videos , /api/vehicles/{id}/sos-videos , /api/sos-video/{video_id}
+
+## SOS video — CHUNKED / RESUMABLE upload (for long clips on mobile)
+Use this instead of the single-shot upload for anything large; each chunk <= 5MB base64.
+1. POST /api/user/sos-video/init      {total_chunks, duration_ms, latitude?, longitude?, vehicle_id?}
+   -> {upload_id, chunk_max_bytes, total_chunks}
+2. POST /api/user/sos-video/chunk     {upload_id, index, data_base64}   (repeat; idempotent per index)
+   -> {received, total, index}
+3. GET  /api/user/sos-video/status/{upload_id}  -> {status, total, received:[...], missing:[...]}
+   Resume after a dropped connection by re-sending only the `missing` indexes.
+4. POST /api/user/sos-video/complete  {upload_id}  -> SOSVideoMeta (assembles, alerts + pushes family, clears chunks)
+   Returns 400 if any chunk is missing, 413 if assembled > ~60MB.
 
 ## QR Tags (kids/patients/staff/pets/bags) + public scan
 - CRUD: GET/POST /api/tags, GET/PUT/DELETE /api/tags/{id}, POST /api/tags/{id}/lost_mode
