@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { QRCodeCanvas } from "qrcode.react";
 import api from "@/lib/api";
-import { ArrowLeft, Copy, Check, ShieldAlert, ExternalLink, UserPlus, Trash2, Phone, Download } from "lucide-react";
+import { ArrowLeft, Copy, Check, ShieldAlert, ExternalLink, UserPlus, Trash2, Phone, Download, Navigation, Users } from "lucide-react";
 
 export default function VehicleDetail() {
   const { id } = useParams();
@@ -12,6 +12,9 @@ export default function VehicleDetail() {
   const [copied, setCopied] = useState(false);
   const [cForm, setCForm] = useState({ name: "", phone: "", relation: "" });
   const [cErr, setCErr] = useState("");
+  const [inviteUrl, setInviteUrl] = useState("");
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
 
   const scanUrl = v ? `${window.location.origin}/scan/${v.qr_id}` : "";
 

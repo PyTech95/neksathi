@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { LogIn } from "lucide-react";
 
 export default function Login() {
   const { login } = useAuth();
   const nav = useNavigate();
+  const loc = useLocation();
+  const next = new URLSearchParams(loc.search).get("next");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
@@ -17,7 +19,7 @@ export default function Login() {
     setBusy(true);
     try {
       await login(email.trim(), password);
-      nav("/dashboard");
+      nav(next || "/dashboard");
     } catch (e) {
       setErr(e?.response?.data?.detail || "Login failed");
     } finally {
