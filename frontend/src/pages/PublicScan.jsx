@@ -173,7 +173,7 @@ export default function PublicScan() {
                 <a href={`tel:${(call.portal_number || "").replace(/\s/g, "")}`} className="btn btn-primary" style={{ marginTop: 14 }} data-testid="dial-portal"><Phone size={16} /> Dial NekSathi portal</a>
               </div>
             ) : (
-              (incident.call_available || incident.status === "no_response") && (
+              (incident.status !== "resolved") && (
                 <button className="btn btn-danger btn-block" style={{ marginTop: 14 }} disabled={busy} onClick={doCall} data-testid="call-owner-btn">
                   <Phone size={18} /> {busy ? "Connecting…" : "Call owner (private)"}
                 </button>

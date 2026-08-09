@@ -32,6 +32,17 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.
 - iteration_2.json: frontend 100% for the 3 new features (Tags, Cards, Subscriptions dry-run) + regression clean.
 - iteration_3.json: frontend 100% for Live Tracking, Family Invites, Admin Alerts+CSV + regression clean.
+- iteration_4.json: **Car QR module** — backend 17/17 pytest, frontend 100%, privacy assertions verified (owner phone never exposed on public/call screens).
+
+## Car QR Code module — implemented 2026-06 (batch 4)
+- **Admin Car-QR** (`/admin/qr`): bulk generate (≤10k), batches, CSV export, printable stickers (`stickers.html`), inventory w/ status filter+search, block/unblock, mark-sold to dealer.
+- **Dealers** (`/admin/dealers`): vendor list + summary (qty/billed/outstanding) + create.
+- **QR Activation** (`/claim/:serial`): unclaimed→login+register vehicle→Activated; already-assigned→auto-redirect to public `/scan/:qr_id`; blocked→blocked screen.
+- **Public scan** (`/scan/:qrId`): "How can we help?" → Wrong Parking / Accident / Theft. Wrong-parking starts a 15-min incident + WhatsApp/push notify; reporter waiting screen polls status; owner responds **I AM COMING** (or can't) from `/incidents`; reporter sees "owner is coming". **Masked portal call** (Reporter→NekSathi portal→Owner) never reveals owner number.
+- **Owner Incidents** (`/incidents`): respond (coming/can't) + resolve.
+- **Admin Incidents** (`/admin/incidents`): stats + filterable history.
+- **Privacy**: owner/family numbers never returned to reporters; call bridged via portal number; audit in db.call_records / db.notifications.
+- **MOCKED (ready for live keys)**: WhatsApp `notify_whatsapp()` (audit-logged; live when TWILIO_WHATSAPP_FROM + Twilio creds set) and masked call (live with Twilio/Exotel creds via telco-config). Backend tests: `/app/backend/tests/test_car_qr_incidents.py`.
 
 ## What's been implemented (web) — updated 2026-06 (batch 3)
 - **Live Tracking** `/track/:id`: Leaflet/OSM map with GPS trail, current-speed vs limit stats, "Simulate a drive" (posts pings, triggers overspeed alerts), speed-alert list.
