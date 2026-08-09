@@ -1752,7 +1752,7 @@ async def public_tag_lookup(qr_id: str):
         medical_notes=t.get("medical_notes"),
         reward_text=t.get("reward_text"),
         guardian_name=t.get("guardian_name"),
-        has_guardian=bool(t.get("guardian_phone") or (owner and owner.get("phone"))),
+        has_guardian=bool(t.get("guardian_phone")) or (t.get("tag_type") in ("person", "kid", "patient", "staff") and bool(owner and owner.get("phone"))),
         lost_mode=bool(t.get("lost_mode")),
         owner_first_name=first_name,
     )

@@ -57,6 +57,14 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - Avatar shows in the top nav next to "Settings" (nav-avatar), and new Share-Tap cards default their photo to the owner's avatar so public shared cards feel personal (PublicCard already renders photo_base64).
 - Verified via curl (avatar persists on /auth/me; card create stores photo) and screenshot (Settings avatar UI + nav avatar). Test data cleaned; demo user reset.
 
+## Multi-persona expansion + landing revamp — 2026-06 (batch 13, this fork)
+- **Repositioned beyond cars**: Nek Sathi now targets people & belongings. Landing page revamped — broadened hero copy, new "Built for everyone" personas section (School kids, Patients & elderly, Office & workplace, Pets, Travel/luggage, Vehicles) with stock imagery, and a "Trusted by families & teams" testimonials band.
+- **New tag personas**: added `patient` and `staff` tag types (TAG_META + backend Literal). Guardian/ICE fields (guardian_name, guardian_phone) added to person/kid/patient/staff tags (TagIn/TagOut) and shown in the Tags create form.
+- **Emergency ICE + masked guardian call**: public tag page (`/t/:qr`) shows an ICE card (blood group, allergies/medical notes, guardian NAME) and a privacy-safe **"Call guardian (private)"** button → new `POST /public/tag/{qr}/call` masked-call endpoint. Guardian/owner phone is NEVER returned; `has_guardian` flag drives the button (tightened to person-types).
+- **Tag alerts now notify guardian + owner** via WhatsApp (mock, pref-gated) + push (pref-gated).
+- **Notification preferences honoured**: incident create, overspeed alerts and tag alerts now respect the owner's `notify_prefs` (whatsapp/push channels + incident_alerts/speed_alerts) via `_prefs()` helper. Family contacts on incidents are always alerted; the owner's own channel honours their toggles.
+- Verified via curl (guardian create/read with phone never leaked, masked call, has_guardian correctness) and **testing_agent (iteration_9.json): 20+ flows PASS, no defects**.
+
 ## Testing
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.
