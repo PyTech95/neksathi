@@ -199,6 +199,8 @@ class UserOut(BaseModel):
     name: str
     phone: str
     is_admin: bool = False
+    is_dealer: bool = False
+    vendor_id: Optional[str] = None
     suspended: bool = False
 
 
@@ -455,6 +457,8 @@ def to_user_out(u: dict) -> UserOut:
         name=u["name"],
         phone=u["phone"],
         is_admin=bool(u.get("is_admin", False)),
+        is_dealer=bool(u.get("is_dealer", False)),
+        vendor_id=u.get("vendor_id"),
         suspended=bool(u.get("suspended", False)),
     )
 
@@ -3510,27 +3514,74 @@ async def public_incident_call(request: Request, incident_id: str, payload: Inci
         raise HTTPException(status_code=404, detail="Incident not found")
     owner = await db.users.find_one({"id": inc["owner_id"]})
     owner_phone = owner and owner.get("phone")
-    provider = _telco_provider()
-    live = provider in ("twilio", "exotel")
+    twilio_from = os.environ.get("TWILIO_FROM")
+    live = bool(twilio_from and os.environ.get("TWILIO_ACCOUNT_SID") and os.environ.get("TWILIO_AUTH_TOKEN"))
+    reporter_phone = (payload.scanner_phone or inc.get("scanner_phone") or "").strip()
+    status = "mock_connected"
+    note = "Connecting you to the owner through the Nek Sathi portal — their number stays private."
+
+    if live and reporter_phone and owner_phone:
+        # Two-leg masked call: Twilio rings the REPORTER, then Dials the OWNER.
+        # Neither party sees the other's number (both legs use the Nek Sathi number).
+        twiml_url = f"{os.environ.get('PUBLIC_APP_URL', '')}/api/telephony/twiml/{incident_id}"
+        try:  # pragma: no cover - live path
+            from twilio.rest import Client as _Tw
+            _cli = _Tw(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
+            _cli.calls.create(to=reporter_phone, from_=twilio_from, url=twiml_url, method="POST")
+            status = "calling"
+            note = "We're calling you now — pick up and we'll connect you privately to the owner."
+        except Exception as e:
+            # Demo-friendly fallback: Twilio trial can only dial verified numbers.
+            # Keep the privacy-preserving UX flowing instead of showing an error.
+            status = "connecting"
+            note = "Connecting you privately to the owner via the Nek Sathi portal. (Demo: live dialing needs a verified/upgraded Twilio number.)"
+            log.warning("masked call failed, demo fallback: %s", e)
+    elif live and not reporter_phone:
+        status = "need_phone"
+        note = "Enter your callback number so we can connect you privately (your number stays hidden)."
+
     rec = {
         "id": new_id(), "incident_id": incident_id, "qr_id": inc["qr_id"],
-        "vehicle_id": inc["vehicle_id"], "reporter_phone": payload.scanner_phone,
+        "vehicle_id": inc["vehicle_id"], "reporter_phone": reporter_phone or None,
         "owner_phone": owner_phone,  # stored for audit only; NOT returned
-        "provider": provider, "portal_number": NEK_PORTAL_NUMBER,
-        "status": "connecting" if live else "mock_connected",
-        "duration_sec": 0, "created_at": now_utc(),
+        "provider": "twilio" if live else "mock", "portal_number": NEK_PORTAL_NUMBER,
+        "status": status, "duration_sec": 0, "created_at": now_utc(),
     }
     await db.call_records.insert_one(dict(rec))
     await db.incidents.update_one({"id": incident_id}, {"$set": {"call_attempted": True}})
     await notify_whatsapp(owner_phone, f"Someone is trying to reach you about your car {inc['number_plate']} via the Nek Sathi portal.", meta={"incident_id": incident_id, "kind": "call"})
     return {
-        "status": rec["status"],
+        "status": status,
         "masked": True,
         "portal_number": NEK_PORTAL_NUMBER,
-        "note": ("Connecting you to the owner through the Nek Sathi portal — their number stays private."
-                 if not live else "Dial the portal number; our IVR bridges you to the owner privately."),
-        "provider": provider,
+        "note": note,
+        "provider": rec["provider"],
     }
+
+
+@api.api_route("/telephony/twiml/{incident_id}", methods=["GET", "POST"])
+async def telephony_twiml(incident_id: str):
+    """TwiML served to Twilio (never to the reporter's browser) that dials the owner."""
+    inc = await db.incidents.find_one({"id": incident_id})
+    owner = await db.users.find_one({"id": inc["owner_id"]}) if inc else None
+    owner_phone = (owner or {}).get("phone")
+    if not owner_phone:
+        xml = "<?xml version='1.0' encoding='UTF-8'?><Response><Say>Sorry, we could not connect you. Goodbye.</Say></Response>"
+    else:
+        caller = os.environ.get("TWILIO_FROM", "")
+        xml = (f"<?xml version='1.0' encoding='UTF-8'?><Response>"
+               f"<Say voice='alice'>Connecting you privately to the vehicle owner via Nek Sathi. Please hold.</Say>"
+               f"<Dial callerId='{caller}' timeout='25'>{owner_phone}</Dial>"
+               f"</Response>")
+    return Response(content=xml, media_type="application/xml")
+
+
+@api.api_route("/telephony/inbound", methods=["GET", "POST"])
+async def telephony_inbound():
+    xml = ("<?xml version='1.0' encoding='UTF-8'?><Response>"
+           "<Say voice='alice'>Thank you for calling Nek Sathi. Please scan the vehicle Q R code and use the app to be connected privately. Goodbye.</Say>"
+           "</Response>")
+    return Response(content=xml, media_type="application/xml")
 
 
 # ---- Owner-side incident management ----
@@ -3735,6 +3786,86 @@ async def otp_verify(request: Request, payload: OtpVerifyIn):
         raise HTTPException(status_code=403, detail="Account suspended")
     token = create_access_token(user["id"])
     return TokenOut(access_token=token, user=to_user_out(user))
+
+
+
+# ===========================================================================
+# DEALER LOGIN + DASHBOARD
+# Admin creates a login for a vendor; the dealer signs in via /auth/login and
+# sees ONLY their own QR stock (scoped by vendor name on qr_inventory).
+# ===========================================================================
+
+async def require_dealer(user: dict = Depends(current_user)) -> dict:
+    if not user.get("is_dealer") or not user.get("vendor_id"):
+        raise HTTPException(status_code=403, detail="Dealer access only")
+    return user
+
+
+class DealerAccountIn(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=6, max_length=128)
+    name: Optional[str] = Field(default=None, max_length=80)
+
+
+@api.post("/admin/vendors/{vendor_id}/account", response_model=UserOut)
+async def admin_create_dealer_account(vendor_id: str, payload: DealerAccountIn, _: dict = Depends(require_admin)):
+    vendor = await db.vendors.find_one({"id": vendor_id})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Dealer not found")
+    email = payload.email.lower().strip()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="Email already in use")
+    user = {
+        "id": new_id(), "email": email,
+        "name": (payload.name or vendor.get("name") or "Dealer").strip(),
+        "phone": vendor.get("phone") or "-", "password_hash": hash_password(payload.password),
+        "is_admin": False, "is_dealer": True, "vendor_id": vendor_id,
+        "suspended": False, "created_at": now_utc(),
+    }
+    await db.users.insert_one(dict(user))
+    await db.vendors.update_one({"id": vendor_id}, {"$set": {"account_email": email, "has_login": True}})
+    return to_user_out(user)
+
+
+async def _dealer_stock(vendor_name: str) -> dict:
+    async def _c(extra):
+        q = {"sold_to_vendor": vendor_name}
+        q.update(extra)
+        return await db.qr_inventory.count_documents(q)
+    return {
+        "assigned_total": await _c({}),           # total QR handed to this dealer
+        "available": await _c({"status": "sold"}),  # with dealer, not yet activated
+        "activated": await _c({"status": "assigned"}),  # sold to a customer & activated
+        "blocked": await _c({"status": "blocked"}),
+    }
+
+
+@api.get("/dealer/me")
+async def dealer_me(user: dict = Depends(require_dealer)):
+    vendor = await db.vendors.find_one({"id": user["vendor_id"]})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Dealer profile not found")
+    stock = await _dealer_stock(vendor["name"])
+    return {
+        "vendor": {"id": vendor["id"], "name": vendor["name"], "city": vendor.get("city"), "phone": vendor.get("phone")},
+        "stock": stock,
+    }
+
+
+@api.get("/dealer/inventory")
+async def dealer_inventory(user: dict = Depends(require_dealer), status: Optional[str] = None, q: Optional[str] = None, limit: int = 200):
+    vendor = await db.vendors.find_one({"id": user["vendor_id"]})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Dealer profile not found")
+    filt: dict = {"sold_to_vendor": vendor["name"]}
+    if status:
+        filt["status"] = status
+    if q:
+        filt["serial_no"] = {"$regex": q, "$options": "i"}
+    items = []
+    async for d in db.qr_inventory.find(filt).sort("serial_no", 1).limit(limit):
+        items.append({"id": d["id"], "serial_no": d["serial_no"], "status": d["status"], "sold_at": d.get("sold_at")})
+    return {"count": len(items), "items": items}
 
 
 

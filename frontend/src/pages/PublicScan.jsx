@@ -167,10 +167,28 @@ export default function PublicScan() {
 
             {call ? (
               <div className="glass card-pad center" style={{ padding: 24, marginTop: 14 }} data-testid="call-connecting">
-                <Phone size={40} color="#22d3ee" />
-                <h3 style={{ fontSize: 20, margin: "10px 0 6px" }}>Connecting privately…</h3>
-                <p className="muted" style={{ fontSize: 14 }}>{call.note}</p>
-                <a href={`tel:${(call.portal_number || "").replace(/\s/g, "")}`} className="btn btn-primary" style={{ marginTop: 14 }} data-testid="dial-portal"><Phone size={16} /> Dial Nek Sathi portal</a>
+                {call.status === "calling" ? (
+                  <>
+                    <Phone size={40} color="#22d3ee" />
+                    <h3 style={{ fontSize: 20, margin: "10px 0 6px" }}>Calling you now…</h3>
+                    <p className="muted" style={{ fontSize: 14 }}>{call.note}</p>
+                  </>
+                ) : call.status === "need_phone" ? (
+                  <>
+                    <Phone size={40} color="#f5a524" />
+                    <h3 style={{ fontSize: 19, margin: "10px 0 6px" }}>Enter your number</h3>
+                    <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>{call.note}</p>
+                    <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 …" data-testid="call-phone-input" style={{ maxWidth: 240, margin: "0 auto 10px" }} />
+                    <button className="btn btn-primary" disabled={busy || !phone} onClick={doCall} data-testid="call-retry-btn"><Phone size={15} /> Connect me</button>
+                  </>
+                ) : (
+                  <>
+                    <Phone size={40} color="#22d3ee" />
+                    <h3 style={{ fontSize: 20, margin: "10px 0 6px" }}>Connect privately</h3>
+                    <p className="muted" style={{ fontSize: 14 }}>{call.note}</p>
+                    <a href={`tel:${(call.portal_number || "").replace(/\s/g, "")}`} className="btn btn-primary" style={{ marginTop: 12 }} data-testid="dial-portal"><Phone size={16} /> Dial Nek Sathi portal</a>
+                  </>
+                )}
               </div>
             ) : (
               (incident.status !== "resolved") && (

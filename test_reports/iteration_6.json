@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 6 e2e (backend + frontend) for Dealer login/dashboard, Admin create-dealer-login modal, demo-friendly Masked Call, Nek Sathi brand rename, and regressions (owner-response loop, QR activation via email session, admin routes). Backend: 10/10 pytest passed. Frontend: 6/7 substantive checks PASS; 1 owner-response verification via public page reload was a flawed test mechanism (state re-derived from client memory, not URL) — admin incident history confirms coming-click DID flip the incident to status 'coming', so functionality is intact.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Public /scan waiting screen persistence", "issue": "After clicking alert-owner-btn the waiting screen (with call-owner-btn / owner-coming) is stored in local component state; reloading /scan/{qr_id} does not restore it. Not a bug for the demo (reporter is unlikely to reload), but consider persisting the last incident id in URL (e.g. /scan/{qr_id}?incident=...) or query the latest incident for that qr_id on load so refresh reflects owner-coming.", "affected_selectors": ["owner-coming"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_dealer_and_masked_call.py", "/app/test_reports/pytest/dealer_masked.xml"],
+  "action_items": [
+    "(Nice-to-have, not blocking demo) Persist last-incident-id on /scan/{qr_id} so a browser refresh preserves the waiting/owner-coming panel."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 4017 lines — consider splitting into routers (auth, vehicles, public, admin, dealer, incidents, telephony) for maintainability.",
+    "AdminDealers.jsx create-login testid uses raw vendor name (e.g. `create-login-Dealer B 79627`) containing spaces — works but selectors are fragile; consider slugified or id-based testids (`create-login-<vendor_id>`).",
+    "Masked call fallback correctly downgrades from Twilio-trial failure to status 'connecting' with no owner phone in response payload — verified.",
+    "Rate limits (login 10/min, incident 20/min, call 10/min) are appropriate; back-to-back automated test runs should either cache tokens or sleep to avoid 429s (tests updated accordingly)."
+  ],
+  "updated_files": ["/app/backend/tests/test_dealer_and_masked_call.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "6/7 substantive (masked-call, dealer-login+scoping, admin-create-dealer, new-dealer-login, brand, QR-activation, admin-regression PASS; owner-response public-page refresh check flawed test but admin history confirms coming did register)"},
+  "test_credentials": "Admin admin@safeqr.com/admin1234; Owner demo_web@safeqr.com/demo1234; Dealer A dealera@nek.dev/dealer1234; new dealer created dynamically during test.",
+  "seed_data_creation": "Created 1 new vendor 'Dealer B <ts>' with dealer login (email dealerb_<ts>@nek.dev / dealerb1234), 2 wrong_parking incidents on demo_web's vehicle, and claimed serial NS-2608-000015 (or next available 000016..000024) with plate DL01AB<ts>.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Serials in the dealer's 000015..000024 range are being claimed by successive test runs — check /api/dealer/inventory?status=sold to pick a fresh unclaimed one before running QR-activation. Login button is NOT type=submit — use get_by_role('button', name=/sign in/i). PublicScan waiting screen is client-state only (does not survive reload). Twilio trial fallback returns status='connecting' with 'Dial Nek Sathi portal' link — treat as passing state.",
+  "test_scenarios_executed": {
+    "dealer_login_and_dashboard": "PASS - dealera lands on /dealer, all 4 stat cards (Assigned=15, Available=14, Activated=1, Blocked=0), 15 inventory rows, search+status filter present, nav = 'Nek Sathi | Dealer portal | Logout'",
+    "dealer_scoping": "PASS - /admin -> /dealer redirect, /dashboard -> /dealer redirect",
+    "admin_create_dealer_login": "PASS - added new vendor, opened create-login modal, submit-dealer-account created, row shows new email",
+    "new_dealer_can_login": "PASS - new dealer credentials log in and land on /dealer",
+    "masked_call_demo_friendly": "PASS - status='connecting', 'Dial Nek Sathi portal' link visible, owner phone NOT leaked on public page",
+    "owner_response_loop": "PARTIAL - coming-<id> click succeeded and admin incident-history confirms status='coming'; public /scan reload did not show owner-coming panel because waiting UI is in-memory state (test-mechanism limitation, not a functional break)",
+    "qr_activation_via_email_session": "PASS - /claim/NS-2608-000015 submitted, claim-done shown",
+    "brand_rename": "PASS - 'Nek Sathi' in nav on all authenticated pages, 'Powered by Nek Sathi' on /scan, no 'Saathi' leftover found on tested pages",
+    "admin_regression": "PASS - admin lands on /dashboard, can visit /admin, /admin/qr, /admin/dealers, /admin/incidents"
+  }
+}

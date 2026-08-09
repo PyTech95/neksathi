@@ -15,7 +15,14 @@ export default function TopNav() {
         Nek<span className="neon">&nbsp;Sathi</span>
       </Link>
       <div className="nav-links">
-        {user ? (
+        {user && user.is_dealer ? (
+          <>
+            <Link to="/dealer" className="nav-link active" data-testid="nav-dealer">Dealer portal</Link>
+            <button className="btn btn-ghost btn-sm" data-testid="logout-btn" onClick={() => { logout(); nav("/"); }}>
+              <LogOut size={15} /> Logout
+            </button>
+          </>
+        ) : user ? (
           <>
             <Link to="/dashboard" className={`nav-link ${isActive("/dashboard") ? "active" : ""}`} data-testid="nav-dashboard">Vehicles</Link>
             <Link to="/tags" className={`nav-link ${isActive("/tags") ? "active" : ""}`} data-testid="nav-tags">Tags</Link>

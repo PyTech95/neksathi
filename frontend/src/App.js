@@ -25,12 +25,15 @@ import AdminQR from "@/pages/AdminQR";
 import AdminDealers from "@/pages/AdminDealers";
 import AdminIncidents from "@/pages/AdminIncidents";
 import OtpLogin from "@/pages/OtpLogin";
+import DealerDashboard from "@/pages/DealerDashboard";
 
-function Protected({ children, adminOnly }) {
+function Protected({ children, adminOnly, dealerOnly }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="spinner" data-testid="auth-loading" />;
   if (!user) return <Navigate to="/login" replace />;
   if (adminOnly && !user.is_admin) return <Navigate to="/dashboard" replace />;
+  if (dealerOnly && !user.is_dealer) return <Navigate to="/dashboard" replace />;
+  if (user.is_dealer && !dealerOnly) return <Navigate to="/dealer" replace />;
   return children;
 }
 
@@ -52,6 +55,7 @@ function Shell() {
           <Route path="/invite/:token" element={<Invite />} />
           <Route path="/claim/:serial" element={<Claim />} />
           <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
+          <Route path="/dealer" element={<Protected dealerOnly><DealerDashboard /></Protected>} />
           <Route path="/vehicle/:id" element={<Protected><VehicleDetail /></Protected>} />
           <Route path="/track/:id" element={<Protected><Track /></Protected>} />
           <Route path="/tags" element={<Protected><Tags /></Protected>} />

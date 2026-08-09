@@ -18,8 +18,8 @@ export default function Login() {
     setErr("");
     setBusy(true);
     try {
-      await login(email.trim(), password);
-      nav(next || "/dashboard");
+      const u = await login(email.trim(), password);
+      nav(next || (u?.is_dealer ? "/dealer" : "/dashboard"));
     } catch (e) {
       setErr(e?.response?.data?.detail || "Login failed");
     } finally {
