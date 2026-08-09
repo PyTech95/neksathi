@@ -1,0 +1,22 @@
+{
+  "summary": "Frontend e2e testing of the 3 new features (Tags, Cards, Subscriptions) + light regression. All features work end-to-end. Created a Tag (with reward), viewed detail (QR canvas visible, copy/download/open-public visible), toggled lost mode (button switches to btn-danger). Visited public /t/:qrId - all 5 alert buttons visible, tag-alert-found produced tag-scan-success. Created a Card with full contact info, opened detail (QR + public link), visited /c/:qrId which shows public name, call/mail/web tiles, save-contact vCard link pointing to /api/public/card/{qr}/vcf?dl=1, and card message form successfully posted showing card-message-sent. Subscription page: demo_web already active on family_pro (banner shown, subscribe-family_pro disabled 'Current plan'). Registered a fresh user and subscribed to basic - dry-run auto-confirmed, sub-notice shown ('Subscription activated (Stripe test mode / DRY-RUN).'), current-sub-banner appeared, subscribe-basic became 'Current plan' disabled. Regression: landing, login, register, dashboard, alerts, tags, cards pages all load; admin login + /admin admin-page visible. TopNav shows Vehicles/Tags/Cards/Alerts/Plans links.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Login/Register buttons rely on implicit form submit (no explicit type='submit'). data-testid selectors work fine; note for future test authors."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100%"},
+  "test_credentials": "demo_web@safeqr.com / demo1234 ; admin@safeqr.com / admin1234 ; fresh test user created during run",
+  "seed_data_creation": "Created 1 Tag and 1 Card under demo_web, plus 1 new user with basic subscription (dry-run).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 3 new features (Tags, Cards, Subscriptions dry-run) fully functional via UI. Public tag/card pages, vCard link, subscription dry-run confirm all working. Rate limits observed - test hit tag-alert-found once, card-message once. If retesting subscriptions on demo_web, note it is now on family_pro; use a fresh user for a clean subscribe flow.",
+  "rca of the issue": "No issues found."
+}

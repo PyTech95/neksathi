@@ -198,6 +198,7 @@ h1, h2, h3, .head { font-family: 'Chakra Petch', sans-serif; letter-spacing: -0.
 .big-action:active { transform: scale(.98); }
 
 .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(124,58,237,.25); border-top-color: var(--cyan); animation: spin 1s linear infinite; margin: 40px auto; }
+.spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 ::selection { background: rgba(34,211,238,.35); color: #fff; }
