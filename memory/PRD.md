@@ -94,6 +94,13 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - Auth Key saved in backend/.env (validated — MSG91 accepted it). ⚠️ Account balance = 0 (needs top-up). Still MOCK because per-channel template/flow IDs (OTP template, SMS flow, WhatsApp number/template, voice caller id) are not yet provided. Deployment scan = PASS, zero code blockers — app can deploy today in mock mode.
 - User exploring **Vobiz** for masked voice routing (REST API, number masking + click-to-call; can slot into comms.py alongside MSG91). Awaiting Vobiz Auth ID/Token + masking DID.
 
+## Expanded scan reasons + admin false-report guard — 2026-06 (batch 18)
+- **7-reason public scan screen** (`PublicScan.jsx`, data-driven `REASONS` config): Wrong Parking, Vehicle Blocking, Headlight ON, Door / Window Open, Emergency, Vehicle Damage, Other — each with its own gradient + lucide icon. Replaced the old 3-button (parking/accident/theft) choose screen. `accident`/`theft` types kept valid in the backend for backward compatibility, just no longer on the public menu.
+- Backend `IncidentCreateIn` Literal extended; centralized `INCIDENT_TITLES` + `_incident_body()` per-type; `WINDOW_TYPES` (parking + blocking = 15-min countdown + I-am-coming) and `URGENT_TYPES` (emergency/accident/theft/damage bypass owner notify-prefs + always offer a private call). Photo evidence + silent selfie apply to every reason.
+- Owner (`Incidents.jsx`) + Admin (`AdminIncidents.jsx`) META + filter updated for all reasons.
+- **Admin false-report guard**: `GET /admin/incidents` returns both photos; admin Incident-history table has an "Evidence" column showing the Vehicle photo + Reporter selfie (click to enlarge) to trace misuse.
+- Verified: curl (all 7 reason types create incidents; admin returns both photos) + screenshot (all reason buttons render, emergency keeps photo step).
+
 
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.

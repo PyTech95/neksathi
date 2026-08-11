@@ -2,11 +2,22 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import CameraCapture from "@/components/CameraCapture";
-import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X } from "lucide-react";
+import { Car, ParkingCircle, Siren, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare } from "lucide-react";
 
 const geo = (setC) => {
   if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => setC({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {}, { timeout: 6000 });
 };
+
+const WINDOW_TYPES = ["wrong_parking", "vehicle_blocking"];
+const REASONS = [
+  { key: "wrong_parking", label: "Wrong Parking", icon: <ParkingCircle size={26} />, grad: "linear-gradient(100deg,#f59e0b,#f5a524)", desc: "Alert the owner to move their vehicle. A 15-minute window starts once you alert them." },
+  { key: "vehicle_blocking", label: "Vehicle Blocking", icon: <Ban size={26} />, grad: "linear-gradient(100deg,#f97316,#fb923c)", desc: "This vehicle is blocking the way. Ask the owner to move it — a 15-minute window starts." },
+  { key: "headlight_on", label: "Headlight ON", icon: <Lightbulb size={26} />, grad: "linear-gradient(100deg,#ca8a04,#eab308)", desc: "The headlights are left ON. Let the owner know before the battery drains." },
+  { key: "door_open", label: "Door / Window Open", icon: <DoorOpen size={26} />, grad: "linear-gradient(100deg,#0891b2,#22d3ee)", desc: "A door or window is left open. Notify the owner to secure the vehicle." },
+  { key: "emergency", label: "Emergency", icon: <Siren size={26} />, grad: "linear-gradient(100deg,#e11d48,#ff3b5c)", urgent: true, desc: "Urgent! Notify the owner & family immediately, then connect a private call." },
+  { key: "vehicle_damage", label: "Vehicle Damage", icon: <AlertTriangle size={26} />, grad: "linear-gradient(100deg,#dc2626,#f97316)", desc: "The vehicle appears damaged. Report it to the owner with a photo." },
+  { key: "other", label: "Other", icon: <MessageSquare size={26} />, grad: "linear-gradient(100deg,#7c3aed,#8b5cf6)", desc: "Something else about this vehicle — leave a note for the owner." },
+];
 
 export default function PublicScan() {
   const { qrId } = useParams();
@@ -123,59 +134,43 @@ export default function PublicScan() {
           <div data-testid="scan-choose">
             <h2 className="center" style={{ fontSize: 24, marginBottom: 16 }}>How can we help?</h2>
             <div className="grid" style={{ gap: 12 }}>
-              <button className="big-action" style={{ background: "linear-gradient(100deg,#f59e0b,#f5a524)" }} onClick={() => setScreen("wrong_parking")} data-testid="choose-wrong_parking"><ParkingCircle size={28} /> Wrong Parking</button>
-              <button className="big-action" style={{ background: "linear-gradient(100deg,#e11d48,#ff3b5c)" }} onClick={() => { setScreen("accident"); }} data-testid="choose-accident"><Siren size={28} /> Accident</button>
-              <button className="big-action" style={{ background: "linear-gradient(100deg,#7c3aed,#8b5cf6)" }} onClick={() => setScreen("theft")} data-testid="choose-theft"><ShieldAlert size={28} /> Theft / Suspicious</button>
-            </div>
-          </div>
-        )}
-
-        {screen === "wrong_parking" && (
-          <div data-testid="scan-wrong-parking">
-            <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={goChoose}><ArrowLeft size={15} /> Back</button>
-            <h2 style={{ fontSize: 22, marginBottom: 6 }}>Wrong parking</h2>
-            <p className="muted" style={{ marginBottom: 4 }}>Alert the owner to move their vehicle. A 15-minute window starts once you alert them.</p>
-            <NoteFields />
-            {photoBlock()}
-            <button className="big-action" style={{ background: "linear-gradient(100deg,#f59e0b,#f5a524)", marginTop: 14 }} disabled={busy} onClick={() => createIncident("wrong_parking")} data-testid="alert-owner-btn">
-              {busy ? <Loader2 size={24} className="spin" /> : <BellRing size={26} />} Alarm / Alert Owner
-            </button>
-          </div>
-        )}
-
-        {screen === "accident" && (
-          <div data-testid="scan-accident">
-            <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={goChoose}><ArrowLeft size={15} /> Back</button>
-            <div className="glass card-pad center" style={{ padding: 26, borderColor: "rgba(255,59,92,.5)" }}>
-              <Siren size={48} color="#ff3b5c" />
-              <h2 style={{ fontSize: 26, margin: "12px 0 6px", color: "#ff3b5c" }}>Accident Alert</h2>
-              <p className="muted">Notify the owner & family immediately, then connect a private call.</p>
-            </div>
-            {!incident ? (
-              <>
-                {photoBlock()}
-                <button className="big-action" style={{ background: "linear-gradient(100deg,#e11d48,#ff3b5c)", marginTop: 14 }} disabled={busy} onClick={() => createIncident("accident")} data-testid="accident-alert-btn">
-                  {busy ? <Loader2 size={24} className="spin" /> : <Siren size={26} />} Send accident alert
+              {REASONS.map((r) => (
+                <button key={r.key} className="big-action" style={{ background: r.grad }} onClick={() => setScreen(r.key)} data-testid={`choose-${r.key}`}>
+                  {r.icon} {r.label}
                 </button>
-              </>
-            ) : null}
+              ))}
+            </div>
           </div>
         )}
 
-        {screen === "theft" && (
-          <div data-testid="scan-theft">
-            <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={goChoose}><ArrowLeft size={15} /> Back</button>
-            <div className="glass card-pad" style={{ padding: 22 }}>
-              <h2 style={{ fontSize: 22, marginBottom: 6 }}>Theft / suspicious activity</h2>
-              <p className="muted">Confirm to alert the owner & family. You can then place a private call.</p>
+        {(() => {
+          const r = REASONS.find((x) => x.key === screen);
+          if (!r) return null;
+          const windowed = WINDOW_TYPES.includes(r.key);
+          return (
+            <div data-testid={`scan-${r.key}`}>
+              <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={goChoose}><ArrowLeft size={15} /> Back</button>
+              {r.urgent ? (
+                <div className="glass card-pad center" style={{ padding: 26, borderColor: "rgba(255,59,92,.5)" }}>
+                  <Siren size={48} color="#ff3b5c" />
+                  <h2 style={{ fontSize: 26, margin: "12px 0 6px", color: "#ff3b5c" }}>{r.label}</h2>
+                  <p className="muted">{r.desc}</p>
+                </div>
+              ) : (
+                <>
+                  <h2 style={{ fontSize: 22, marginBottom: 6 }}>{r.label}</h2>
+                  <p className="muted" style={{ marginBottom: 4 }}>{r.desc}</p>
+                </>
+              )}
+              <NoteFields />
+              {photoBlock()}
+              <button className="big-action" style={{ background: r.grad, marginTop: 14 }} disabled={busy} onClick={() => createIncident(r.key)} data-testid={`alert-${r.key}-btn`}>
+                {busy ? <Loader2 size={24} className="spin" /> : (r.urgent ? <Siren size={26} /> : <BellRing size={26} />)}
+                {r.urgent ? " Send emergency alert" : windowed ? " Alarm / Alert Owner" : " Alert Owner"}
+              </button>
             </div>
-            <NoteFields />
-            {photoBlock()}
-            <button className="big-action" style={{ background: "linear-gradient(100deg,#7c3aed,#8b5cf6)", marginTop: 14 }} disabled={busy} onClick={() => createIncident("theft")} data-testid="theft-alert-btn">
-              {busy ? <Loader2 size={24} className="spin" /> : <ShieldAlert size={26} />} Confirm & alert owner
-            </button>
-          </div>
-        )}
+          );
+        })()}
 
         {screen === "waiting" && incident && (
           <div data-testid="scan-waiting">
@@ -195,11 +190,11 @@ export default function PublicScan() {
                 <BellRing size={48} color="#f5a524" />
                 <h2 style={{ fontSize: 23, margin: "12px 0 6px" }}>Owner alerted</h2>
                 <p className="muted">
-                  {incident.type === "wrong_parking"
+                  {WINDOW_TYPES.includes(incident.type)
                     ? "We've notified the owner & family. Waiting for them to respond…"
                     : "The owner & family have been notified."}
                 </p>
-                {incident.type === "wrong_parking" && (
+                {WINDOW_TYPES.includes(incident.type) && (
                   <div className="chip" style={{ marginTop: 14 }}><Clock size={13} /> {incident.minutes_left} min window · {incident.status === "no_response" ? "No response yet" : "Alert sent"}</div>
                 )}
               </div>

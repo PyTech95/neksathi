@@ -1,9 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
 import api from "@/lib/api";
-import { ParkingCircle, Siren, ShieldAlert, Check, X, CheckCircle2, Clock, MapPin, Phone, RefreshCw, BellRing } from "lucide-react";
+import { ParkingCircle, Siren, ShieldAlert, Check, X, CheckCircle2, Clock, MapPin, Phone, RefreshCw, BellRing, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare } from "lucide-react";
 
 const META = {
   wrong_parking: { icon: <ParkingCircle size={18} />, color: "#f5a524", label: "Wrong parking" },
+  vehicle_blocking: { icon: <Ban size={18} />, color: "#fb923c", label: "Vehicle blocking" },
+  headlight_on: { icon: <Lightbulb size={18} />, color: "#eab308", label: "Headlight ON" },
+  door_open: { icon: <DoorOpen size={18} />, color: "#22d3ee", label: "Door / window open" },
+  emergency: { icon: <Siren size={18} />, color: "#ff3b5c", label: "Emergency" },
+  vehicle_damage: { icon: <AlertTriangle size={18} />, color: "#f97316", label: "Vehicle damage" },
+  other: { icon: <MessageSquare size={18} />, color: "#8b5cf6", label: "Other" },
   accident: { icon: <Siren size={18} />, color: "#ff3b5c", label: "Accident" },
   theft: { icon: <ShieldAlert size={18} />, color: "#8b5cf6", label: "Theft / suspicious" },
 };
@@ -67,7 +73,7 @@ export default function Incidents() {
                         </div>
                       )}
                       <div style={{ display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap", fontSize: 13 }}>
-                        {it.type === "wrong_parking" && !it.resolved && <span className="muted"><Clock size={13} style={{ verticalAlign: "-2px" }} /> {it.minutes_left} min left</span>}
+                        {(it.type === "wrong_parking" || it.type === "vehicle_blocking") && !it.resolved && <span className="muted"><Clock size={13} style={{ verticalAlign: "-2px" }} /> {it.minutes_left} min left</span>}
                         {it.scanner_phone && <a href={`tel:${it.scanner_phone}`} className="neon" style={{ fontWeight: 700 }}><Phone size={12} style={{ verticalAlign: "-1px" }} /> Reporter: {it.scanner_phone}</a>}
                         {it.scanner_lat != null && <a href={`https://www.openstreetmap.org/?mlat=${it.scanner_lat}&mlon=${it.scanner_lng}#map=17/${it.scanner_lat}/${it.scanner_lng}`} target="_blank" rel="noreferrer" className="muted"><MapPin size={12} style={{ verticalAlign: "-1px" }} /> Location</a>}
                       </div>

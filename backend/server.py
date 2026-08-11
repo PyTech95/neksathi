@@ -3632,9 +3632,33 @@ NEK_PORTAL_NUMBER = os.environ.get("NEK_PORTAL_NUMBER", "+91 80 4718 0000")
 
 INCIDENT_TITLES = {
     "wrong_parking": "🅿️ Wrong parking reported",
+    "vehicle_blocking": "🚧 Vehicle blocking reported",
+    "headlight_on": "💡 Headlights left ON",
+    "door_open": "🚪 Door / window left open",
+    "emergency": "🚨 Emergency reported",
+    "vehicle_damage": "⚠️ Vehicle damage reported",
+    "other": "📢 New alert about your vehicle",
     "accident": "🚨 Accident reported",
     "theft": "🚨 Theft / suspicious activity",
 }
+
+# Which reasons use the 15-minute "please move" countdown + I-am-coming flow.
+WINDOW_TYPES = {"wrong_parking", "vehicle_blocking"}
+# Urgent reasons — always broadcast to owner + family and offer a private call.
+URGENT_TYPES = {"emergency", "accident", "theft", "vehicle_damage"}
+
+def _incident_body(kind: str, plate: str) -> str:
+    return {
+        "wrong_parking": f"Your car {plate} has been reported for wrong parking. Someone is trying to alert you. Please move within {INCIDENT_WINDOW_MIN} minutes. Open Nek Sathi to respond: 'I am coming'.",
+        "vehicle_blocking": f"Your car {plate} is blocking the way. Please move it within {INCIDENT_WINDOW_MIN} minutes. Open Nek Sathi to respond: 'I am coming'.",
+        "headlight_on": f"Heads up — the headlights on your car {plate} appear to be left ON. Someone alerted you via Nek Sathi.",
+        "door_open": f"Heads up — a door or window on your car {plate} appears to be open. Someone alerted you via Nek Sathi.",
+        "emergency": f"EMERGENCY reported involving your car {plate} via Nek Sathi. Please respond immediately.",
+        "vehicle_damage": f"Damage to your car {plate} was reported via Nek Sathi. Please check as soon as possible.",
+        "other": f"Someone left an alert about your car {plate} via Nek Sathi. Please check the details.",
+        "accident": f"An accident involving your car {plate} was reported via Nek Sathi. Please respond immediately.",
+        "theft": f"Suspicious/theft activity reported on your car {plate} via Nek Sathi. Please check immediately.",
+    }.get(kind, f"A new alert was reported about your car {plate} via Nek Sathi.")
 
 
 def _whatsapp_live() -> bool:
@@ -3701,14 +3725,14 @@ def _incident_public(inc: dict) -> dict:
         "status": inc["status"],
         "owner_response": inc.get("owner_response"),
         "minutes_left": _minutes_left(inc["expires_at"]),
-        "call_available": inc["type"] in ("accident", "theft") or inc["status"] in ("alert_sent", "no_response", "call_attempted"),
+        "call_available": inc["type"] in URGENT_TYPES or inc["status"] in ("alert_sent", "no_response", "call_attempted"),
         "portal_number": NEK_PORTAL_NUMBER,
         "created_at": inc["created_at"],
     }
 
 
 class IncidentCreateIn(BaseModel):
-    type: Literal["wrong_parking", "accident", "theft"]
+    type: Literal["wrong_parking", "vehicle_blocking", "headlight_on", "door_open", "emergency", "vehicle_damage", "other", "accident", "theft"]
     scanner_note: Optional[str] = Field(default=None, max_length=500)
     scanner_phone: Optional[str] = Field(default=None, max_length=20)
     scanner_lat: Optional[float] = None
@@ -3767,17 +3791,12 @@ async def create_incident(request: Request, qr_id: str, payload: IncidentCreateI
     owner_doc = await db.users.find_one({"id": v["owner_id"]})
     op = _prefs(owner_doc)
     title = INCIDENT_TITLES.get(payload.type, "Vehicle alert")
-    if payload.type == "wrong_parking":
-        body = (f"Your car {v['number_plate']} has been reported for wrong parking. "
-                f"Someone is trying to alert you. Please move within {INCIDENT_WINDOW_MIN} minutes. "
-                f"Open Nek Sathi to respond: 'I am coming'.")
-    elif payload.type == "accident":
-        body = f"An accident involving your car {v['number_plate']} was reported via Nek Sathi. Please respond immediately."
-    else:
-        body = f"Suspicious/theft activity reported on your car {v['number_plate']} via Nek Sathi. Please check immediately."
+    body = _incident_body(payload.type, v["number_plate"])
     for r in recipients:
-        # Family contacts always get alerted; the owner's own channel honours their prefs.
-        if r["role"] == "owner" and not (op.get("whatsapp") and op.get("incident_alerts")):
+        # Family contacts always get alerted; the owner's own channel honours their prefs
+        # (urgent reasons bypass prefs so the owner is never left unaware of an emergency).
+        urgent = payload.type in URGENT_TYPES
+        if r["role"] == "owner" and not urgent and not (op.get("whatsapp") and op.get("incident_alerts")):
             continue
         await notify_whatsapp(r["phone"], body, meta={"incident_id": inc_id, "role": r["role"]})
     try:
@@ -3794,8 +3813,8 @@ async def public_incident_status(incident_id: str):
     inc = await db.incidents.find_one({"id": incident_id})
     if not inc:
         raise HTTPException(status_code=404, detail="Incident not found")
-    # Auto-expire wrong-parking to no_response once the window lapses.
-    if (not inc.get("resolved") and inc["type"] == "wrong_parking"
+    # Auto-expire windowed reasons (parking/blocking) to no_response once the window lapses.
+    if (not inc.get("resolved") and inc["type"] in WINDOW_TYPES
             and inc["status"] == "alert_sent" and _minutes_left(inc["expires_at"]) == 0):
         await db.incidents.update_one({"id": incident_id}, {"$set": {"status": "no_response"}})
         inc["status"] = "no_response"
@@ -3940,6 +3959,8 @@ async def admin_incidents(_: dict = Depends(require_admin), type: Optional[str] 
             "status": inc["status"], "owner_response": inc.get("owner_response"),
             "call_attempted": inc.get("call_attempted", False), "resolved": inc.get("resolved", False),
             "scanner_phone": inc.get("scanner_phone"), "created_at": inc["created_at"],
+            "evidence_photo_base64": inc.get("evidence_photo_base64"),
+            "reporter_photo_base64": inc.get("reporter_photo_base64"),
         })
     async def _c(f):
         return await db.incidents.count_documents(f)
