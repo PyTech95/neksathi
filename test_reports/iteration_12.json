@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 12 — verified full Twilio→MSG91 migration + comms mock behaviour + regression. Backend pytest 19/19 PASS (test_msg91_migration.py): (a) grep-scan confirms zero non-comment 'twilio' refs in backend (excluding tests/comms.py doc-string reference to the migration itself). (b) OTP mock: POST /api/auth/otp/request returns {channel:'mock', live:false, dev_code:'######'}; verify with returned code creates user (phone-suffix email @phone.neksaathi.app) + returns access_token. Wrong code rejected 400. (c) GET /api/admin/telco-config: provider='msg91', live={otp:false,sms:false,whatsapp:false,voice:false}, no twilio-prefixed keys. PUT with MSG91 fields (empty strings) 200 ok. (d) Public vehicle QR incident masked call: POST /api/public/qr/{qr}/incident (accident) → POST /api/public/incident/{id}/call returns {masked:true, status:'mock_connected', provider:'mock'} — no owner_phone/guardian_phone/target_phone fields in the response body. (e) GET /api/public/incident/{id} carries no owner_phone. (f) Tag masked call: kid_help tag created under owner → POST /api/public/tag/{qr}/call returns masked mock_connected; guardian phone +919000000002 NOT present in response text; GET /api/public/tag/{qr} also omits guardian_phone. (g) Tag alert kid_help mock path: 200 ok, no phone leakage. (h) Role logins admin/owner/dealer/org all return access_token + correct role flags. (i) Owner /vehicles, /tags list 200. (j) Admin /plans, /support/tickets, /contacts, /orgs all 200. (k) SOS chunked upload /user/sos-video/init → /chunk → /status returns missing=[] after single chunk. \n\nFrontend Playwright: OTP mock login on /otp-login PASS — dev code visible in card and OTP verify navigates to /dashboard. Role routing PASS — dealera→/dealer, school→/org, demo_web→/dashboard; admin lands on /dashboard by design and can navigate to /admin console successfully. Masked-call UI flow on /scan/45805f3a-...: choose-accident → accident-alert-btn triggers alert (mirrors public/qr/{id}/incident) → 'Owner alerted' + call-owner-btn → 'Connect privately / Connecting you to the owner through the Nek Sathi portal — their number stays private.' NO phone-like digits rendered on the page (regex scan returned []). Copy explicitly states owner's number is never shown.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_msg91_migration.py",
+    "/app/test_reports/pytest/iter12.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "comms.py — send_otp raises RuntimeError on non-success but /auth/otp/request catches broadly and returns 400 with detail — good.",
+    "server.py L2011 & L3811 both call comms.masked_call and never surface owner/guardian phone in the JSON response (only masked/status/provider/note/portal_number returned). Audit trail keeps target_phone in call_records — correct (never returned to caller).",
+    "server.py L697 telco-config /live snapshot is a helpful admin affordance; masked authkey via _mask_secret prevents leak in GET.",
+    "backend/.env has empty MSG91_* placeholders — comms.*_live() gates return False → all paths correctly degrade to mock. No Twilio env vars remain.",
+    "notify_whatsapp (server.py L3644) and send_sms (L3660) both now delegate to comms — logging includes provider='msg91' and status='mock' as expected.",
+    "server.py is 4395 lines — continued recommendation to split into routers.",
+    "OtpLogin.jsx correctly consumes dev_code only when API returns it (mock mode); goes to /dashboard on success — for admin OTP that would bypass /admin but admins don't use OTP path in preview."
+  ],
+  "updated_files": ["/app/backend/tests/test_msg91_migration.py"],
+  "success_rate": {"backend": "100% (19/19)", "frontend": "100% (OTP + 4 role logins + masked-call UI all pass)"},
+  "test_credentials": "admin@safeqr.com/admin1234, demo_web@safeqr.com/demo1234, dealera@nek.dev/dealer1234, school@nek.dev/school1234",
+  "seed_data_creation": "Test-created rows cleaned via mongosh: any TEST_OTP/TEST_UI users, ephemeral @phone.neksaathi.app users from last hour, TEST_MSG91_* tags, TEST_MSG91-noted incidents, and stale otp_codes all deleted.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "MSG91 comms migration is complete and stable. All comms functions in /app/backend/comms.py degrade to MOCK when env vars are empty (which is the preview state). Backend endpoints for MSG91: GET/PUT /api/admin/telco-config (MSG91 fields only, provider='msg91'). Masked-call endpoints: POST /api/public/incident/{id}/call and POST /api/public/tag/{qr}/call — both return {masked:true, status, provider, note, portal_number} and NEVER include phone fields. OTP endpoints: POST /api/auth/otp/{request,verify} — in mock mode dev_code returned; use it to complete verify. UI selectors verified: otp-login-page, otp-phone, otp-request-btn, otp-dev-code, otp-name, otp-code, otp-verify-btn, choose-accident, accident-alert-btn, alert-sent, call-owner-btn, scan-waiting. Admin lands on /dashboard on login; /admin is reachable via direct navigation.",
+  "rca_of_the_issue": "N/A — clean migration. Twilio fully removed; MSG91 adapter honours env-driven gating; privacy/masking invariants hold in every code path exercised."
+}

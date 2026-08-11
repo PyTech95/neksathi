@@ -31,6 +31,7 @@ from slowapi.util import get_remote_address
 from starlette.middleware.cors import CORSMiddleware
 
 from push import send_push, push_router
+import comms
 from email_client import send_email, password_reset_html
 from vcard import build_vcard4, vcard_filename
 from sticker_html import build_sticker_html, VARIANTS as STICKER_VARIANTS
@@ -655,18 +656,16 @@ async def record_consent(payload: dict, user: dict = Depends(current_user)):
 # ---------------------------------------------------------------------------
 
 class TelcoConfigIn(BaseModel):
-    provider: Literal["whatsapp", "twilio", "msg91", "exotel", "gupshup"] = "whatsapp"
+    provider: Literal["msg91", "mock"] = "msg91"
     sms_enabled: bool = False
-    twilio_account_sid: Optional[str] = Field(default=None, max_length=80)
-    twilio_auth_token: Optional[str] = Field(default=None, max_length=120)
-    twilio_from: Optional[str] = Field(default=None, max_length=20)
-    msg91_api_key: Optional[str] = Field(default=None, max_length=120)
-    msg91_sender: Optional[str] = Field(default=None, max_length=20)
-    exotel_sid: Optional[str] = Field(default=None, max_length=80)
-    exotel_token: Optional[str] = Field(default=None, max_length=120)
-    exotel_from: Optional[str] = Field(default=None, max_length=20)
-    gupshup_api_key: Optional[str] = Field(default=None, max_length=120)
-    gupshup_source: Optional[str] = Field(default=None, max_length=20)
+    msg91_authkey: Optional[str] = Field(default=None, max_length=120)
+    msg91_otp_template_id: Optional[str] = Field(default=None, max_length=80)
+    msg91_sms_flow_id: Optional[str] = Field(default=None, max_length=80)
+    msg91_sms_sender: Optional[str] = Field(default=None, max_length=20)
+    msg91_whatsapp_number: Optional[str] = Field(default=None, max_length=20)
+    msg91_whatsapp_template: Optional[str] = Field(default=None, max_length=120)
+    msg91_whatsapp_namespace: Optional[str] = Field(default=None, max_length=120)
+    msg91_caller_id: Optional[str] = Field(default=None, max_length=20)
 
 
 def _mask_secret(v: Optional[str]) -> Optional[str]:
@@ -675,24 +674,28 @@ def _mask_secret(v: Optional[str]) -> Optional[str]:
     return v[:4] + "•" * max(0, len(v) - 8) + v[-4:] if len(v) > 8 else "•" * len(v)
 
 
+_MSG91_ENV = {
+    "msg91_authkey": "MSG91_AUTHKEY",
+    "msg91_otp_template_id": "MSG91_OTP_TEMPLATE_ID",
+    "msg91_sms_flow_id": "MSG91_SMS_FLOW_ID",
+    "msg91_sms_sender": "MSG91_SMS_SENDER",
+    "msg91_whatsapp_number": "MSG91_WHATSAPP_NUMBER",
+    "msg91_whatsapp_template": "MSG91_WHATSAPP_TEMPLATE",
+    "msg91_whatsapp_namespace": "MSG91_WHATSAPP_NAMESPACE",
+    "msg91_caller_id": "MSG91_CALLER_ID",
+}
+
+
 @api.get("/admin/telco-config")
 async def get_telco_config(_: dict = Depends(require_admin)):
-    doc = await db.system_config.find_one({"id": "telco"}) or {"id": "telco", "provider": "whatsapp", "sms_enabled": False}
-    return {
-        "provider": doc.get("provider", "whatsapp"),
-        "sms_enabled": bool(doc.get("sms_enabled", False)),
-        "twilio_account_sid": _mask_secret(doc.get("twilio_account_sid")),
-        "twilio_auth_token": _mask_secret(doc.get("twilio_auth_token")),
-        "twilio_from": doc.get("twilio_from"),
-        "msg91_api_key": _mask_secret(doc.get("msg91_api_key")),
-        "msg91_sender": doc.get("msg91_sender"),
-        "exotel_sid": _mask_secret(doc.get("exotel_sid")),
-        "exotel_token": _mask_secret(doc.get("exotel_token")),
-        "exotel_from": doc.get("exotel_from"),
-        "gupshup_api_key": _mask_secret(doc.get("gupshup_api_key")),
-        "gupshup_source": doc.get("gupshup_source"),
-        "updated_at": doc.get("updated_at"),
-    }
+    doc = await db.system_config.find_one({"id": "telco"}) or {"id": "telco", "provider": "msg91", "sms_enabled": False}
+    out = {"provider": doc.get("provider", "msg91"), "sms_enabled": bool(doc.get("sms_enabled", False)), "updated_at": doc.get("updated_at")}
+    for k in _MSG91_ENV:
+        val = doc.get(k)
+        out[k] = _mask_secret(val) if k in ("msg91_authkey",) else val
+    # Live-status snapshot so admins can see what's actually active.
+    out["live"] = {"otp": comms.otp_live(), "sms": comms.sms_live(), "whatsapp": comms.whatsapp_live(), "voice": comms.voice_live()}
+    return out
 
 
 @api.put("/admin/telco-config")
@@ -700,14 +703,11 @@ async def set_telco_config(payload: TelcoConfigIn, admin: dict = Depends(require
     doc = payload.model_dump()
     doc.update({"id": "telco", "updated_at": now_utc(), "updated_by": admin["id"]})
     await db.system_config.update_one({"id": "telco"}, {"$set": doc}, upsert=True)
-    # Sync into process env so the /bridge endpoint picks it up without restart.
-    if payload.provider == "twilio":
-        if payload.twilio_account_sid: os.environ["TWILIO_ACCOUNT_SID"] = payload.twilio_account_sid
-        if payload.twilio_auth_token: os.environ["TWILIO_AUTH_TOKEN"] = payload.twilio_auth_token
-        if payload.twilio_from: os.environ["TWILIO_FROM"] = payload.twilio_from
-    elif payload.provider == "exotel":
-        if payload.exotel_sid: os.environ["EXOTEL_SID"] = payload.exotel_sid
-        if payload.exotel_token: os.environ["EXOTEL_TOKEN"] = payload.exotel_token
+    # Sync into process env so comms.py picks it up immediately (no restart).
+    for field, env_key in _MSG91_ENV.items():
+        val = getattr(payload, field)
+        if val:
+            os.environ[env_key] = val
     return {"ok": True, "provider": payload.provider}
 
 
@@ -2007,38 +2007,26 @@ async def public_tag_call(request: Request, qr_id: str, payload: TagCallIn):
     owner = await db.users.find_one({"id": t.get("owner_id")})
     target_phone = t.get("guardian_phone") or (owner and owner.get("phone"))
     reporter_phone = (payload.scanner_phone or "").strip()
-    twilio_from = os.environ.get("TWILIO_FROM")
-    live = bool(twilio_from and os.environ.get("TWILIO_ACCOUNT_SID") and os.environ.get("TWILIO_AUTH_TOKEN"))
-    status = "mock_connected"
-    note = "Connecting you to the guardian through the Nek Sathi portal — their number stays private."
-
-    if live and reporter_phone and target_phone:
-        try:  # pragma: no cover - live path
-            from twilio.rest import Client as _Tw
-            _cli = _Tw(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
-            twiml = ("<?xml version='1.0' encoding='UTF-8'?><Response>"
-                     "<Say voice='alice'>Connecting you privately to the guardian via Nek Sathi. Please hold.</Say>"
-                     f"<Dial callerId='{twilio_from}' timeout='25'>{target_phone}</Dial></Response>")
-            _cli.calls.create(to=reporter_phone, from_=twilio_from, twiml=twiml, method="POST")
-            status = "calling"
-            note = "We're calling you now — pick up and we'll connect you privately to the guardian."
-        except Exception as e:
-            status = "connecting"
-            note = "Connecting you privately via the Nek Sathi portal. (Demo: live dialing needs a verified/upgraded Twilio number.)"
-            log.warning("tag masked call failed, demo fallback: %s", e)
-    elif live and not reporter_phone:
-        status = "need_phone"
-        note = "Enter your callback number so we can connect you privately (your number stays hidden)."
+    live = comms.voice_live()
+    res = await comms.masked_call(reporter_phone, target_phone)
+    status = res.get("status", "mock_connected")
+    notes = {
+        "calling": "We're calling you now — pick up and we'll connect you privately to the guardian.",
+        "connecting": "Connecting you privately via the Nek Sathi portal — the guardian's number stays hidden.",
+        "need_phone": "Enter your callback number so we can connect you privately (your number stays hidden).",
+        "mock_connected": "Connecting you to the guardian through the Nek Sathi portal — their number stays private.",
+    }
+    note = notes.get(status, notes["mock_connected"])
 
     await db.call_records.insert_one({
         "id": new_id(), "tag_id": t["id"], "qr_id": qr_id,
         "reporter_phone": reporter_phone or None, "target_phone": target_phone,  # audit only
-        "provider": "twilio" if live else "mock", "portal_number": NEK_PORTAL_NUMBER,
+        "provider": res.get("provider", "mock"), "portal_number": NEK_PORTAL_NUMBER,
         "status": status, "kind": "tag_guardian", "created_at": now_utc(),
     })
     if _prefs(owner).get("whatsapp") and target_phone:
         await notify_whatsapp(target_phone, f"Someone scanned your Nek Sathi tag '{t['name']}' and is trying to reach you via the portal.", meta={"tag_id": t["id"], "kind": "call"})
-    return {"status": status, "masked": True, "portal_number": NEK_PORTAL_NUMBER, "note": note, "provider": "twilio" if live else "mock"}
+    return {"status": status, "masked": True, "portal_number": NEK_PORTAL_NUMBER, "note": note, "provider": res.get("provider", "mock")}
 
 
 # ---------------------------------------------------------------------------
@@ -2283,13 +2271,13 @@ async def _seed_blackspots() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Call masking bridge (Twilio / Exotel adapter, gracefully falls back to
+# Call masking bridge (MSG91 click-to-call adapter, gracefully falls back to
 # WhatsApp deep-links when no telco keys are configured).
 #
 # Endpoint: POST /public/qr/{qr_id}/bridge (no auth) — takes an entity kind
 # ("vehicle" | "tag" | "card") and returns a masked `dial_url`. In prod this
-# is either a Twilio virtual number or a wa.me link that routes through a
-# managed WhatsApp Business number. Both parties never see raw phones.
+# is either an MSG91 masked/click-to-call bridge or a wa.me link that routes
+# through a managed WhatsApp Business number. Both parties never see raw phones.
 # ---------------------------------------------------------------------------
 
 MASK_TTL_MIN = 30
@@ -2301,7 +2289,7 @@ class BridgeReqIn(BaseModel):
 
 
 class BridgeOut(BaseModel):
-    kind: Literal["whatsapp", "twilio", "unavailable"]
+    kind: Literal["msg91", "mock", "unavailable"]
     dial_url: Optional[str] = None
     masked_from: Optional[str] = None
     masked_to: Optional[str] = None
@@ -2310,11 +2298,7 @@ class BridgeOut(BaseModel):
 
 
 def _telco_provider() -> str:
-    if os.environ.get("TWILIO_ACCOUNT_SID") and os.environ.get("TWILIO_AUTH_TOKEN") and os.environ.get("TWILIO_FROM"):
-        return "twilio"
-    if os.environ.get("EXOTEL_SID") and os.environ.get("EXOTEL_TOKEN"):
-        return "exotel"
-    return "whatsapp"
+    return "msg91" if comms.voice_live() else "mock"
 
 
 @api.post("/public/qr/{qr_id}/bridge", response_model=BridgeOut)
@@ -2364,21 +2348,20 @@ async def public_bridge(request: Request, qr_id: str, payload: BridgeReqIn):
         "created_at": now_utc(),
     })
 
-    if provider == "twilio":
-        # In prod: use Twilio proxy service to mint a masked number. Stub here.
+    if provider == "msg91":
+        res = await comms.masked_call(payload.scanner_phone, owner_phone)
         return BridgeOut(
-            kind="twilio",
-            dial_url=f"tel:{os.environ.get('TWILIO_FROM')}",
+            kind="msg91",
             masked_from="Nek Sathi bridge",
             masked_to=label,
             expires_at=expires,
-            note="Dial the number, our IVR routes you to the owner without revealing their real number.",
+            note="We'll connect you privately via MSG91 — the owner's number stays hidden.",
         )
-    # WhatsApp deep-link fallback — safest zero-config bridge.
+    # Mock fallback (no live voice creds) — WhatsApp deep-link is the safest zero-config bridge.
     text = f"Hi, I scanned your Nek Sathi QR ({label}). Session {session_id[:8]}."
     dial = f"https://wa.me/{owner_phone.replace('+', '').replace(' ', '')}?text={quote_plus(text)}"
     return BridgeOut(
-        kind="whatsapp",
+        kind="mock",
         dial_url=dial,
         masked_from="via WhatsApp",
         masked_to=label,
@@ -3655,69 +3638,37 @@ INCIDENT_TITLES = {
 
 
 def _whatsapp_live() -> bool:
-    return bool(
-        (os.environ.get("TWILIO_WHATSAPP_FROM") or os.environ.get("TWILIO_WHATSAPP_MESSAGING_SID"))
-        and os.environ.get("TWILIO_ACCOUNT_SID")
-        and os.environ.get("TWILIO_AUTH_TOKEN")
-    )
+    return comms.whatsapp_live()
 
 
 async def notify_whatsapp(to: Optional[str], text: str, meta: Optional[dict] = None) -> dict:
-    """Send a WhatsApp message. MOCK unless live Twilio WhatsApp creds exist.
-    Supports either a direct sender (TWILIO_WHATSAPP_FROM) or an approved
-    WhatsApp Business Messaging Service (TWILIO_WHATSAPP_MESSAGING_SID).
+    """Send a WhatsApp message via MSG91. MOCK unless MSG91 WhatsApp creds exist.
     Always audit-logs into db.notifications so the flow is testable end-to-end."""
     if not to:
         return {"status": "skipped"}
-    live = _whatsapp_live()
+    res = await comms.send_whatsapp(to, text)
     doc = {
         "id": new_id(), "channel": "whatsapp", "to": to, "text": text,
-        "status": "mock", "meta": meta or {}, "created_at": now_utc(),
+        "status": res.get("status", "mock"), "provider": "msg91", "meta": meta or {}, "created_at": now_utc(),
     }
-    if live:
-        try:  # pragma: no cover - only runs with real creds
-            from twilio.rest import Client as _TwClient
-            _cli = _TwClient(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
-            kwargs = {"to": f"whatsapp:{to}", "body": text}
-            msid = os.environ.get("TWILIO_WHATSAPP_MESSAGING_SID")
-            if msid:
-                kwargs["messaging_service_sid"] = msid
-            else:
-                kwargs["from_"] = f"whatsapp:{os.environ['TWILIO_WHATSAPP_FROM']}"
-            _cli.messages.create(**kwargs)
-            doc["status"] = "sent"
-        except Exception as _e:
-            doc["status"] = "failed"
-            doc["error"] = str(_e)[:200]
-            log.warning("whatsapp live send failed: %s", _e)
-    else:
-        log.info("[WHATSAPP MOCK] to=%s :: %s", to, text)
+    if res.get("error"):
+        doc["error"] = res["error"]
     await db.notifications.insert_one(dict(doc))
     return {"status": doc["status"], "id": doc["id"]}
 
 
 async def send_sms(to: Optional[str], text: str, meta: Optional[dict] = None) -> dict:
-    """Send an SMS. MOCK unless live Twilio SMS creds (TWILIO_FROM) exist.
+    """Send an SMS via MSG91. MOCK unless MSG91 SMS flow creds exist.
     Used as a fallback channel so emergency alerts never get missed."""
     if not to:
         return {"status": "skipped"}
-    live = bool(os.environ.get("TWILIO_ACCOUNT_SID") and os.environ.get("TWILIO_AUTH_TOKEN") and os.environ.get("TWILIO_FROM"))
+    res = await comms.send_sms(to, text)
     doc = {
         "id": new_id(), "channel": "sms", "to": to, "text": text,
-        "status": "mock", "meta": meta or {}, "created_at": now_utc(),
+        "status": res.get("status", "mock"), "provider": "msg91", "meta": meta or {}, "created_at": now_utc(),
     }
-    if live:
-        try:  # pragma: no cover - only runs with real creds
-            from twilio.rest import Client as _TwClient
-            _cli = _TwClient(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
-            _cli.messages.create(from_=os.environ["TWILIO_FROM"], to=to, body=text)
-            doc["status"] = "sent"
-        except Exception as _e:
-            doc["status"] = "failed"
-            doc["error"] = str(_e)[:200]
-            log.warning("sms live send failed: %s", _e)
-    else:
-        log.info("[SMS MOCK] to=%s :: %s", to, text)
+    if res.get("error"):
+        doc["error"] = res["error"]
     await db.notifications.insert_one(dict(doc))
     return {"status": doc["status"], "id": doc["id"]}
 
@@ -3856,37 +3807,22 @@ async def public_incident_call(request: Request, incident_id: str, payload: Inci
         raise HTTPException(status_code=404, detail="Incident not found")
     owner = await db.users.find_one({"id": inc["owner_id"]})
     owner_phone = owner and owner.get("phone")
-    twilio_from = os.environ.get("TWILIO_FROM")
-    live = bool(twilio_from and os.environ.get("TWILIO_ACCOUNT_SID") and os.environ.get("TWILIO_AUTH_TOKEN"))
     reporter_phone = (payload.scanner_phone or inc.get("scanner_phone") or "").strip()
-    status = "mock_connected"
-    note = "Connecting you to the owner through the Nek Sathi portal — their number stays private."
-
-    if live and reporter_phone and owner_phone:
-        # Two-leg masked call: Twilio rings the REPORTER, then Dials the OWNER.
-        # Neither party sees the other's number (both legs use the Nek Sathi number).
-        twiml_url = f"{os.environ.get('PUBLIC_APP_URL', '')}/api/telephony/twiml/{incident_id}"
-        try:  # pragma: no cover - live path
-            from twilio.rest import Client as _Tw
-            _cli = _Tw(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
-            _cli.calls.create(to=reporter_phone, from_=twilio_from, url=twiml_url, method="POST")
-            status = "calling"
-            note = "We're calling you now — pick up and we'll connect you privately to the owner."
-        except Exception as e:
-            # Demo-friendly fallback: Twilio trial can only dial verified numbers.
-            # Keep the privacy-preserving UX flowing instead of showing an error.
-            status = "connecting"
-            note = "Connecting you privately to the owner via the Nek Sathi portal. (Demo: live dialing needs a verified/upgraded Twilio number.)"
-            log.warning("masked call failed, demo fallback: %s", e)
-    elif live and not reporter_phone:
-        status = "need_phone"
-        note = "Enter your callback number so we can connect you privately (your number stays hidden)."
+    res = await comms.masked_call(reporter_phone, owner_phone)
+    status = res.get("status", "mock_connected")
+    notes = {
+        "calling": "We're calling you now — pick up and we'll connect you privately to the owner.",
+        "connecting": "Connecting you privately to the owner via the Nek Sathi portal — their number stays hidden.",
+        "need_phone": "Enter your callback number so we can connect you privately (your number stays hidden).",
+        "mock_connected": "Connecting you to the owner through the Nek Sathi portal — their number stays private.",
+    }
+    note = notes.get(status, notes["mock_connected"])
 
     rec = {
         "id": new_id(), "incident_id": incident_id, "qr_id": inc["qr_id"],
         "vehicle_id": inc["vehicle_id"], "reporter_phone": reporter_phone or None,
         "owner_phone": owner_phone,  # stored for audit only; NOT returned
-        "provider": "twilio" if live else "mock", "portal_number": NEK_PORTAL_NUMBER,
+        "provider": res.get("provider", "mock"), "portal_number": NEK_PORTAL_NUMBER,
         "status": status, "duration_sec": 0, "created_at": now_utc(),
     }
     await db.call_records.insert_one(dict(rec))
@@ -3899,23 +3835,6 @@ async def public_incident_call(request: Request, incident_id: str, payload: Inci
         "note": note,
         "provider": rec["provider"],
     }
-
-
-@api.api_route("/telephony/twiml/{incident_id}", methods=["GET", "POST"])
-async def telephony_twiml(incident_id: str):
-    """TwiML served to Twilio (never to the reporter's browser) that dials the owner."""
-    inc = await db.incidents.find_one({"id": incident_id})
-    owner = await db.users.find_one({"id": inc["owner_id"]}) if inc else None
-    owner_phone = (owner or {}).get("phone")
-    if not owner_phone:
-        xml = "<?xml version='1.0' encoding='UTF-8'?><Response><Say>Sorry, we could not connect you. Goodbye.</Say></Response>"
-    else:
-        caller = os.environ.get("TWILIO_FROM", "")
-        xml = (f"<?xml version='1.0' encoding='UTF-8'?><Response>"
-               f"<Say voice='alice'>Connecting you privately to the vehicle owner via Nek Sathi. Please hold.</Say>"
-               f"<Dial callerId='{caller}' timeout='25'>{owner_phone}</Dial>"
-               f"</Response>")
-    return Response(content=xml, media_type="application/xml")
 
 
 @api.api_route("/telephony/inbound", methods=["GET", "POST"])
@@ -4040,10 +3959,10 @@ async def admin_qr_block(serial_no: str, payload: dict, _: dict = Depends(requir
 
 
 # ===========================================================================
-# MOBILE OTP LOGIN  (Twilio Verify; dev-mock fallback for preview)
+# MOBILE OTP LOGIN  (MSG91 OTP; dev-mock fallback for preview)
 # Customers activating a QR sticker can sign in with phone + OTP. When
-# TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_VERIFY_SERVICE are set the
-# OTP is sent/verified via Twilio Verify; otherwise a dev code is issued and
+# MSG91_AUTHKEY + MSG91_OTP_TEMPLATE_ID are set the
+# OTP is sent/verified via MSG91; otherwise a dev code is issued and
 # returned so the flow is fully testable in preview.
 # ===========================================================================
 
@@ -4052,12 +3971,8 @@ import random as _random
 OTP_TTL_MIN = 10
 
 
-def _twilio_verify_ready() -> bool:
-    return bool(
-        os.environ.get("TWILIO_ACCOUNT_SID")
-        and os.environ.get("TWILIO_AUTH_TOKEN")
-        and os.environ.get("TWILIO_VERIFY_SERVICE")
-    )
+def _otp_live() -> bool:
+    return comms.otp_live()
 
 
 def _norm_phone(p: str) -> str:
@@ -4078,11 +3993,9 @@ class OtpVerifyIn(BaseModel):
 @rate_limit("5/minute")
 async def otp_request(request: Request, payload: OtpRequestIn):
     phone = _norm_phone(payload.phone)
-    if _twilio_verify_ready():
+    if _otp_live():
         try:  # pragma: no cover - live path
-            from twilio.rest import Client as _Tw
-            _cli = _Tw(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
-            _cli.verify.v2.services(os.environ["TWILIO_VERIFY_SERVICE"]).verifications.create(to=phone, channel="sms")
+            await comms.send_otp(phone)
             return {"ok": True, "channel": "sms", "dev_code": None, "live": True}
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Could not send OTP: {e}")
@@ -4102,12 +4015,9 @@ async def otp_request(request: Request, payload: OtpRequestIn):
 async def otp_verify(request: Request, payload: OtpVerifyIn):
     phone = _norm_phone(payload.phone)
     ok = False
-    if _twilio_verify_ready():
+    if _otp_live():
         try:  # pragma: no cover - live path
-            from twilio.rest import Client as _Tw
-            _cli = _Tw(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
-            chk = _cli.verify.v2.services(os.environ["TWILIO_VERIFY_SERVICE"]).verification_checks.create(to=phone, code=payload.code)
-            ok = chk.status == "approved"
+            ok = await comms.verify_otp(phone, payload.code)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"OTP verify failed: {e}")
     else:
