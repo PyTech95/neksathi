@@ -154,6 +154,54 @@ def voice_live() -> bool:
     return bool(_authkey() and os.environ.get("MSG91_CALLER_ID"))
 
 
+def e164(phone: str | None) -> str:
+    """Return a +country-code E.164 number (Vobiz requires the leading '+')."""
+    if not phone:
+        return ""
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if len(digits) == 10:
+        digits = "91" + digits
+    return "+" + digits if digits else ""
+
+
+# ----------------------------------------------------------- Vobiz masked voice
+VOBIZ_BASE = "https://api.vobiz.ai/api/v1"
+
+
+def vobiz_live() -> bool:
+    return bool(os.environ.get("VOBIZ_AUTH_ID") and os.environ.get("VOBIZ_AUTH_TOKEN")
+                and os.environ.get("VOBIZ_MASKING_DID"))
+
+
+def vobiz_did() -> str:
+    return (os.environ.get("VOBIZ_MASKING_DID") or "").strip()
+
+
+async def vobiz_place_call(to: str, answer_url: str, hangup_url: str | None = None) -> dict:
+    """Dial `to` FROM the Vobiz masking DID; on answer Vobiz fetches answer_url
+    which returns XML that dials the second party (callerId = masking DID).
+    Neither party ever sees the other's real number."""
+    auth_id = os.environ["VOBIZ_AUTH_ID"]
+    token = os.environ["VOBIZ_AUTH_TOKEN"]
+    payload = {
+        "from": vobiz_did(), "to": e164(to),
+        "answer_url": answer_url, "answer_method": "POST",
+        "ring_timeout": "30", "time_limit": "3600",
+    }
+    if hangup_url:
+        payload["hangup_url"] = hangup_url
+        payload["hangup_method"] = "POST"
+    url = f"{VOBIZ_BASE}/Account/{auth_id}/Call/"
+    headers = {"X-Auth-ID": auth_id, "X-Auth-Token": token, "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+            r = await c.post(url, headers=headers, json=payload)
+        return {"ok": not r.is_error, "status_code": r.status_code, "detail": r.text[:300]}
+    except Exception as e:
+        log.warning("Vobiz place call failed: %s", e)
+        return {"ok": False, "error": str(e)[:200]}
+
+
 async def masked_call(party_a: str | None, party_b: str | None) -> dict:
     """Bridge party_a (scanner) <-> party_b (owner/guardian) via MSG91 call
     masking / 2-way call. Neither party sees the other's number — MSG91's

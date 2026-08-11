@@ -101,6 +101,21 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - **Admin false-report guard**: `GET /admin/incidents` returns both photos; admin Incident-history table has an "Evidence" column showing the Vehicle photo + Reporter selfie (click to enlarge) to trace misuse.
 - Verified: curl (all 7 reason types create incidents; admin returns both photos) + screenshot (all reason buttons render, emergency keeps photo step).
 
+## Theft button + required photo + reason analytics — 2026-06 (batch 19)
+- **Theft / Suspicious** re-added as the 8th public scan reason (`PublicScan.jsx` REASONS). Backend already supported `theft` (URGENT).
+- **Required photo**: the vehicle photo is now mandatory to send an alert (button disabled + red "Take a photo (required)" until captured) — stronger proof against false reports. Safety exception: **Emergency & Theft keep the photo optional** (`photoOptional` flag) so a genuine emergency is never blocked if the camera is denied.
+- **Reason analytics**: owner Incidents page (`Incidents.jsx`) shows an "Alert reasons breakdown" band — a per-reason count chip (icon + colour + count), aggregated client-side from the owner's incidents, so patterns stand out.
+- Verified via screenshot (theft button present; wrong-parking alert disabled w/o photo, label "required"; emergency stays optional) + clean compile.
+- **Vobiz masked calling**: pending user credentials (Auth ID, Auth Token, masking DID). Will wire via integration playbook once received — replaces/augments MSG91 voice in comms.py, with a backend answer-URL webhook to bridge reporter↔owner privately.
+
+## Vobiz masked-calling integration — 2026-06 (batch 20)
+- **Vobiz two-way private call bridge** wired into the incident + tag masked-call flows (`comms.py` + `server.py`). Reporter is dialed FROM the Vobiz masking DID; on answer, Vobiz fetches our answer webhook which returns `<Dial callerId="DID"><Number>owner</Number></Dial>` XML — neither party sees the other's real number.
+- `comms.py`: added `e164()`, `vobiz_live()`, `vobiz_did()`, `vobiz_place_call()` (POST https://api.vobiz.ai/api/v1/Account/{auth_id}/Call/ with X-Auth-ID/X-Auth-Token headers).
+- `server.py`: `_bridge_masked_call()` provider router (Vobiz → MSG91 → mock); new public webhooks `POST /api/vobiz/answer` (returns bridge XML, uses a `db.call_sessions` token→target map), `/api/vobiz/dial-result`, `/api/vobiz/hangup` (audit to db.call_records). Incident-call + tag-call endpoints now route through `_bridge_masked_call`.
+- Env: `VOBIZ_AUTH_ID`, `VOBIZ_AUTH_TOKEN`, `VOBIZ_MASKING_DID=+918065353952` all set → **Vobiz voice is now LIVE**. Answer/hangup URLs are built from `PUBLIC_APP_URL` — **on the deployed site (neksathi.in) the backend's `PUBLIC_APP_URL` MUST be `https://neksathi.in`** so the answer_url points there. DID attached in Vobiz Console to an XML Application with Answer URL `https://neksathi.in/api/vobiz/answer`.
+- Verified via curl: incident masked call now returns `provider:"vobiz"`, status `calling` (Vobiz accepted the request → auth valid); answer webhook returns correct bridge XML (target → E.164, DID as callerId); session token flow works. No real number was rung (invalid test destination used).
+- **Photo now REQUIRED for ALL 8 reasons** (user choice, batch 20) — `photoOptional` removed from emergency + theft. Note: on a device with no/denied camera the alert can't be sent; acceptable per explicit user decision for a phone-scan product.
+
 
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.

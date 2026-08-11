@@ -2007,8 +2007,8 @@ async def public_tag_call(request: Request, qr_id: str, payload: TagCallIn):
     owner = await db.users.find_one({"id": t.get("owner_id")})
     target_phone = t.get("guardian_phone") or (owner and owner.get("phone"))
     reporter_phone = (payload.scanner_phone or "").strip()
-    live = comms.voice_live()
-    res = await comms.masked_call(reporter_phone, target_phone)
+    live = comms.voice_live() or comms.vobiz_live()
+    res = await _bridge_masked_call(reporter_phone, target_phone, kind="tag", ref_id=t["id"])
     status = res.get("status", "mock_connected")
     notes = {
         "calling": "We're calling you now — pick up and we'll connect you privately to the guardian.",
@@ -3821,6 +3821,70 @@ async def public_incident_status(incident_id: str):
     return _incident_public(inc)
 
 
+async def _bridge_masked_call(reporter_phone: Optional[str], target_phone: Optional[str], *, kind: str, ref_id: str) -> dict:
+    """Provider-aware masked call. Prefers Vobiz (real two-leg private bridge via
+    a masking DID), then MSG91, else mock. Returns {status, provider,...}; the
+    target (owner/guardian) number is NEVER returned to the caller."""
+    reporter_phone = (reporter_phone or "").strip()
+    if comms.vobiz_live():
+        if not reporter_phone:
+            return {"status": "need_phone", "provider": "vobiz"}
+        token = new_id()
+        await db.call_sessions.insert_one({
+            "token": token, "reporter": reporter_phone, "target": target_phone,
+            "kind": kind, "ref_id": ref_id, "created_at": now_utc(), "used": False,
+        })
+        base = (os.environ.get("PUBLIC_APP_URL") or "").rstrip("/")
+        answer_url = f"{base}/api/vobiz/answer?token={token}"
+        hangup_url = f"{base}/api/vobiz/hangup?token={token}"
+        res = await comms.vobiz_place_call(reporter_phone, answer_url, hangup_url)
+        return {"status": "calling" if res.get("ok") else "connecting", "provider": "vobiz", "detail": res.get("detail")}
+    return await comms.masked_call(reporter_phone, target_phone)
+
+
+def _vobiz_xml(body: str) -> Response:
+    return Response(content=body, media_type="application/xml")
+
+
+@api.post("/vobiz/answer")
+async def vobiz_answer(token: str = ""):
+    """Vobiz fetches this when the reporter answers; we return XML that dials the
+    owner/guardian with the masking DID as caller id (their number stays hidden)."""
+    sess = await db.call_sessions.find_one({"token": token}) if token else None
+    if not sess or not sess.get("target"):
+        return _vobiz_xml('<?xml version="1.0" encoding="UTF-8"?><Response><Speak>This call is unavailable.</Speak><Hangup/></Response>')
+    did = comms.vobiz_did()
+    dest = comms.e164(sess["target"])
+    base = (os.environ.get("PUBLIC_APP_URL") or "").rstrip("/")
+    action = f"{base}/api/vobiz/dial-result?token={token}"
+    await db.call_sessions.update_one({"token": token}, {"$set": {"used": True, "bridged_at": now_utc()}})
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           f'<Response><Dial callerId="{did}" timeout="30" timeLimit="3600" action="{action}" method="POST" redirect="false">'
+           f'<Number>{dest}</Number></Dial>'
+           '<Speak>The other party is unavailable. Please try again later.</Speak><Hangup/></Response>')
+    return _vobiz_xml(xml)
+
+
+@api.post("/vobiz/dial-result")
+async def vobiz_dial_result(request: Request, token: str = ""):
+    try:
+        form = dict(await request.form())
+    except Exception:
+        form = {}
+    await db.call_records.insert_one({"id": new_id(), "kind": "vobiz_dial_result", "token": token, "detail": form, "created_at": now_utc()})
+    return _vobiz_xml('<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>')
+
+
+@api.post("/vobiz/hangup")
+async def vobiz_hangup(request: Request, token: str = ""):
+    try:
+        form = dict(await request.form())
+    except Exception:
+        form = {}
+    await db.call_records.insert_one({"id": new_id(), "kind": "vobiz_hangup", "token": token, "detail": form, "created_at": now_utc()})
+    return {"status": "received"}
+
+
 class IncidentCallIn(BaseModel):
     scanner_phone: Optional[str] = Field(default=None, max_length=20)
 
@@ -3836,7 +3900,7 @@ async def public_incident_call(request: Request, incident_id: str, payload: Inci
     owner = await db.users.find_one({"id": inc["owner_id"]})
     owner_phone = owner and owner.get("phone")
     reporter_phone = (payload.scanner_phone or inc.get("scanner_phone") or "").strip()
-    res = await comms.masked_call(reporter_phone, owner_phone)
+    res = await _bridge_masked_call(reporter_phone, owner_phone, kind="incident", ref_id=incident_id)
     status = res.get("status", "mock_connected")
     notes = {
         "calling": "We're calling you now — pick up and we'll connect you privately to the owner.",

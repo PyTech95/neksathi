@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import CameraCapture from "@/components/CameraCapture";
-import { Car, ParkingCircle, Siren, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare } from "lucide-react";
+import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare } from "lucide-react";
 
 const geo = (setC) => {
   if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => setC({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {}, { timeout: 6000 });
@@ -17,6 +17,7 @@ const REASONS = [
   { key: "emergency", label: "Emergency", icon: <Siren size={26} />, grad: "linear-gradient(100deg,#e11d48,#ff3b5c)", urgent: true, desc: "Urgent! Notify the owner & family immediately, then connect a private call." },
   { key: "vehicle_damage", label: "Vehicle Damage", icon: <AlertTriangle size={26} />, grad: "linear-gradient(100deg,#dc2626,#f97316)", desc: "The vehicle appears damaged. Report it to the owner with a photo." },
   { key: "other", label: "Other", icon: <MessageSquare size={26} />, grad: "linear-gradient(100deg,#7c3aed,#8b5cf6)", desc: "Something else about this vehicle — leave a note for the owner." },
+  { key: "theft", label: "Theft / Suspicious", icon: <ShieldAlert size={26} />, grad: "linear-gradient(100deg,#6d28d9,#8b5cf6)", desc: "Report suspicious activity or theft. The owner & family are alerted and you can place a private call." },
 ];
 
 export default function PublicScan() {
@@ -108,20 +109,20 @@ export default function PublicScan() {
     </div>
   );
 
-  const photoBlock = () => (
+  const photoBlock = (required) => (
     <div className="glass card-pad" style={{ padding: 18, marginTop: 14 }} data-testid="scan-photo-block">
-      <label style={{ display: "block", marginBottom: 10, fontSize: 14, fontWeight: 700 }}>Add a photo of the vehicle</label>
+      <label style={{ display: "block", marginBottom: 10, fontSize: 14, fontWeight: 700 }}>Add a photo of the vehicle {required && <span style={{ color: "#ff3b5c" }}>*</span>}</label>
       {carPhoto ? (
         <div className="photo-thumb" data-testid="scan-photo-preview">
           <img src={carPhoto} alt="Vehicle evidence" />
           <button className="cam-x" style={{ position: "absolute", top: 8, right: 8 }} onClick={() => { setCarPhoto(null); setSelfiePhoto(null); }} data-testid="scan-photo-remove"><X size={18} /></button>
         </div>
       ) : (
-        <button className="btn btn-ghost btn-block" onClick={() => setShowCam(true)} data-testid="scan-photo-add" style={{ padding: 16 }}>
-          <Camera size={18} /> Take a photo (optional)
+        <button className="btn btn-ghost btn-block" onClick={() => setShowCam(true)} data-testid="scan-photo-add" style={{ padding: 16, borderColor: required ? "rgba(255,59,92,.5)" : undefined }}>
+          <Camera size={18} /> {required ? "Take a photo (required)" : "Take a photo (optional)"}
         </button>
       )}
-      <p className="muted" style={{ fontSize: 12, marginTop: 8 }}><ImagePlus size={12} style={{ verticalAlign: "-2px" }} /> A clear photo helps the owner act faster.</p>
+      <p className="muted" style={{ fontSize: 12, marginTop: 8 }}><ImagePlus size={12} style={{ verticalAlign: "-2px" }} /> {required ? "A photo is required to send this alert — stronger proof for the owner." : "A clear photo helps the owner act faster."}</p>
     </div>
   );
 
@@ -163,8 +164,8 @@ export default function PublicScan() {
                 </>
               )}
               <NoteFields />
-              {photoBlock()}
-              <button className="big-action" style={{ background: r.grad, marginTop: 14 }} disabled={busy} onClick={() => createIncident(r.key)} data-testid={`alert-${r.key}-btn`}>
+              {photoBlock(!r.photoOptional)}
+              <button className="big-action" style={{ background: r.grad, marginTop: 14, opacity: (!r.photoOptional && !carPhoto) ? 0.6 : 1 }} disabled={busy || (!r.photoOptional && !carPhoto)} onClick={() => createIncident(r.key)} data-testid={`alert-${r.key}-btn`}>
                 {busy ? <Loader2 size={24} className="spin" /> : (r.urgent ? <Siren size={26} /> : <BellRing size={26} />)}
                 {r.urgent ? " Send emergency alert" : windowed ? " Alarm / Alert Owner" : " Alert Owner"}
               </button>

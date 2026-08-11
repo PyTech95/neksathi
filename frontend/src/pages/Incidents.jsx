@@ -42,7 +42,21 @@ export default function Incidents() {
             <p className="muted">When someone scans your QR and reports an issue, respond here.</p>
           </div>
         ) : (
-          <div className="grid" style={{ gap: 14 }}>
+          <>
+            <div className="glass card-pad" style={{ padding: 16, marginBottom: 16 }} data-testid="reason-breakdown">
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}><BellRing size={15} color="#7c3aed" /> Alert reasons breakdown</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {Object.entries(items.reduce((a, it) => { a[it.type] = (a[it.type] || 0) + 1; return a; }, {})).sort((x, y) => y[1] - x[1]).map(([t, c]) => {
+                  const m = META[t] || META.wrong_parking;
+                  return (
+                    <span key={t} className="chip" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${m.color}18`, borderColor: `${m.color}55`, color: "#fff" }} data-testid={`reason-stat-${t}`}>
+                      <span style={{ color: m.color, display: "inline-flex" }}>{m.icon}</span> {m.label} · <b>{c}</b>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="grid" style={{ gap: 14 }}>
             {items.map((it) => {
               const m = META[it.type] || META.wrong_parking;
               const pending = !it.resolved && (it.status === "alert_sent" || it.status === "no_response");
@@ -91,7 +105,8 @@ export default function Incidents() {
                 </div>
               );
             })}
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>
