@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
-import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft } from "lucide-react";
+import CameraCapture from "@/components/CameraCapture";
+import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X } from "lucide-react";
 
 const geo = (setC) => {
   if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => setC({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {}, { timeout: 6000 });
@@ -20,6 +21,9 @@ export default function PublicScan() {
   const [incident, setIncident] = useState(null);
   const [busy, setBusy] = useState(false);
   const [call, setCall] = useState(null);
+  const [carPhoto, setCarPhoto] = useState(null);
+  const [selfiePhoto, setSelfiePhoto] = useState(null);
+  const [showCam, setShowCam] = useState(false);
   const poll = useRef(null);
 
   useEffect(() => {
@@ -50,6 +54,7 @@ export default function PublicScan() {
       const r = await api.post(`/public/qr/${qrId}/incident`, {
         type, scanner_note: note || null, scanner_phone: phone || null,
         scanner_lat: coords?.lat ?? null, scanner_lng: coords?.lng ?? null,
+        evidence_photo_base64: carPhoto || null, reporter_photo_base64: selfiePhoto || null,
       });
       setIncident(r.data);
       setScreen("waiting");
@@ -57,6 +62,8 @@ export default function PublicScan() {
       startPolling(r.data.id);
     } catch (e) { alert(e?.response?.data?.detail || "Could not send"); } finally { setBusy(false); }
   };
+
+  const goChoose = () => { setScreen("choose"); setCarPhoto(null); setSelfiePhoto(null); };
 
   const doCall = async () => {
     if (!incident) return;
@@ -90,6 +97,23 @@ export default function PublicScan() {
     </div>
   );
 
+  const photoBlock = () => (
+    <div className="glass card-pad" style={{ padding: 18, marginTop: 14 }} data-testid="scan-photo-block">
+      <label style={{ display: "block", marginBottom: 10, fontSize: 14, fontWeight: 700 }}>Add a photo of the vehicle</label>
+      {carPhoto ? (
+        <div className="photo-thumb" data-testid="scan-photo-preview">
+          <img src={carPhoto} alt="Vehicle evidence" />
+          <button className="cam-x" style={{ position: "absolute", top: 8, right: 8 }} onClick={() => { setCarPhoto(null); setSelfiePhoto(null); }} data-testid="scan-photo-remove"><X size={18} /></button>
+        </div>
+      ) : (
+        <button className="btn btn-ghost btn-block" onClick={() => setShowCam(true)} data-testid="scan-photo-add" style={{ padding: 16 }}>
+          <Camera size={18} /> Take a photo (optional)
+        </button>
+      )}
+      <p className="muted" style={{ fontSize: 12, marginTop: 8 }}><ImagePlus size={12} style={{ verticalAlign: "-2px" }} /> A clear photo helps the owner act faster.</p>
+    </div>
+  );
+
   return (
     <div className="page" data-testid="public-scan-page">
       <div className="container-nk" style={{ maxWidth: 540 }}>
@@ -108,10 +132,11 @@ export default function PublicScan() {
 
         {screen === "wrong_parking" && (
           <div data-testid="scan-wrong-parking">
-            <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={() => setScreen("choose")}><ArrowLeft size={15} /> Back</button>
+            <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={goChoose}><ArrowLeft size={15} /> Back</button>
             <h2 style={{ fontSize: 22, marginBottom: 6 }}>Wrong parking</h2>
             <p className="muted" style={{ marginBottom: 4 }}>Alert the owner to move their vehicle. A 15-minute window starts once you alert them.</p>
             <NoteFields />
+            {photoBlock()}
             <button className="big-action" style={{ background: "linear-gradient(100deg,#f59e0b,#f5a524)", marginTop: 14 }} disabled={busy} onClick={() => createIncident("wrong_parking")} data-testid="alert-owner-btn">
               {busy ? <Loader2 size={24} className="spin" /> : <BellRing size={26} />} Alarm / Alert Owner
             </button>
@@ -120,28 +145,32 @@ export default function PublicScan() {
 
         {screen === "accident" && (
           <div data-testid="scan-accident">
-            <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={() => setScreen("choose")}><ArrowLeft size={15} /> Back</button>
+            <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={goChoose}><ArrowLeft size={15} /> Back</button>
             <div className="glass card-pad center" style={{ padding: 26, borderColor: "rgba(255,59,92,.5)" }}>
               <Siren size={48} color="#ff3b5c" />
               <h2 style={{ fontSize: 26, margin: "12px 0 6px", color: "#ff3b5c" }}>Accident Alert</h2>
               <p className="muted">Notify the owner & family immediately, then connect a private call.</p>
             </div>
             {!incident ? (
-              <button className="big-action" style={{ background: "linear-gradient(100deg,#e11d48,#ff3b5c)", marginTop: 14 }} disabled={busy} onClick={() => createIncident("accident")} data-testid="accident-alert-btn">
-                {busy ? <Loader2 size={24} className="spin" /> : <Siren size={26} />} Send accident alert
-              </button>
+              <>
+                {photoBlock()}
+                <button className="big-action" style={{ background: "linear-gradient(100deg,#e11d48,#ff3b5c)", marginTop: 14 }} disabled={busy} onClick={() => createIncident("accident")} data-testid="accident-alert-btn">
+                  {busy ? <Loader2 size={24} className="spin" /> : <Siren size={26} />} Send accident alert
+                </button>
+              </>
             ) : null}
           </div>
         )}
 
         {screen === "theft" && (
           <div data-testid="scan-theft">
-            <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={() => setScreen("choose")}><ArrowLeft size={15} /> Back</button>
+            <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={goChoose}><ArrowLeft size={15} /> Back</button>
             <div className="glass card-pad" style={{ padding: 22 }}>
               <h2 style={{ fontSize: 22, marginBottom: 6 }}>Theft / suspicious activity</h2>
               <p className="muted">Confirm to alert the owner & family. You can then place a private call.</p>
             </div>
             <NoteFields />
+            {photoBlock()}
             <button className="big-action" style={{ background: "linear-gradient(100deg,#7c3aed,#8b5cf6)", marginTop: 14 }} disabled={busy} onClick={() => createIncident("theft")} data-testid="theft-alert-btn">
               {busy ? <Loader2 size={24} className="spin" /> : <ShieldAlert size={26} />} Confirm & alert owner
             </button>
@@ -214,6 +243,12 @@ export default function PublicScan() {
 
         <p className="center muted" style={{ marginTop: 26, fontSize: 12 }}>Powered by Nek Sathi · No owner personal data is exposed.</p>
       </div>
+      {showCam && (
+        <CameraCapture
+          onDone={({ car, selfie }) => { if (car) setCarPhoto(car); if (selfie) setSelfiePhoto(selfie); setShowCam(false); }}
+          onCancel={() => setShowCam(false)}
+        />
+      )}
     </div>
   );
 }

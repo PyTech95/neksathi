@@ -50,6 +50,22 @@ export default function Incidents() {
                         <span className="chip" style={{ padding: "2px 10px", fontSize: 11, background: it.resolved ? "rgba(34,211,238,.16)" : `${m.color}22`, borderColor: it.resolved ? "rgba(34,211,238,.4)" : `${m.color}55`, color: it.resolved ? "#22d3ee" : "#fff" }}>{statusLabel(it.status)}</span>
                       </div>
                       {it.scanner_note && <p className="muted" style={{ fontSize: 14, marginTop: 6 }}>{it.scanner_note}</p>}
+                      {(it.evidence_photo_base64 || it.reporter_photo_base64) && (
+                        <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }} data-testid={`incident-photos-${it.id}`}>
+                          {it.evidence_photo_base64 && (
+                            <a href={it.evidence_photo_base64} target="_blank" rel="noreferrer" title="Vehicle photo" data-testid={`incident-evidence-${it.id}`}>
+                              <img src={it.evidence_photo_base64} alt="Vehicle" style={{ width: 92, height: 92, objectFit: "cover", borderRadius: 12, border: "1px solid rgba(34,211,238,.4)" }} />
+                              <span className="muted" style={{ display: "block", fontSize: 11, marginTop: 3 }}>Vehicle</span>
+                            </a>
+                          )}
+                          {it.reporter_photo_base64 && (
+                            <a href={it.reporter_photo_base64} target="_blank" rel="noreferrer" title="Reporter photo" data-testid={`incident-reporter-${it.id}`}>
+                              <img src={it.reporter_photo_base64} alt="Reporter" style={{ width: 92, height: 92, objectFit: "cover", borderRadius: 12, border: "1px solid rgba(245,165,36,.5)" }} />
+                              <span className="muted" style={{ display: "block", fontSize: 11, marginTop: 3 }}>Reporter</span>
+                            </a>
+                          )}
+                        </div>
+                      )}
                       <div style={{ display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap", fontSize: 13 }}>
                         {it.type === "wrong_parking" && !it.resolved && <span className="muted"><Clock size={13} style={{ verticalAlign: "-2px" }} /> {it.minutes_left} min left</span>}
                         {it.scanner_phone && <a href={`tel:${it.scanner_phone}`} className="neon" style={{ fontWeight: 700 }}><Phone size={12} style={{ verticalAlign: "-1px" }} /> Reporter: {it.scanner_phone}</a>}

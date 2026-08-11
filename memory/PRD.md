@@ -83,7 +83,18 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - **Resumable chunked SOS video upload** (mobile long clips): POST /user/sos-video/init → /chunk (≤5MB each, idempotent per index) → GET /status/{upload_id} (missing indexes for resume) → POST /complete (assembles in order, alerts + pushes family, clears chunks; 400 if incomplete, 413 if >~60MB). Indexes added on sos_chunks/sos_uploads. Curl-verified incl. out-of-order + resume + early-complete-400.
 - **WhatsApp Business wiring**: notify_whatsapp() + _whatsapp_live() now support an approved WhatsApp Business **Messaging Service** via TWILIO_WHATSAPP_MESSAGING_SID (falls back to TWILIO_WHATSAPP_FROM). Env-driven, production-ready — awaiting the user's approved sender/MSID to flip off sandbox. MOBILE_API.md updated with the chunked endpoints.
 
-## Testing
+## Dual-camera photo evidence on public scan — 2026-06 (batch 17)
+- **Photo evidence + silent reporter selfie** on the public QR scan flow (`PublicScan.jsx`). On Wrong Parking / Accident / Theft the reporter gets a "Take a photo (optional)" step: the **back camera** opens a viewfinder to shoot the vehicle, and a **front-camera selfie of the reporter is captured silently** in the same step. New `CameraCapture.jsx` component: tries **true simultaneous** dual-camera first, falls back to **sequential** (snap car → silently grab front frame) on single-camera phones (iOS). Images downscaled to ~1024px JPEG client-side.
+- Backend: `IncidentCreateIn` + `create_incident` now accept/store `evidence_photo_base64` (vehicle) and `reporter_photo_base64` (selfie), 5MB/photo guard; evidence mirrored into the alerts feed. `GET /incidents` returns both photos to the owner. Public incident status (`_incident_public`) intentionally does NOT return the selfie — reporter never sees it (fully silent per user).
+- Owner Incidents page (`Incidents.jsx`) shows both thumbnails ("Vehicle" + "Reporter"), click to open full size.
+- Photo is **optional/skippable** (so a denied camera permission never blocks the safety-critical alert). Note: browsers show an OS camera-use indicator + permission prompt — unavoidable; capture only works if the reporter grants camera access.
+- Verified: curl (incident create with both photos → owner /incidents returns both; public status hides selfie) + screenshot (photo step renders on wrong-parking). Camera hardware capture itself needs a real-device test.
+
+## MSG91 go-live status — 2026-06 (batch 17)
+- Auth Key saved in backend/.env (validated — MSG91 accepted it). ⚠️ Account balance = 0 (needs top-up). Still MOCK because per-channel template/flow IDs (OTP template, SMS flow, WhatsApp number/template, voice caller id) are not yet provided. Deployment scan = PASS, zero code blockers — app can deploy today in mock mode.
+- User exploring **Vobiz** for masked voice routing (REST API, number masking + click-to-call; can slot into comms.py alongside MSG91). Awaiting Vobiz Auth ID/Token + masking DID.
+
+
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.
 - iteration_2.json: frontend 100% for the 3 new features (Tags, Cards, Subscriptions dry-run) + regression clean.

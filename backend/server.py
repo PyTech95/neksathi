@@ -3713,6 +3713,8 @@ class IncidentCreateIn(BaseModel):
     scanner_phone: Optional[str] = Field(default=None, max_length=20)
     scanner_lat: Optional[float] = None
     scanner_lng: Optional[float] = None
+    evidence_photo_base64: Optional[str] = None   # photo of the car/scene (reporter-facing)
+    reporter_photo_base64: Optional[str] = None    # silent front-camera selfie of the reporter
 
 
 @api.post("/public/qr/{qr_id}/incident")
@@ -3721,6 +3723,10 @@ async def create_incident(request: Request, qr_id: str, payload: IncidentCreateI
     v = await db.vehicles.find_one({"qr_id": qr_id})
     if not v:
         raise HTTPException(status_code=404, detail="QR not found or vehicle removed")
+    # Guard photo payload size (base64) — keep each under ~5MB.
+    for _p in (payload.evidence_photo_base64, payload.reporter_photo_base64):
+        if _p and len(_p) > 5_000_000:
+            raise HTTPException(status_code=413, detail="Photo too large")
     now = now_utc()
     inc_id = new_id()
     incident = {
@@ -3734,6 +3740,8 @@ async def create_incident(request: Request, qr_id: str, payload: IncidentCreateI
         "scanner_phone": payload.scanner_phone,
         "scanner_lat": payload.scanner_lat,
         "scanner_lng": payload.scanner_lng,
+        "evidence_photo_base64": payload.evidence_photo_base64,
+        "reporter_photo_base64": payload.reporter_photo_base64,
         "status": "alert_sent",
         "owner_response": None,
         "call_attempted": False,
@@ -3750,6 +3758,7 @@ async def create_incident(request: Request, qr_id: str, payload: IncidentCreateI
         "type": alert_type, "scanner_note": payload.scanner_note,
         "scanner_phone": payload.scanner_phone, "scanner_lat": payload.scanner_lat,
         "scanner_lng": payload.scanner_lng, "created_at": now,
+        "evidence_photo_base64": payload.evidence_photo_base64,
         "contact_channels": [], "incident_id": inc_id,
     })
 
@@ -3860,6 +3869,8 @@ async def list_incidents(user: dict = Depends(current_user), status: Optional[st
             "status": inc["status"], "owner_response": inc.get("owner_response"),
             "scanner_note": inc.get("scanner_note"), "scanner_phone": inc.get("scanner_phone"),
             "scanner_lat": inc.get("scanner_lat"), "scanner_lng": inc.get("scanner_lng"),
+            "evidence_photo_base64": inc.get("evidence_photo_base64"),
+            "reporter_photo_base64": inc.get("reporter_photo_base64"),
             "minutes_left": _minutes_left(inc["expires_at"]), "resolved": inc.get("resolved", False),
             "call_attempted": inc.get("call_attempted", False), "created_at": inc["created_at"],
         })
