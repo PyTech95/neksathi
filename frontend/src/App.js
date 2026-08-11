@@ -31,6 +31,7 @@ import AdminPlans from "@/pages/AdminPlans";
 import AdminSupport from "@/pages/AdminSupport";
 import Contact from "@/pages/Contact";
 import AdminContacts from "@/pages/AdminContacts";
+import AdminCalls from "@/pages/AdminCalls";
 import Settings from "@/pages/Settings";
 import PersonaLanding from "@/pages/PersonaLanding";
 import OrgDashboard from "@/pages/OrgDashboard";
@@ -89,6 +90,7 @@ function Shell() {
           <Route path="/admin/support" element={<Protected adminOnly><AdminSupport /></Protected>} />
           <Route path="/admin/contacts" element={<Protected adminOnly><AdminContacts /></Protected>} />
           <Route path="/admin/orgs" element={<Protected adminOnly><AdminOrgs /></Protected>} />
+          <Route path="/admin/calls" element={<Protected adminOnly><AdminCalls /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

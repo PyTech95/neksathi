@@ -116,6 +116,12 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - Verified via curl: incident masked call now returns `provider:"vobiz"`, status `calling` (Vobiz accepted the request → auth valid); answer webhook returns correct bridge XML (target → E.164, DID as callerId); session token flow works. No real number was rung (invalid test destination used).
 - **Photo now REQUIRED for ALL 8 reasons** (user choice, batch 20) — `photoOptional` removed from emergency + theft. Note: on a device with no/denied camera the alert can't be sent; acceptable per explicit user decision for a phone-scan product.
 
+## Admin call logs + emergency photo bypass — 2026-06 (batch 21)
+- **Admin Call Logs** (`/admin/calls`, `AdminCalls.jsx`, hub card `link-admin-calls`): monitors every masked call attempt — subject (plate/tag), type (vehicle/tag), provider (Vobiz/MSG91/mock), status, duration, masked reporter number, timestamp. Stat cards (total / via Vobiz / connected / mock). Backend `GET /admin/call-records` (admin-only) with provider filter; reporter numbers masked via `_mask_phone`, owner/guardian numbers NEVER returned.
+- Call records now stamp `call_token`, `number_plate`, `kind` (incident|tag_guardian) and `duration_sec`. Vobiz `dial-result`/`hangup` webhooks patch `duration_sec` + `final_status` onto the matching record by token.
+- **Emergency photo bypass** (`PublicScan.jsx`): `photoOptional` restored to **Emergency** so a user with a blocked/absent camera can still raise an emergency. Photo remains REQUIRED for the other 7 reasons (wrong_parking, vehicle_blocking, headlight_on, door_open, vehicle_damage, other, theft).
+- Verified: curl (`/admin/call-records` returns masked reporter, provider vobiz, subject plate, duration) + screenshot (admin call-logs page renders with stats, filter, table). Test call records cleaned.
+
 
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.

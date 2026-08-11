@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox, Mail, Building2 } from "lucide-react";
+import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox, Mail, Building2, Phone } from "lucide-react";
 
 function Badge({ n }) {
   if (!n) return null;
@@ -87,6 +87,9 @@ export default function Admin() {
           </Link>
           <Link to="/admin/orgs" className="glass glass-hover card-pad" data-testid="link-admin-orgs" style={{ textDecoration: "none", color: "inherit" }}>
             <Building2 size={22} color="#a78bfa" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Organizations</h3><p className="muted" style={{ fontSize: 13 }}>Schools / hospitals / offices & their tag orders</p>
+          </Link>
+          <Link to="/admin/calls" className="glass glass-hover card-pad" data-testid="link-admin-calls" style={{ textDecoration: "none", color: "inherit" }}>
+            <Phone size={22} color="#34d399" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Call logs</h3><p className="muted" style={{ fontSize: 13 }}>Masked call attempts, provider, status & duration</p>
           </Link>
         </div>
 

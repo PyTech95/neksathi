@@ -2022,6 +2022,7 @@ async def public_tag_call(request: Request, qr_id: str, payload: TagCallIn):
         "id": new_id(), "tag_id": t["id"], "qr_id": qr_id,
         "reporter_phone": reporter_phone or None, "target_phone": target_phone,  # audit only
         "provider": res.get("provider", "mock"), "portal_number": NEK_PORTAL_NUMBER,
+        "call_token": res.get("token"), "number_plate": t.get("name"), "duration_sec": 0,
         "status": status, "kind": "tag_guardian", "created_at": now_utc(),
     })
     if _prefs(owner).get("whatsapp") and target_phone:
@@ -3838,7 +3839,7 @@ async def _bridge_masked_call(reporter_phone: Optional[str], target_phone: Optio
         answer_url = f"{base}/api/vobiz/answer?token={token}"
         hangup_url = f"{base}/api/vobiz/hangup?token={token}"
         res = await comms.vobiz_place_call(reporter_phone, answer_url, hangup_url)
-        return {"status": "calling" if res.get("ok") else "connecting", "provider": "vobiz", "detail": res.get("detail")}
+        return {"status": "calling" if res.get("ok") else "connecting", "provider": "vobiz", "token": token, "detail": res.get("detail")}
     return await comms.masked_call(reporter_phone, target_phone)
 
 
@@ -3871,7 +3872,18 @@ async def vobiz_dial_result(request: Request, token: str = ""):
         form = dict(await request.form())
     except Exception:
         form = {}
-    await db.call_records.insert_one({"id": new_id(), "kind": "vobiz_dial_result", "token": token, "detail": form, "created_at": now_utc()})
+    dur = 0
+    try:
+        dur = int(float(form.get("BillDuration") or form.get("Duration") or 0))
+    except Exception:
+        dur = 0
+    final = (form.get("DialStatus") or form.get("CallStatus") or "completed")
+    if token:
+        await db.call_records.update_one(
+            {"call_token": token},
+            {"$set": {"duration_sec": dur, "final_status": final, "completed_at": now_utc()}},
+        )
+    await db.call_records.insert_one({"id": new_id(), "kind": "vobiz_dial_result", "call_token": token, "detail": form, "created_at": now_utc()})
     return _vobiz_xml('<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>')
 
 
@@ -3881,8 +3893,52 @@ async def vobiz_hangup(request: Request, token: str = ""):
         form = dict(await request.form())
     except Exception:
         form = {}
-    await db.call_records.insert_one({"id": new_id(), "kind": "vobiz_hangup", "token": token, "detail": form, "created_at": now_utc()})
+    dur = 0
+    try:
+        dur = int(float(form.get("BillDuration") or form.get("Duration") or 0))
+    except Exception:
+        dur = 0
+    if token and dur:
+        await db.call_records.update_one({"call_token": token}, {"$set": {"duration_sec": dur}})
+    await db.call_records.insert_one({"id": new_id(), "kind": "vobiz_hangup", "call_token": token, "detail": form, "created_at": now_utc()})
     return {"status": "received"}
+
+
+def _mask_phone(p: Optional[str]) -> Optional[str]:
+    if not p:
+        return None
+    d = "".join(ch for ch in p if ch.isdigit())
+    if len(d) < 4:
+        return "****"
+    return f"{'+' if p.strip().startswith('+') else ''}{d[:-6]}••••{d[-2:]}" if len(d) > 6 else f"••••{d[-2:]}"
+
+
+@api.get("/admin/call-records")
+async def admin_call_records(_: dict = Depends(require_admin), provider: Optional[str] = None, limit: int = 200):
+    """Admin monitor of masked call attempts (Vobiz/MSG91/mock). Phone numbers
+    are masked; owner/target numbers are never returned in full."""
+    filt: dict = {"kind": {"$in": ["incident", "tag_guardian"]}}
+    if provider:
+        filt["provider"] = provider
+    out = []
+    async for r in db.call_records.find(filt).sort("created_at", -1).limit(min(limit, 500)):
+        out.append({
+            "id": r["id"], "kind": r.get("kind"), "provider": r.get("provider", "mock"),
+            "status": r.get("status"), "final_status": r.get("final_status"),
+            "duration_sec": r.get("duration_sec", 0),
+            "reporter_phone": _mask_phone(r.get("reporter_phone")),
+            "subject": r.get("number_plate"),
+            "created_at": r.get("created_at"),
+        })
+    async def _c(f):
+        return await db.call_records.count_documents(f)
+    stats = {
+        "total": await _c({"kind": {"$in": ["incident", "tag_guardian"]}}),
+        "vobiz": await _c({"provider": "vobiz", "kind": {"$in": ["incident", "tag_guardian"]}}),
+        "mock": await _c({"provider": "mock", "kind": {"$in": ["incident", "tag_guardian"]}}),
+        "connected": await _c({"final_status": {"$regex": "complet", "$options": "i"}}),
+    }
+    return {"count": len(out), "results": out, "stats": stats}
 
 
 class IncidentCallIn(BaseModel):
@@ -3915,7 +3971,8 @@ async def public_incident_call(request: Request, incident_id: str, payload: Inci
         "vehicle_id": inc["vehicle_id"], "reporter_phone": reporter_phone or None,
         "owner_phone": owner_phone,  # stored for audit only; NOT returned
         "provider": res.get("provider", "mock"), "portal_number": NEK_PORTAL_NUMBER,
-        "status": status, "duration_sec": 0, "created_at": now_utc(),
+        "call_token": res.get("token"), "number_plate": inc.get("number_plate"),
+        "status": status, "duration_sec": 0, "kind": "incident", "created_at": now_utc(),
     }
     await db.call_records.insert_one(dict(rec))
     await db.incidents.update_one({"id": incident_id}, {"$set": {"call_attempted": True}})
