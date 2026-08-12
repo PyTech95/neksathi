@@ -3858,12 +3858,39 @@ async def vobiz_answer(token: str = ""):
     dest = comms.e164(sess["target"])
     base = (os.environ.get("PUBLIC_APP_URL") or "").rstrip("/")
     action = f"{base}/api/vobiz/dial-result?token={token}"
+    rec_cb = f"{base}/api/vobiz/recording?token={token}"
     await db.call_sessions.update_one({"token": token}, {"$set": {"used": True, "bridged_at": now_utc()}})
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
-           f'<Response><Dial callerId="{did}" timeout="30" timeLimit="3600" action="{action}" method="POST" redirect="false">'
+           f'<Response>'
+           f'<Record fileFormat="mp3" recordSession="true" maxLength="3600" callbackUrl="{rec_cb}" callbackMethod="POST" redirect="false" playBeep="false"/>'
+           f'<Dial callerId="{did}" timeout="30" timeLimit="3600" action="{action}" method="POST" redirect="false">'
            f'<Number>{dest}</Number></Dial>'
            '<Speak>The other party is unavailable. Please try again later.</Speak><Hangup/></Response>')
     return _vobiz_xml(xml)
+
+
+@api.post("/vobiz/recording")
+async def vobiz_recording(request: Request, token: str = ""):
+    """Vobiz posts here when the call recording is ready. Store the URL on the
+    matching call record so admins can review disputed reports."""
+    try:
+        form = dict(await request.form())
+    except Exception:
+        form = {}
+    url = (form.get("RecordUrl") or form.get("RecordingUrl") or form.get("recording_url")
+           or form.get("RecordFile") or form.get("Url") or "")
+    dur = 0
+    try:
+        dur = int(float(form.get("RecordingDuration") or form.get("Duration") or 0))
+    except Exception:
+        dur = 0
+    if token and url:
+        upd = {"recording_url": url}
+        if dur:
+            upd["recording_duration"] = dur
+        await db.call_records.update_one({"call_token": token}, {"$set": upd})
+    await db.call_records.insert_one({"id": new_id(), "kind": "vobiz_recording", "call_token": token, "detail": form, "created_at": now_utc()})
+    return {"status": "received"}
 
 
 @api.post("/vobiz/dial-result")
@@ -3928,6 +3955,7 @@ async def admin_call_records(_: dict = Depends(require_admin), provider: Optiona
             "duration_sec": r.get("duration_sec", 0),
             "reporter_phone": _mask_phone(r.get("reporter_phone")),
             "subject": r.get("number_plate"),
+            "recording_url": r.get("recording_url"),
             "created_at": r.get("created_at"),
         })
     async def _c(f):

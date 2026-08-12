@@ -122,6 +122,12 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - **Emergency photo bypass** (`PublicScan.jsx`): `photoOptional` restored to **Emergency** so a user with a blocked/absent camera can still raise an emergency. Photo remains REQUIRED for the other 7 reasons (wrong_parking, vehicle_blocking, headlight_on, door_open, vehicle_damage, other, theft).
 - Verified: curl (`/admin/call-records` returns masked reporter, provider vobiz, subject plate, duration) + screenshot (admin call-logs page renders with stats, filter, table). Test call records cleaned.
 
+## Call recordings in admin logs — 2026-06 (batch 22)
+- **Vobiz call recording**: the answer XML now emits a `<Record fileFormat="mp3" recordSession="true" callbackUrl=.../api/vobiz/recording?token=...>` before `<Dial>`, so the full bridged call is recorded. New `POST /api/vobiz/recording` webhook stores `recording_url` (+ `recording_duration`) on the matching call record by token.
+- Admin Call Logs (`AdminCalls.jsx`) has a **Recording** column with a ▶ Play link (opens the Vobiz mp3) when available; `GET /admin/call-records` returns `recording_url`.
+- Verified via curl: answer XML contains `<Record>`; recording webhook stores the URL; admin endpoint returns it.
+- ⚠️ **Consent note**: recording calls has legal/consent obligations in many regions — consider a short "this call may be recorded" notice; flagged to user.
+
 
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.

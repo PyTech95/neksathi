@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { Phone, ArrowLeft, RefreshCw, ParkingCircle, ShieldAlert } from "lucide-react";
+import { Phone, ArrowLeft, RefreshCw, ParkingCircle, ShieldAlert, PlayCircle } from "lucide-react";
 
 const providerChip = (p) => ({
   vobiz: { bg: "rgba(52,211,153,.16)", bd: "rgba(52,211,153,.5)", c: "#34d399", label: "Vobiz (live)" },
@@ -58,11 +58,11 @@ export default function AdminCalls() {
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}>
-                <th style={th}>Subject</th><th style={th}>Type</th><th style={th}>Provider</th><th style={th}>Status</th><th style={th}>Duration</th><th style={th}>Reporter</th><th style={th}>When</th>
+                <th style={th}>Subject</th><th style={th}>Type</th><th style={th}>Provider</th><th style={th}>Status</th><th style={th}>Duration</th><th style={th}>Reporter</th><th style={th}>Recording</th><th style={th}>When</th>
               </tr></thead>
               <tbody>
-                {loading && <tr><td style={td} colSpan={7} className="muted">Loading…</td></tr>}
-                {!loading && data.results.length === 0 && <tr><td style={td} colSpan={7} className="muted">No call attempts yet.</td></tr>}
+                {loading && <tr><td style={td} colSpan={8} className="muted">Loading…</td></tr>}
+                {!loading && data.results.length === 0 && <tr><td style={td} colSpan={8} className="muted">No call attempts yet.</td></tr>}
                 {!loading && data.results.map((r) => {
                   const pc = providerChip(r.provider);
                   return (
@@ -73,6 +73,11 @@ export default function AdminCalls() {
                       <td style={td} className="muted">{r.final_status || r.status || "—"}</td>
                       <td style={td} className="muted">{fmtDur(r.duration_sec)}</td>
                       <td style={td} className="muted">{r.reporter_phone || "—"}</td>
+                      <td style={td}>
+                        {r.recording_url
+                          ? <a href={r.recording_url} target="_blank" rel="noreferrer" className="neon" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700 }} data-testid={`call-recording-${r.id}`}><PlayCircle size={16} /> Play</a>
+                          : <span className="muted">—</span>}
+                      </td>
                       <td style={td} className="muted">{r.created_at ? new Date(r.created_at).toLocaleString() : "—"}</td>
                     </tr>
                   );
