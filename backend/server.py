@@ -3809,6 +3809,23 @@ async def create_incident(request: Request, qr_id: str, payload: IncidentCreateI
     return _incident_public(incident)
 
 
+@api.get("/incidents/live")
+async def live_incidents(user: dict = Depends(current_user)):
+    """Lightweight poll for the owner's ACTIVE (unresolved) incidents in the last
+    24h — powers the in-portal live alarm (banner + sound + bell)."""
+    cutoff = now_utc() - timedelta(hours=24)
+    out = []
+    async for inc in db.incidents.find({
+        "owner_id": user["id"], "resolved": {"$ne": True}, "created_at": {"$gte": cutoff},
+    }).sort("created_at", -1).limit(20):
+        out.append({
+            "id": inc["id"], "type": inc["type"], "number_plate": inc["number_plate"],
+            "scanner_note": inc.get("scanner_note"), "created_at": inc["created_at"],
+            "minutes_left": _minutes_left(inc["expires_at"]),
+        })
+    return {"count": len(out), "results": out}
+
+
 @api.get("/public/incident/{incident_id}")
 async def public_incident_status(incident_id: str):
     inc = await db.incidents.find_one({"id": incident_id})

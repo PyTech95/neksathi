@@ -3,6 +3,7 @@ import { QrCode, LogOut, ChevronDown, School, HeartPulse, Briefcase } from "luci
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
+import LiveAlarm from "@/components/LiveAlarm";
 
 export default function TopNav() {
   const { user, logout } = useAuth();
@@ -56,6 +57,7 @@ export default function TopNav() {
               </span>
               Settings
             </Link>
+            <LiveAlarm />
             {user.is_admin && (
               <Link to="/admin" className={`nav-link ${isActive("/admin") ? "active" : ""}`} data-testid="nav-admin" style={{ display: "inline-flex", alignItems: "center" }}>
                 Admin

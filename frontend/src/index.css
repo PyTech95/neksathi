@@ -223,4 +223,22 @@ h1, h2, h3, .head { font-family: 'Chakra Petch', sans-serif; letter-spacing: -0.
 
 ::selection { background: rgba(34,211,238,.35); color: #fff; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
+
+/* --- Live incident alarm (owner web portal) --- */
+@keyframes alarmRing { 0%,100% { transform: rotate(0); } 10%,30% { transform: rotate(-14deg); } 20%,40% { transform: rotate(14deg); } 50% { transform: rotate(0); } }
+.alarm-ring { animation: alarmRing 1s ease-in-out infinite; transform-origin: 50% 10%; }
+@keyframes alarmSlide { from { transform: translate(-50%, -120%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+@keyframes alarmGlow { 0%,100% { box-shadow: 0 10px 40px rgba(255,59,92,.35); } 50% { box-shadow: 0 10px 55px rgba(255,59,92,.7); } }
+.alarm-banner {
+  position: fixed; top: 74px; left: 50%; transform: translateX(-50%);
+  z-index: 120; width: min(560px, calc(100vw - 24px));
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  background: linear-gradient(100deg, #e11d48, #ff3b5c); color: #fff;
+  border-radius: 16px; border: 1px solid rgba(255,255,255,.25);
+  animation: alarmSlide .35s ease-out, alarmGlow 1.6s ease-in-out infinite;
+}
+.alarm-banner-icon { display: grid; place-items: center; width: 34px; height: 34px; background: rgba(255,255,255,.18); border-radius: 10px; flex-shrink: 0; }
+.alarm-view-btn { background: #fff; color: #e11d48; border: none; border-radius: 10px; padding: 7px 14px; font-weight: 800; cursor: pointer; flex-shrink: 0; }
+.alarm-mute-btn, .alarm-close-btn { background: rgba(255,255,255,.15); color: #fff; border: none; border-radius: 9px; width: 32px; height: 32px; display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
+
 ::-webkit-scrollbar-thumb { background: rgba(124,58,237,.4); border-radius: 8px; }

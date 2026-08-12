@@ -128,6 +128,12 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - Verified via curl: answer XML contains `<Record>`; recording webhook stores the URL; admin endpoint returns it.
 - ⚠️ **Consent note**: recording calls has legal/consent obligations in many regions — consider a short "this call may be recorded" notice; flagged to user.
 
+## Live web-portal alarm — 2026-06 (batch 23)
+- **In-portal live alarm** for vehicle owners (no external keys, works on preview + anywhere). New `GET /incidents/live` (auth) returns the owner's unresolved incidents from the last 24h. New `LiveAlarm.jsx` mounted in `TopNav`: polls every 10s, baselines existing incidents on load, and on any NEW incident shows a glowing red **banner** (type + plate + note + View/Mute/Dismiss), plays a **Web Audio alarm** (3 rising beeps, mute toggle persisted in localStorage), and shows a **bell badge** with the active count. Audio unlocked on first pointer gesture (autoplay policy).
+- Solves the "owner/family get no alarm on the web portal" gap that existed because WhatsApp/SMS (MSG91) and push (EMERGENT_PUSH_KEY) are still mock/unconfigured.
+- Verified E2E via screenshot: logged in as demo owner → triggered an emergency incident → red banner appeared + bell showed "1" within the poll cycle. Test data cleaned.
+- IMPORTANT diagnosis logged: the alert *code* fires correctly (incident created + notify dispatched) but delivery is MOCK — real owner/family delivery needs MSG91 WhatsApp/SMS go-live (templates + balance) and/or Emergent Deploy for mobile push.
+
 
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.

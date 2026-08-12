@@ -155,7 +155,10 @@ def voice_live() -> bool:
 
 
 def e164(phone: str | None) -> str:
-    """Return a +country-code E.164 number (Vobiz requires the leading '+')."""
+    """Destination in E.164 with a leading '+' (matches Vobiz `to` docs example
+    +919876543210). Note: a valid number that connected earlier can still be
+    rejected as 'Invalid Destination Address' by the carrier if the Vobiz
+    account/DID loses outbound voice capability, balance, or hits trial limits."""
     if not phone:
         return ""
     digits = "".join(ch for ch in phone if ch.isdigit())
