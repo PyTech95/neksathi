@@ -3839,25 +3839,37 @@ async def public_incident_status(incident_id: str):
     return _incident_public(inc)
 
 
-async def _bridge_masked_call(reporter_phone: Optional[str], target_phone: Optional[str], *, kind: str, ref_id: str) -> dict:
-    """Provider-aware masked call. Prefers Vobiz (real two-leg private bridge via
-    a masking DID), then MSG91, else mock. Returns {status, provider,...}; the
-    target (owner/guardian) number is NEVER returned to the caller."""
+async def _bridge_masked_call(reporter_phone: Optional[str], targets, *, kind: str, ref_id: str) -> dict:
+    """Provider-aware masked call. Prefers Vobiz (real private bridge via a
+    masking DID), then MSG91, else mock. `targets` is a phone string or a list
+    of numbers (owner + family) that are rung together — whoever answers first
+    connects. Target numbers are NEVER returned to the reporter."""
     reporter_phone = (reporter_phone or "").strip()
+    if isinstance(targets, str) or targets is None:
+        targets = [targets] if targets else []
+    # de-dup, keep order, drop blanks
+    seen, clean_targets = set(), []
+    for t in targets:
+        t = (t or "").strip()
+        if t and t not in seen:
+            seen.add(t)
+            clean_targets.append(t)
     if comms.vobiz_live():
         if not reporter_phone:
             return {"status": "need_phone", "provider": "vobiz"}
         token = new_id()
         await db.call_sessions.insert_one({
-            "token": token, "reporter": reporter_phone, "target": target_phone,
-            "kind": kind, "ref_id": ref_id, "created_at": now_utc(), "used": False,
+            "token": token, "reporter": reporter_phone,
+            "target": clean_targets[0] if clean_targets else None,
+            "targets": clean_targets, "kind": kind, "ref_id": ref_id,
+            "created_at": now_utc(), "used": False,
         })
         base = (os.environ.get("PUBLIC_APP_URL") or "").rstrip("/")
         answer_url = f"{base}/api/vobiz/answer?token={token}"
         hangup_url = f"{base}/api/vobiz/hangup?token={token}"
         res = await comms.vobiz_place_call(reporter_phone, answer_url, hangup_url)
         return {"status": "calling" if res.get("ok") else "connecting", "provider": "vobiz", "token": token, "detail": res.get("detail")}
-    return await comms.masked_call(reporter_phone, target_phone)
+    return await comms.masked_call(reporter_phone, clean_targets[0] if clean_targets else None)
 
 
 def _vobiz_xml(body: str) -> Response:
@@ -3866,23 +3878,25 @@ def _vobiz_xml(body: str) -> Response:
 
 @api.post("/vobiz/answer")
 async def vobiz_answer(token: str = ""):
-    """Vobiz fetches this when the reporter answers; we return XML that dials the
-    owner/guardian with the masking DID as caller id (their number stays hidden)."""
+    """Vobiz fetches this when the reporter answers; we return XML that simul-rings
+    the owner + family with the masking DID as caller id (their numbers stay hidden)."""
     sess = await db.call_sessions.find_one({"token": token}) if token else None
-    if not sess or not sess.get("target"):
+    targets = (sess.get("targets") if sess else None) or ([sess["target"]] if sess and sess.get("target") else [])
+    if not targets:
         return _vobiz_xml('<?xml version="1.0" encoding="UTF-8"?><Response><Speak>This call is unavailable.</Speak><Hangup/></Response>')
     did = comms.vobiz_did()
-    dest = comms.e164(sess["target"])
     base = (os.environ.get("PUBLIC_APP_URL") or "").rstrip("/")
     action = f"{base}/api/vobiz/dial-result?token={token}"
     rec_cb = f"{base}/api/vobiz/recording?token={token}"
     await db.call_sessions.update_one({"token": token}, {"$set": {"used": True, "bridged_at": now_utc()}})
+    numbers = "".join(f"<Number>{comms.e164(t)}</Number>" for t in targets)
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
-           f'<Response>'
+           '<Response>'
+           '<Speak>Please hold. Connecting you privately to the vehicle owner.</Speak>'
            f'<Record fileFormat="mp3" recordSession="true" maxLength="3600" callbackUrl="{rec_cb}" callbackMethod="POST" redirect="false" playBeep="false"/>'
-           f'<Dial callerId="{did}" timeout="30" timeLimit="3600" action="{action}" method="POST" redirect="false">'
-           f'<Number>{dest}</Number></Dial>'
-           '<Speak>The other party is unavailable. Please try again later.</Speak><Hangup/></Response>')
+           f'<Dial callerId="{did}" timeout="35" timeLimit="3600" action="{action}" method="POST" redirect="false">'
+           f'{numbers}</Dial>'
+           '<Speak>The owner is not available right now. Please try again later.</Speak><Hangup/></Response>')
     return _vobiz_xml(xml)
 
 
@@ -4000,8 +4014,15 @@ async def public_incident_call(request: Request, incident_id: str, payload: Inci
         raise HTTPException(status_code=404, detail="Incident not found")
     owner = await db.users.find_one({"id": inc["owner_id"]})
     owner_phone = owner and owner.get("phone")
+    # Ring the owner AND family contacts together — whoever answers first connects.
+    targets = [owner_phone]
+    vehicle = await db.vehicles.find_one({"id": inc["vehicle_id"]})
+    if vehicle:
+        async for c in db.contacts.find({"vehicle_id": vehicle["id"]}):
+            if c.get("phone"):
+                targets.append(c["phone"])
     reporter_phone = (payload.scanner_phone or inc.get("scanner_phone") or "").strip()
-    res = await _bridge_masked_call(reporter_phone, owner_phone, kind="incident", ref_id=incident_id)
+    res = await _bridge_masked_call(reporter_phone, targets, kind="incident", ref_id=incident_id)
     status = res.get("status", "mock_connected")
     notes = {
         "calling": "We're calling you now — pick up and we'll connect you privately to the owner.",

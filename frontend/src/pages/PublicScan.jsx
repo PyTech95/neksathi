@@ -84,6 +84,25 @@ export default function PublicScan() {
     catch (e) { alert(e?.response?.data?.detail || "Call failed"); } finally { setBusy(false); }
   };
 
+  const dialValid = phone.replace(/\D/g, "").length >= 10;
+  const dialPad = () => (
+    <>
+      <div className="dial-display" data-testid="dial-display">{phone || <span style={{ opacity: 0.4 }}>Enter your mobile number</span>}</div>
+      <div className="dial-grid">
+        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "0", "back"].map((k) => (
+          <button
+            key={k}
+            className="dial-key"
+            data-testid={`dial-key-${k}`}
+            onClick={() => setPhone((p) => (k === "back" ? p.slice(0, -1) : (p + k).slice(0, 15)))}
+          >
+            {k === "back" ? "⌫" : k}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+
   if (loading) return <div className="page"><div className="spinner" /></div>;
   if (notFound) return (
     <div className="page container-nk center"><div className="glass card-pad" style={{ maxWidth: 460, margin: "40px auto", padding: 40 }} data-testid="scan-not-found">
@@ -213,9 +232,9 @@ export default function PublicScan() {
                   <>
                     <Phone size={40} color="#f5a524" />
                     <h3 style={{ fontSize: 19, margin: "10px 0 6px" }}>Enter your number</h3>
-                    <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>{call.note}</p>
-                    <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 …" data-testid="call-phone-input" style={{ maxWidth: 240, margin: "0 auto 10px" }} />
-                    <button className="btn btn-primary" disabled={busy || !phone} onClick={doCall} data-testid="call-retry-btn"><Phone size={15} /> Connect me</button>
+                    <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>We'll call you and connect you privately to the owner.</p>
+                    {dialPad()}
+                    <button className="btn btn-primary btn-block" disabled={busy || !dialValid} onClick={doCall} data-testid="call-retry-btn" style={{ marginTop: 12 }}><Phone size={15} /> Connect me</button>
                   </>
                 ) : (
                   <>
@@ -228,9 +247,14 @@ export default function PublicScan() {
               </div>
             ) : (
               (incident.status !== "resolved") && (
-                <button className="btn btn-danger btn-block" style={{ marginTop: 14 }} disabled={busy} onClick={doCall} data-testid="call-owner-btn">
-                  <Phone size={18} /> {busy ? "Connecting…" : "Call owner (private)"}
-                </button>
+                <div className="glass card-pad" style={{ padding: 22, marginTop: 14 }} data-testid="call-dialpad">
+                  <h3 style={{ fontSize: 18, marginBottom: 4, textAlign: "center" }}>Call the owner — privately</h3>
+                  <p className="muted" style={{ fontSize: 12, textAlign: "center", marginBottom: 12 }}>Enter your number. We'll ring you and connect you to the owner & family. Your number stays hidden.</p>
+                  {dialPad()}
+                  <button className="btn btn-danger btn-block" style={{ marginTop: 14 }} disabled={busy || !dialValid} onClick={doCall} data-testid="call-owner-btn">
+                    <Phone size={18} /> {busy ? "Connecting…" : "Call owner (private)"}
+                  </button>
+                </div>
               )
             )}
             <p className="center muted" style={{ marginTop: 18, fontSize: 12 }}>Your call is routed through Nek Sathi — the owner's number is never shown.</p>

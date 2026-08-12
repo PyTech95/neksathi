@@ -241,4 +241,21 @@ h1, h2, h3, .head { font-family: 'Chakra Petch', sans-serif; letter-spacing: -0.
 .alarm-view-btn { background: #fff; color: #e11d48; border: none; border-radius: 10px; padding: 7px 14px; font-weight: 800; cursor: pointer; flex-shrink: 0; }
 .alarm-mute-btn, .alarm-close-btn { background: rgba(255,255,255,.15); color: #fff; border: none; border-radius: 9px; width: 32px; height: 32px; display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
 
+/* Alarm history dropdown */
+.alarm-dropdown { position: absolute; top: calc(100% + 10px); right: 0; width: 340px; max-width: 88vw; border-radius: 16px; padding: 0; z-index: 130; overflow: hidden; border: 1px solid rgba(124,58,237,.3); }
+.alarm-dd-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.alarm-dd-body { max-height: 340px; overflow-y: auto; }
+.alarm-dd-row { width: 100%; display: flex; gap: 10px; align-items: center; padding: 11px 14px; background: none; border: none; border-bottom: 1px solid rgba(255,255,255,.05); cursor: pointer; color: inherit; transition: background-color .15s ease; }
+.alarm-dd-row:hover { background: rgba(255,59,92,.1); }
+.alarm-dd-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: rgba(255,59,92,.16); color: #ff6b81; flex-shrink: 0; }
+.alarm-dd-foot { width: 100%; padding: 11px; background: rgba(124,58,237,.14); border: none; border-top: 1px solid rgba(255,255,255,.08); color: var(--cyan); font-weight: 700; font-size: 13px; cursor: pointer; }
+.alarm-dd-foot:hover { background: rgba(124,58,237,.24); }
+
+/* Reporter dial pad (public scan → call owner) */
+.dial-display { min-height: 46px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(124,58,237,.3); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; letter-spacing: 2px; margin-bottom: 14px; }
+.dial-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.dial-key { padding: 16px 0; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); color: #fff; font-size: 22px; font-weight: 700; cursor: pointer; transition: background-color .15s ease, transform .08s ease; }
+.dial-key:hover { background: rgba(124,58,237,.25); }
+.dial-key:active { transform: scale(.94); }
+
 ::-webkit-scrollbar-thumb { background: rgba(124,58,237,.4); border-radius: 8px; }

@@ -41,9 +41,11 @@ export default function LiveAlarm() {
   const nav = useNavigate();
   const [active, setActive] = useState([]);
   const [banner, setBanner] = useState(null);
+  const [open, setOpen] = useState(false);
   const [muted, setMuted] = useState(() => localStorage.getItem("nk_alarm_muted") === "1");
   const seen = useRef(null);          // Set of known incident ids (null = not baseline'd yet)
   const audioCtx = useRef(null);
+  const wrapRef = useRef(null);
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
@@ -79,20 +81,71 @@ export default function LiveAlarm() {
   const count = active.length;
   const bm = banner ? (META[banner.type] || META.other) : null;
 
+  const timeAgo = (iso) => {
+    const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    if (s < 60) return "just now";
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+    return `${Math.floor(s / 86400)}d ago`;
+  };
+
+  // Close the dropdown on outside click.
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
+  }, [open]);
+
+  const goto = (id) => { setOpen(false); nav(`/incidents${id ? `?focus=${id}` : ""}`); };
+
   return (
     <>
-      <button
-        className="nav-link"
-        onClick={() => nav("/incidents")}
-        title="Live incident alerts"
-        data-testid="alarm-bell"
-        style={{ position: "relative", display: "inline-flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: "6px 8px" }}
-      >
-        {count > 0 ? <BellRing size={20} className="alarm-ring" color="#ff3b5c" /> : <Bell size={20} />}
-        {count > 0 && (
-          <span data-testid="alarm-bell-count" style={{ position: "absolute", top: 0, right: 0, background: "#ff3b5c", color: "#fff", borderRadius: 999, minWidth: 17, height: 17, fontSize: 10, fontWeight: 800, display: "grid", placeItems: "center", padding: "0 4px" }}>{count}</span>
+      <div ref={wrapRef} style={{ position: "relative", display: "inline-flex" }}>
+        <button
+          className="nav-link"
+          onClick={() => setOpen((o) => !o)}
+          title="Live incident alerts"
+          data-testid="alarm-bell"
+          style={{ position: "relative", display: "inline-flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: "6px 8px" }}
+        >
+          {count > 0 ? <BellRing size={20} className="alarm-ring" color="#ff3b5c" /> : <Bell size={20} />}
+          {count > 0 && (
+            <span data-testid="alarm-bell-count" style={{ position: "absolute", top: 0, right: 0, background: "#ff3b5c", color: "#fff", borderRadius: 999, minWidth: 17, height: 17, fontSize: 10, fontWeight: 800, display: "grid", placeItems: "center", padding: "0 4px" }}>{count}</span>
+          )}
+        </button>
+
+        {open && (
+          <div className="glass alarm-dropdown" data-testid="alarm-dropdown">
+            <div className="alarm-dd-head">
+              <span style={{ fontWeight: 800, fontSize: 13 }}>Active alerts {count > 0 && `(${count})`}</span>
+              <button className="alarm-mute-btn" data-testid="alarm-dd-mute" onClick={toggleMute} title={muted ? "Unmute" : "Mute"} style={{ width: 28, height: 28 }}>
+                {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+              </button>
+            </div>
+            <div className="alarm-dd-body">
+              {count === 0 ? (
+                <div className="muted" style={{ padding: "18px 12px", textAlign: "center", fontSize: 13 }} data-testid="alarm-dd-empty">No active alerts right now.</div>
+              ) : active.map((a) => {
+                const m = META[a.type] || META.other;
+                return (
+                  <button key={a.id} className="alarm-dd-row" data-testid={`alarm-dd-row-${a.id}`} onClick={() => goto(a.id)}>
+                    <span className="alarm-dd-icon">{m.icon}</span>
+                    <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                      <span style={{ display: "block", fontWeight: 700, fontSize: 13 }}>{m.label} · {a.number_plate}</span>
+                      <span className="muted" style={{ fontSize: 11, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {a.scanner_note || "QR scanned & alert raised"} · {timeAgo(a.created_at)}
+                        {(a.type === "wrong_parking" || a.type === "vehicle_blocking") && a.minutes_left > 0 ? ` · ${a.minutes_left}m left` : ""}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <button className="alarm-dd-foot" data-testid="alarm-dd-viewall" onClick={() => goto()}>View all incidents →</button>
+          </div>
         )}
-      </button>
+      </div>
 
       {banner && (
         <div className="alarm-banner" data-testid="alarm-banner" role="alert">

@@ -134,6 +134,15 @@ User uploaded a zip of the Expo app and said "deploy here" then "preview link".
 - Verified E2E via screenshot: logged in as demo owner → triggered an emergency incident → red banner appeared + bell showed "1" within the poll cycle. Test data cleaned.
 - IMPORTANT diagnosis logged: the alert *code* fires correctly (incident created + notify dispatched) but delivery is MOCK — real owner/family delivery needs MSG91 WhatsApp/SMS go-live (templates + balance) and/or Emergent Deploy for mobile push.
 
+## Masked call bridge → owner + family simul-ring — 2026-06 (batch 24)
+- **Fixed "owner/family not getting the call"**: the Vobiz answer webhook previously dialed only the owner. Now `_bridge_masked_call` accepts a list of targets and the incident-call endpoint passes **owner + all family contacts**; the answer XML **simul-rings all of them** in one `<Dial>` (whoever answers first connects), behind the masking DID caller id. Added a "Please hold, connecting you privately to the vehicle owner" greeting.
+- Flow reminder (correct architecture for a single shared DID): reporter taps Call → enters their number (required, so we can call them) → Vobiz calls the reporter from the DID → on answer, bridges to owner+family. Reporter's number is required because dial-in masking on one shared DID can't route to the right owner without an IVR.
+- Verified via curl: answer XML contains `<Number>owner</Number><Number>family</Number>` with `callerId=DID`.
+- ⚠️ **Deploy note**: this fix is in PREVIEW. Production (neksathi.in) must be **redeployed** to get it, and its `PUBLIC_APP_URL` must equal the environment placing the call so Vobiz can reach `/api/vobiz/answer`.
+
+## Reporter dial pad — 2026-06 (batch 25)
+- Replaced the plain number input in the scan → "Call owner" flow with a **touch dial pad** (`PublicScan.jsx` `dialPad()`): number display box + 3×4 keypad (1-9, +, 0, ⌫), Call button enabled only at ≥10 digits. Used in both the initial call step and the need_phone step. Verified via screenshot. CSS in index.css (`.dial-display/.dial-grid/.dial-key`).
+
 
 - iteration_7.json: **Landing overhaul + full QR/parking/accident E2E** — backend 39/39 pytest, frontend 100% on all tested flows. No issues.
 - iteration_1.json: backend 100% (12 pytest), frontend 100% (12 UI flows). No blocking issues.
