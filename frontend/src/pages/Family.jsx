@@ -1,9 +1,40 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { loadLeaflet } from "@/lib/leaflet";
-import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer } from "lucide-react";
+import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, VolumeX, BellRing, ChevronDown } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
+
+function useAlarm() {
+  const ctxRef = useRef(null);
+  const nodesRef = useRef(null);
+  const [on, setOn] = useState(false);
+  const stop = () => {
+    if (nodesRef.current) { try { nodesRef.current.osc1.stop(); nodesRef.current.osc2.stop(); nodesRef.current.lfo.stop(); } catch (_) {} nodesRef.current = null; }
+    setOn(false);
+  };
+  const start = () => {
+    if (nodesRef.current) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!ctxRef.current) ctxRef.current = new AC();
+    const ctx = ctxRef.current; ctx.resume();
+    const gain = ctx.createGain(); gain.gain.value = 0.0001;
+    gain.gain.exponentialRampToValueAtTime(0.6, ctx.currentTime + 0.05); gain.connect(ctx.destination);
+    const osc1 = ctx.createOscillator(); const osc2 = ctx.createOscillator();
+    osc1.type = "sawtooth"; osc2.type = "square";
+    const lfo = ctx.createOscillator(); const lfoGain = ctx.createGain();
+    lfo.frequency.value = 2; lfoGain.gain.value = 400;
+    lfo.connect(lfoGain); lfoGain.connect(osc1.frequency); lfoGain.connect(osc2.frequency);
+    osc1.frequency.value = 1000; osc2.frequency.value = 700;
+    osc1.connect(gain); osc2.connect(gain);
+    osc1.start(); osc2.start(); lfo.start();
+    nodesRef.current = { osc1, osc2, lfo, gain };
+    setOn(true);
+  };
+  useEffect(() => () => stop(), []);
+  return { on, start, stop };
+}
 
 function MemberActivity({ memberId }) {
   const [d, setD] = useState(null);
@@ -44,7 +75,13 @@ export default function Family() {
   const [zones, setZones] = useState([]);
   const [checkIns, setCheckIns] = useState({ incoming: [], outgoing: [] });
   const [activeSos, setActiveSos] = useState([]);
+  const [nudge, setNudge] = useState({ active: false });
+  const [sosMuted, setSosMuted] = useState(() => localStorage.getItem("sosMuted") === "1");
+  const [digestOpen, setDigestOpen] = useState(false);
   const [digest, setDigest] = useState(null);
+  const alarm = useAlarm();
+  const seenSos = useRef(null);
+  const nudgeActiveRef = useRef(false);
   const [sending, setSending] = useState(false);
   const [sentMsg, setSentMsg] = useState("");
   const [loading, setLoading] = useState(true);
@@ -73,14 +110,34 @@ export default function Family() {
   };
   useEffect(() => { load(); }, []);
 
-  // Poll active SOS every 20s so the guardian sees a live pin.
+  // Poll active SOS + nudge every 15s; ring the alarm on a NEW SOS or nudge.
   useEffect(() => {
     if (!data?.in_family) return;
-    const t = setInterval(async () => {
-      try { setActiveSos((await api.get("/family/active-sos")).data.items || []); } catch (_) {}
-    }, 20000);
+    const tick = async () => {
+      try {
+        const sos = (await api.get("/family/active-sos")).data.items || [];
+        setActiveSos(sos);
+        const ids = new Set(sos.map((s) => s.id));
+        if (seenSos.current === null) { seenSos.current = ids; }
+        else {
+          const isNew = [...ids].some((id) => !seenSos.current.has(id));
+          seenSos.current = ids;
+          if (isNew && sos.length && !sosMuted) alarm.start();
+          if (sos.length === 0) alarm.stop();
+        }
+      } catch (_) {}
+      try {
+        const n = (await api.get("/family/nudge-state")).data;
+        setNudge(n);
+        if (n.active && !nudgeActiveRef.current) alarm.start();
+        if (!n.active && nudgeActiveRef.current) alarm.stop();
+        nudgeActiveRef.current = n.active;
+      } catch (_) {}
+    };
+    tick();
+    const t = setInterval(tick, 15000);
     return () => clearInterval(t);
-  }, [data?.in_family]);
+  }, [data?.in_family, sosMuted]);
 
   const saveRules = async (patch) => {
     const next = { ...rules, ...patch };
@@ -105,6 +162,10 @@ export default function Family() {
   };
   const requestCheckIn = async (memberId) => { await api.post("/family/check-in", { member_id: memberId }); await load(); };
   const respondCheckIn = async (id, status) => { await api.post(`/family/check-in/${id}/respond`, { status }); await load(); };
+  const nudgeMember = async (memberId) => { await api.post("/family/nudge", { member_id: memberId }); };
+  const dismissNudge = async () => { alarm.stop(); nudgeActiveRef.current = false; setNudge({ active: false }); try { await api.post("/family/nudge/clear"); } catch (_) {} };
+  const toggleSosMute = () => { const v = !sosMuted; setSosMuted(v); localStorage.setItem("sosMuted", v ? "1" : "0"); if (v) alarm.stop(); };
+  const stopAlarm = () => alarm.stop();
 
   useEffect(() => {
     if (!data?.in_family) return;
@@ -193,8 +254,19 @@ export default function Family() {
             </div>
           )}
 
+          {nudge.active && (
+            <div className="glass" style={{ padding: 16, borderRadius: 14, marginBottom: 16, borderColor: "rgba(34,211,238,.6)", background: "rgba(34,211,238,.08)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }} data-testid="nudge-banner">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}><BellRing size={22} className="neon" style={{ animation: "sosPulse .7s infinite" }} /><span style={{ fontSize: 14.5, fontWeight: 700 }}>{nudge.guardian_name || "Your guardian"} is trying to reach you!</span></div>
+              <button className="btn btn-primary btn-sm" onClick={dismissNudge} data-testid="nudge-dismiss-btn"><CheckCircle2 size={14} /> I'm here — stop</button>
+            </div>
+          )}
+
           {activeSos.length > 0 && (
             <div className="glass" style={{ padding: 16, borderRadius: 14, marginBottom: 16, borderColor: "rgba(255,59,92,.6)", background: "rgba(255,59,92,.08)" }} data-testid="active-sos-banner">
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+                {alarm.on && <button className="btn btn-ghost btn-sm" onClick={stopAlarm} data-testid="sos-alarm-stop"><VolumeX size={14} /> Silence alarm</button>}
+                <button className="btn btn-ghost btn-sm" onClick={toggleSosMute} data-testid="sos-mute-toggle" style={{ marginLeft: 6 }}>{sosMuted ? <><Bell size={14} /> Unmute</> : <><VolumeX size={14} /> Mute future</>}</button>
+              </div>
               {activeSos.map((s) => (
                 <div key={s.id} data-testid={`active-sos-${s.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "4px 0" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -240,6 +312,7 @@ export default function Family() {
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     {data.is_guardian && !m.is_me && <button className="btn btn-ghost btn-sm" onClick={() => requestCheckIn(m.member_id)} data-testid={`member-checkin-${m.member_id}`}><HeartHandshake size={14} /> Check in</button>}
+                    {data.is_guardian && !m.is_me && <button className="btn btn-ghost btn-sm" onClick={() => nudgeMember(m.member_id)} data-testid={`member-nudge-${m.member_id}`} title="Ring their phone loudly"><BellRing size={14} /> Nudge</button>}
                     {m.latitude != null && <a className="btn btn-ghost btn-sm" href={`https://maps.google.com/?q=${m.latitude},${m.longitude}`} target="_blank" rel="noreferrer" data-testid={`member-map-${m.member_id}`}><MapPin size={14} /></a>}
                     {(data.is_guardian || m.is_me) && <button className="btn btn-ghost btn-sm" onClick={() => setOpenMember(openMember === m.member_id ? null : m.member_id)} data-testid={`member-activity-btn-${m.member_id}`}><Activity size={14} /> Activity</button>}
                     {data.is_guardian && m.role !== "guardian" && <button className="btn btn-ghost btn-sm" onClick={() => removeMember(m.member_id)} data-testid={`member-remove-${m.member_id}`}><UserMinus size={14} /></button>}
@@ -360,6 +433,14 @@ export default function Family() {
                 <div style={{ textAlign: "center", padding: "12px 6px", borderRadius: 10, background: "rgba(245,165,36,.08)" }}><BatteryMedium size={18} style={{ color: "#f5a524" }} /><div style={{ fontSize: 22, fontWeight: 800 }} data-testid="digest-battery">{digest.low_battery}</div><div className="muted" style={{ fontSize: 12 }}>Low battery</div></div>
               </div>
               {digest.top_places?.length > 0 && <p className="muted" style={{ fontSize: 12.5, marginTop: 10 }}>Most visited: {digest.top_places.map((p) => `${p.name} (${p.count})`).join(", ")}</p>}
+              {digest.is_guardian && digest.preview_text && (
+                <div style={{ marginTop: 10 }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setDigestOpen((v) => !v)} data-testid="digest-preview-toggle"><ChevronDown size={14} style={{ transform: digestOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} /> {digestOpen ? "Hide" : "Preview the exact message"}</button>
+                  {digestOpen && (
+                    <pre data-testid="digest-preview-text" style={{ marginTop: 8, padding: 12, borderRadius: 10, background: "rgba(255,255,255,.04)", border: "1px solid var(--panel-brd)", whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 12.5, lineHeight: 1.6 }}>{digest.preview_text}</pre>
+                  )}
+                </div>
+              )}
               {sentMsg && <p style={{ fontSize: 12.5, marginTop: 8, color: "#34d399" }} data-testid="digest-sent-msg">{sentMsg}</p>}
             </div>
           )}

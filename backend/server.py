@@ -2404,6 +2404,54 @@ async def family_active_sos(user: dict = Depends(current_user)):
 
 
 # ---------------------------------------------------------------------------
+# Member Nudge — guardian pings a member so their phone (or open portal) rings
+# loudly to get their attention (e.g. for a pending check-in).
+# ---------------------------------------------------------------------------
+class NudgeIn(BaseModel):
+    member_id: str
+
+
+@api.post("/family/nudge")
+async def nudge_member(payload: NudgeIn, user: dict = Depends(current_user)):
+    fam = await _my_family(user["id"])
+    if not fam or fam["guardian_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the guardian can nudge a member.")
+    m = await db.family_members.find_one({"id": payload.member_id, "family_id": fam["id"]})
+    if not m or m["user_id"] == user["id"]:
+        raise HTTPException(status_code=400, detail="Pick a family member.")
+    await db.nudges.update_many({"member_user_id": m["user_id"], "active": True}, {"$set": {"active": False}})
+    doc = {"id": new_id(), "family_id": fam["id"], "guardian_id": user["id"], "guardian_name": user.get("name"),
+           "member_user_id": m["user_id"], "active": True, "created_at": now_utc()}
+    await db.nudges.insert_one(dict(doc))
+    msg = f"{user.get('name','Your guardian')} is trying to reach you — please open Nek Sathi now."
+    try:
+        await send_push(recipients=[m["user_id"]], data={"title": "🔔 Please respond", "message": msg, "action_url": "/family"}, idempotency_key=doc["id"])
+    except Exception:
+        pass
+    mu = await db.users.find_one({"id": m["user_id"]})
+    if mu and mu.get("phone"):
+        try:
+            await notify_whatsapp(mu["phone"], f"🔔 Nek Sathi: {msg}", meta={"kind": "nudge", "user_id": m["user_id"]})
+        except Exception:
+            pass
+    return {"nudged": True, "id": doc["id"]}
+
+
+@api.get("/family/nudge-state")
+async def nudge_state(user: dict = Depends(current_user)):
+    n = await db.nudges.find_one({"member_user_id": user["id"], "active": True}, sort=[("created_at", -1)])
+    if not n:
+        return {"active": False}
+    return {"active": True, "id": n["id"], "guardian_name": n.get("guardian_name"), "created_at": n.get("created_at")}
+
+
+@api.post("/family/nudge/clear")
+async def nudge_clear(user: dict = Depends(current_user)):
+    await db.nudges.update_many({"member_user_id": user["id"], "active": True}, {"$set": {"active": False, "cleared_at": now_utc()}})
+    return {"cleared": True}
+
+
+# ---------------------------------------------------------------------------
 # SOS Auto-Escalation — if an SOS is not acknowledged within a few minutes,
 # ring the guardian's phone (Vobiz voice call) and send an urgent alert.
 # ---------------------------------------------------------------------------
@@ -2579,7 +2627,7 @@ async def family_digest(user: dict = Depends(current_user)):
     d = await _build_family_digest(fam)
     log_row = await db.digest_log.find_one({"family_id": fam["id"]}, sort=[("sent_at", -1)])
     return {"in_family": True, "is_guardian": fam["guardian_id"] == user["id"],
-            "last_sent_at": (log_row or {}).get("sent_at"), **d}
+            "last_sent_at": (log_row or {}).get("sent_at"), "preview_text": _digest_text(d), **d}
 
 
 @api.post("/family/digest/send")
