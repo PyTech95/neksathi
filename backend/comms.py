@@ -149,6 +149,48 @@ async def send_whatsapp(to: str | None, text: str) -> dict:
         return {"status": "failed", "error": str(e)[:200]}
 
 
+# ------------------------------------------------------- WhatsApp OTP delivery
+def whatsapp_otp_live() -> bool:
+    """OTP-over-WhatsApp is live when we have an authkey, the integrated WABA
+    number and a dedicated approved OTP template. Kept separate from the general
+    alert template so activating OTP does not flip incident alerts to live."""
+    return bool(_authkey() and os.environ.get("MSG91_WHATSAPP_NUMBER")
+                and os.environ.get("MSG91_WHATSAPP_OTP_TEMPLATE"))
+
+
+async def send_whatsapp_otp(phone: str, code: str) -> dict:
+    """Deliver a server-generated OTP `code` over WhatsApp using an approved
+    Utility template with a single body variable (body_1 = the OTP string).
+    The code is generated/verified locally; this only handles delivery."""
+    tmpl = {
+        "name": os.environ["MSG91_WHATSAPP_OTP_TEMPLATE"],
+        "language": {"code": os.environ.get("MSG91_WHATSAPP_LANG", "en"), "policy": "deterministic"},
+        "to_and_components": [{
+            "to": [norm_mobile(phone)],
+            "components": {"body_1": {"type": "text", "value": str(code)}},
+        }],
+    }
+    ns = os.environ.get("MSG91_WHATSAPP_NAMESPACE")
+    if ns:
+        tmpl["namespace"] = ns
+    body = {
+        "integrated_number": os.environ["MSG91_WHATSAPP_NUMBER"],
+        "content_type": "template",
+        "payload": {"messaging_product": "whatsapp", "type": "template", "template": tmpl},
+    }
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+        r = await c.post(f"{BASE}/v5/whatsapp/whatsapp-outbound-message/bulk/", json=body,
+                         headers={"authkey": _authkey(), "Content-Type": "application/json"})
+    try:
+        data = r.json()
+    except Exception:
+        data = {"raw": r.text[:300]}
+    ok = r.status_code in (200, 202) and not data.get("hasError", False)
+    if not ok:
+        raise RuntimeError(f"MSG91 WhatsApp OTP send failed: {r.text[:200]}")
+    return {"live": True, "status": "sent", "request_id": data.get("request_id")}
+
+
 # ------------------------------------------------------------------ Masked call
 def voice_live() -> bool:
     return bool(_authkey() and os.environ.get("MSG91_CALLER_ID"))

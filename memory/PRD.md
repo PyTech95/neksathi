@@ -203,3 +203,11 @@ Original app has ~60 screens; remaining web parity targets:
 - P2: Family invites + shared vehicles, live tracking map, blackspots, nearby help.
 - P2: Admin: alerts feed + CSV export, plans CRUD, support tickets, QR inventory/vendors.
 - Mobile-only (needs Expo job): native camera SOS video, push notifications, accelerometer accident detection, overspeed GPS.
+
+## Update 2026-06 — WhatsApp OTP LIVE
+- OTP login now delivered over WhatsApp (MSG91) — user confirmed real delivery + login working.
+- Server generates 6-digit code, stores in db.otp_codes (10-min TTL), delivers via approved Utility template `neksathi1` (body_1 = OTP), verifies locally.
+- Kept SEPARATE from general alert WhatsApp (new env `MSG91_WHATSAPP_OTP_TEMPLATE`); general incident alerts remain MOCK until `MSG91_WHATSAPP_TEMPLATE` is set.
+- comms.py: `whatsapp_otp_live()`, `send_whatsapp_otp(phone, code)`. server.py: WhatsApp branch in `/api/auth/otp/request` (channel="whatsapp"), verify uses local store.
+- env set: MSG91_WHATSAPP_NUMBER=15553779998, MSG91_WHATSAPP_OTP_TEMPLATE=neksathi1, MSG91_WHATSAPP_LANG=en. Namespace not required for this account.
+- STILL MOCK: SMS OTP (MSG91_OTP_TEMPLATE_ID/SMS_FLOW_ID empty — "SMS later"), general WhatsApp alerts, Stripe payments.

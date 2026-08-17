@@ -694,7 +694,7 @@ async def get_telco_config(_: dict = Depends(require_admin)):
         val = doc.get(k)
         out[k] = _mask_secret(val) if k in ("msg91_authkey",) else val
     # Live-status snapshot so admins can see what's actually active.
-    out["live"] = {"otp": comms.otp_live(), "sms": comms.sms_live(), "whatsapp": comms.whatsapp_live(), "voice": comms.voice_live()}
+    out["live"] = {"otp": comms.otp_live(), "sms": comms.sms_live(), "whatsapp": comms.whatsapp_live(), "whatsapp_otp": comms.whatsapp_otp_live(), "voice": comms.voice_live()}
     return out
 
 
@@ -4212,6 +4212,20 @@ class OtpVerifyIn(BaseModel):
 @rate_limit("5/minute")
 async def otp_request(request: Request, payload: OtpRequestIn):
     phone = _norm_phone(payload.phone)
+    # WhatsApp OTP: we generate + store the code locally and deliver it over
+    # WhatsApp via an approved template; verification is done locally.
+    if comms.whatsapp_otp_live():
+        code = f"{_random.randint(0, 999999):06d}"
+        await db.otp_codes.update_one(
+            {"phone": phone},
+            {"$set": {"phone": phone, "code": code, "expires_at": now_utc() + timedelta(minutes=OTP_TTL_MIN), "created_at": now_utc()}},
+            upsert=True,
+        )
+        try:  # pragma: no cover - live path
+            await comms.send_whatsapp_otp(phone, code)
+            return {"ok": True, "channel": "whatsapp", "dev_code": None, "live": True}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Could not send WhatsApp OTP: {e}")
     if _otp_live():
         try:  # pragma: no cover - live path
             await comms.send_otp(phone)
