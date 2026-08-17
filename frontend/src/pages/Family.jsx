@@ -1,40 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { loadLeaflet } from "@/lib/leaflet";
-import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, VolumeX, BellRing, ChevronDown } from "lucide-react";
+import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, BellRing, ChevronDown } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
-
-function useAlarm() {
-  const ctxRef = useRef(null);
-  const nodesRef = useRef(null);
-  const [on, setOn] = useState(false);
-  const stop = () => {
-    if (nodesRef.current) { try { nodesRef.current.osc1.stop(); nodesRef.current.osc2.stop(); nodesRef.current.lfo.stop(); } catch (_) {} nodesRef.current = null; }
-    setOn(false);
-  };
-  const start = () => {
-    if (nodesRef.current) return;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    if (!ctxRef.current) ctxRef.current = new AC();
-    const ctx = ctxRef.current; ctx.resume();
-    const gain = ctx.createGain(); gain.gain.value = 0.0001;
-    gain.gain.exponentialRampToValueAtTime(0.6, ctx.currentTime + 0.05); gain.connect(ctx.destination);
-    const osc1 = ctx.createOscillator(); const osc2 = ctx.createOscillator();
-    osc1.type = "sawtooth"; osc2.type = "square";
-    const lfo = ctx.createOscillator(); const lfoGain = ctx.createGain();
-    lfo.frequency.value = 2; lfoGain.gain.value = 400;
-    lfo.connect(lfoGain); lfoGain.connect(osc1.frequency); lfoGain.connect(osc2.frequency);
-    osc1.frequency.value = 1000; osc2.frequency.value = 700;
-    osc1.connect(gain); osc2.connect(gain);
-    osc1.start(); osc2.start(); lfo.start();
-    nodesRef.current = { osc1, osc2, lfo, gain };
-    setOn(true);
-  };
-  useEffect(() => () => stop(), []);
-  return { on, start, stop };
-}
 
 function MemberActivity({ memberId }) {
   const [d, setD] = useState(null);
@@ -75,13 +44,8 @@ export default function Family() {
   const [zones, setZones] = useState([]);
   const [checkIns, setCheckIns] = useState({ incoming: [], outgoing: [] });
   const [activeSos, setActiveSos] = useState([]);
-  const [nudge, setNudge] = useState({ active: false });
-  const [sosMuted, setSosMuted] = useState(() => localStorage.getItem("sosMuted") === "1");
   const [digestOpen, setDigestOpen] = useState(false);
   const [digest, setDigest] = useState(null);
-  const alarm = useAlarm();
-  const seenSos = useRef(null);
-  const nudgeActiveRef = useRef(false);
   const [sending, setSending] = useState(false);
   const [sentMsg, setSentMsg] = useState("");
   const [loading, setLoading] = useState(true);
@@ -110,34 +74,14 @@ export default function Family() {
   };
   useEffect(() => { load(); }, []);
 
-  // Poll active SOS + nudge every 15s; ring the alarm on a NEW SOS or nudge.
+  // Poll active SOS every 15s so the guardian's map pin stays live.
   useEffect(() => {
     if (!data?.in_family) return;
-    const tick = async () => {
-      try {
-        const sos = (await api.get("/family/active-sos")).data.items || [];
-        setActiveSos(sos);
-        const ids = new Set(sos.map((s) => s.id));
-        if (seenSos.current === null) { seenSos.current = ids; }
-        else {
-          const isNew = [...ids].some((id) => !seenSos.current.has(id));
-          seenSos.current = ids;
-          if (isNew && sos.length && !sosMuted) alarm.start();
-          if (sos.length === 0) alarm.stop();
-        }
-      } catch (_) {}
-      try {
-        const n = (await api.get("/family/nudge-state")).data;
-        setNudge(n);
-        if (n.active && !nudgeActiveRef.current) alarm.start();
-        if (!n.active && nudgeActiveRef.current) alarm.stop();
-        nudgeActiveRef.current = n.active;
-      } catch (_) {}
-    };
-    tick();
-    const t = setInterval(tick, 15000);
+    const t = setInterval(async () => {
+      try { setActiveSos((await api.get("/family/active-sos")).data.items || []); } catch (_) {}
+    }, 15000);
     return () => clearInterval(t);
-  }, [data?.in_family, sosMuted]);
+  }, [data?.in_family]);
 
   const saveRules = async (patch) => {
     const next = { ...rules, ...patch };
@@ -148,6 +92,8 @@ export default function Family() {
       quiet_start: next.quiet_start, quiet_end: next.quiet_end,
       low_battery_threshold: next.low_battery_threshold ?? 15,
       sos_escalation_min: next.sos_escalation_min ?? 3,
+      digest_day: next.digest_day ?? 6,
+      digest_hour: next.digest_hour ?? 9,
     });
   };
   const sendDigest = async () => {
@@ -163,9 +109,6 @@ export default function Family() {
   const requestCheckIn = async (memberId) => { await api.post("/family/check-in", { member_id: memberId }); await load(); };
   const respondCheckIn = async (id, status) => { await api.post(`/family/check-in/${id}/respond`, { status }); await load(); };
   const nudgeMember = async (memberId) => { await api.post("/family/nudge", { member_id: memberId }); };
-  const dismissNudge = async () => { alarm.stop(); nudgeActiveRef.current = false; setNudge({ active: false }); try { await api.post("/family/nudge/clear"); } catch (_) {} };
-  const toggleSosMute = () => { const v = !sosMuted; setSosMuted(v); localStorage.setItem("sosMuted", v ? "1" : "0"); if (v) alarm.stop(); };
-  const stopAlarm = () => alarm.stop();
 
   useEffect(() => {
     if (!data?.in_family) return;
@@ -254,19 +197,8 @@ export default function Family() {
             </div>
           )}
 
-          {nudge.active && (
-            <div className="glass" style={{ padding: 16, borderRadius: 14, marginBottom: 16, borderColor: "rgba(34,211,238,.6)", background: "rgba(34,211,238,.08)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }} data-testid="nudge-banner">
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}><BellRing size={22} className="neon" style={{ animation: "sosPulse .7s infinite" }} /><span style={{ fontSize: 14.5, fontWeight: 700 }}>{nudge.guardian_name || "Your guardian"} is trying to reach you!</span></div>
-              <button className="btn btn-primary btn-sm" onClick={dismissNudge} data-testid="nudge-dismiss-btn"><CheckCircle2 size={14} /> I'm here — stop</button>
-            </div>
-          )}
-
           {activeSos.length > 0 && (
             <div className="glass" style={{ padding: 16, borderRadius: 14, marginBottom: 16, borderColor: "rgba(255,59,92,.6)", background: "rgba(255,59,92,.08)" }} data-testid="active-sos-banner">
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
-                {alarm.on && <button className="btn btn-ghost btn-sm" onClick={stopAlarm} data-testid="sos-alarm-stop"><VolumeX size={14} /> Silence alarm</button>}
-                <button className="btn btn-ghost btn-sm" onClick={toggleSosMute} data-testid="sos-mute-toggle" style={{ marginLeft: 6 }}>{sosMuted ? <><Bell size={14} /> Unmute</> : <><VolumeX size={14} /> Mute future</>}</button>
-              </div>
               {activeSos.map((s) => (
                 <div key={s.id} data-testid={`active-sos-${s.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "4px 0" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -383,6 +315,20 @@ export default function Family() {
                   {[1, 2, 3, 5, 10, 15].map((m) => <option key={m} value={m}>{m} minute{m === 1 ? "" : "s"}</option>)}
                 </select>
               </div>
+              <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
+                <div className="field" style={{ flex: 1, minWidth: 130 }}>
+                  <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><BarChart3 size={14} /> Send weekly digest on</label>
+                  <select className="input" value={rules.digest_day ?? 6} onChange={(e) => saveRules({ digest_day: Number(e.target.value) })} data-testid="rules-digest-day">
+                    {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((d, i) => <option key={i} value={i}>{d}</option>)}
+                  </select>
+                </div>
+                <div className="field" style={{ flex: 1, minWidth: 130 }}>
+                  <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><Clock size={14} /> at (IST)</label>
+                  <select className="input" value={rules.digest_hour ?? 9} onChange={(e) => saveRules({ digest_hour: Number(e.target.value) })} data-testid="rules-digest-hour">
+                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                  </select>
+                </div>
+              </div>
               {zones.length > 0 && (
                 <div style={{ marginTop: 16, borderTop: "1px solid var(--panel-brd)", paddingTop: 14 }} data-testid="zone-rules">
                   <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 8 }}>Mute specific places</div>
@@ -426,7 +372,7 @@ export default function Family() {
                 <h2 style={{ fontSize: 18, margin: 0, display: "flex", alignItems: "center", gap: 8 }}><BarChart3 size={17} className="neon" /> Weekly safety digest</h2>
                 {digest.is_guardian && <button className="btn btn-primary btn-sm" onClick={sendDigest} disabled={sending} data-testid="digest-send-btn">{sending ? <Loader2 className="spin" size={14} /> : <><Send size={14} /> Send now</>}</button>}
               </div>
-              <p className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>Auto-sent every Sunday morning by WhatsApp + email{digest.last_sent_at ? ` · last sent ${new Date(digest.last_sent_at).toLocaleString()}` : ""}. Last 7 days:</p>
+              <p className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>Auto-sent {["Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays"][rules?.digest_day ?? 6]} at {String(rules?.digest_hour ?? 9).padStart(2, "0")}:00 IST by WhatsApp + email{digest.last_sent_at ? ` · last sent ${new Date(digest.last_sent_at).toLocaleString()}` : ""}. Last 7 days:</p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginTop: 6 }}>
                 <div style={{ textAlign: "center", padding: "12px 6px", borderRadius: 10, background: "rgba(34,211,238,.08)" }}><MapPin size={18} className="neon" /><div style={{ fontSize: 22, fontWeight: 800 }} data-testid="digest-visits">{digest.place_visits}</div><div className="muted" style={{ fontSize: 12 }}>Place visits</div></div>
                 <div style={{ textAlign: "center", padding: "12px 6px", borderRadius: 10, background: "rgba(255,59,92,.08)" }}><AlertTriangle size={18} style={{ color: "#ff3b5c" }} /><div style={{ fontSize: 22, fontWeight: 800 }} data-testid="digest-sos">{digest.sos_events}</div><div className="muted" style={{ fontSize: 12 }}>SOS alerts</div></div>

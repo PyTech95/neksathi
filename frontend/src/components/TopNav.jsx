@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import LiveAlarm from "@/components/LiveAlarm";
+import FamilyAlarm from "@/components/FamilyAlarm";
 
 export default function TopNav() {
   const { user, logout } = useAuth();
@@ -62,6 +63,7 @@ export default function TopNav() {
               Settings
             </Link>
             <LiveAlarm />
+            <FamilyAlarm />
             {user.is_admin && (
               <Link to="/admin" className={`nav-link ${isActive("/admin") ? "active" : ""}`} data-testid="nav-admin" style={{ display: "inline-flex", alignItems: "center" }}>
                 Admin

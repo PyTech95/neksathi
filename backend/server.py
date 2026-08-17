@@ -2246,6 +2246,8 @@ class AlertRulesIn(BaseModel):
     quiet_end: Optional[int] = Field(default=None, ge=0, le=23)
     low_battery_threshold: int = Field(default=15, ge=5, le=50)
     sos_escalation_min: int = Field(default=3, ge=1, le=15)
+    digest_day: int = Field(default=6, ge=0, le=6)
+    digest_hour: int = Field(default=9, ge=0, le=23)
 
 
 @api.get("/family/alert-rules")
@@ -2258,7 +2260,8 @@ async def get_alert_rules(user: dict = Depends(current_user)):
             "place_alert_direction": fam.get("place_alert_direction", "both"),
             "quiet_start": fam.get("quiet_start"), "quiet_end": fam.get("quiet_end"),
             "low_battery_threshold": fam.get("low_battery_threshold", 15),
-            "sos_escalation_min": fam.get("sos_escalation_min", 3)}
+            "sos_escalation_min": fam.get("sos_escalation_min", 3),
+            "digest_day": fam.get("digest_day", 6), "digest_hour": fam.get("digest_hour", 9)}
 
 
 @api.put("/family/alert-rules")
@@ -2643,14 +2646,16 @@ async def family_digest_send(user: dict = Depends(current_user)):
 
 
 async def _digest_scheduler():
-    """Every 30 min, on Sunday after 9am IST, WhatsApp each circle its weekly
-    recap once (deduped per ISO week via db.digest_log)."""
+    """Every 30 min, send each circle its weekly recap on the guardian's chosen
+    day + hour (IST), once per ISO week (deduped via db.digest_log)."""
     while True:
         try:
             ist = _ist_now()
-            if ist.weekday() == 6 and ist.hour >= 9:
-                week = ist.strftime("%G-W%V")
-                async for fam in db.families.find({}):
+            week = ist.strftime("%G-W%V")
+            async for fam in db.families.find({}):
+                day = int(fam.get("digest_day", 6))
+                hour = int(fam.get("digest_hour", 9))
+                if ist.weekday() == day and ist.hour >= hour:
                     if not await db.digest_log.find_one({"family_id": fam["id"], "week": week}):
                         await _send_family_digest(fam)
                         await db.digest_log.update_one({"family_id": fam["id"], "week": week},
@@ -2658,6 +2663,38 @@ async def _digest_scheduler():
         except Exception as e:
             log.warning("digest scheduler: %s", e)
         await asyncio.sleep(1800)
+
+
+async def _checkin_nudge_scanner():
+    """Auto-nudge a member who hasn't answered a guardian's check-in within 2
+    minutes (once per check-in)."""
+    while True:
+        try:
+            now = now_utc()
+            cutoff = now - timedelta(minutes=2)
+            floor = now - timedelta(minutes=60)
+            async for ci in db.check_ins.find({"status": "pending", "auto_nudged": {"$ne": True},
+                                               "created_at": {"$lt": cutoff, "$gt": floor}}):
+                await db.check_ins.update_one({"id": ci["id"]}, {"$set": {"auto_nudged": True}})
+                await db.nudges.update_many({"member_user_id": ci["member_user_id"], "active": True}, {"$set": {"active": False}})
+                nd = {"id": new_id(), "family_id": ci["family_id"], "guardian_id": ci["guardian_id"],
+                      "guardian_name": ci.get("guardian_name"), "member_user_id": ci["member_user_id"],
+                      "active": True, "auto": True, "created_at": now_utc()}
+                await db.nudges.insert_one(dict(nd))
+                mu = await db.users.find_one({"id": ci["member_user_id"]})
+                msg = f"{ci.get('guardian_name','Your guardian')} is still waiting — please reply to the check-in."
+                try:
+                    await send_push(recipients=[ci["member_user_id"]], data={"title": "🔔 Please respond", "message": msg, "action_url": "/family"}, idempotency_key=nd["id"])
+                except Exception:
+                    pass
+                if mu and mu.get("phone"):
+                    try:
+                        await notify_whatsapp(mu["phone"], f"🔔 Nek Sathi: {msg}", meta={"kind": "nudge", "user_id": ci["member_user_id"]})
+                    except Exception:
+                        pass
+        except Exception as e:
+            log.warning("checkin nudge scanner: %s", e)
+        await asyncio.sleep(30)
 
 
 
@@ -6679,6 +6716,7 @@ async def _startup():
     await _seed_blackspots()
     asyncio.create_task(_digest_scheduler())
     asyncio.create_task(_sos_escalation_scanner())
+    asyncio.create_task(_checkin_nudge_scanner())
     log.info("Nek Sathi indexes ensured")
 
 
