@@ -1000,6 +1000,8 @@ class SOSEventOut(BaseModel):
     notified: int = 0
     channels: List[str] = []
     has_photo: bool = False
+    acknowledged: bool = False
+    escalated: bool = False
     created_at: datetime
 
 
@@ -1089,11 +1091,22 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
         "message": payload.message, "notified": notified,
         "channels": sorted(channels), "created_at": now_utc(),
         "photo_base64": payload.photo_base64, "has_photo": bool(payload.photo_base64),
+        "acknowledged": False, "escalated": False,
     }
     await db.sos_events.insert_one(dict(doc))
     if payload.photo_base64:
         asyncio.create_task(_gdrive_autobackup(user["id"], payload.photo_base64, f"sos-{doc['id']}.jpg", "image/jpeg"))
     return SOSEventOut(**{k: v for k, v in clean(doc).items() if k != "photo_base64"})
+
+
+@api.post("/me/sos-events/{event_id}/ack")
+async def acknowledge_sos(event_id: str, user: dict = Depends(current_user)):
+    """Owner marks an SOS as handled ("I'm safe") — cancels auto-escalation."""
+    r = await db.sos_events.update_one({"id": event_id, "user_id": user["id"]},
+                                       {"$set": {"acknowledged": True, "acknowledged_at": now_utc()}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="SOS event not found")
+    return {"acknowledged": True}
 
 
 @api.get("/me/sos-events", response_model=List[SOSEventOut])
@@ -2128,24 +2141,26 @@ async def push_status(payload: StatusIn, user: dict = Depends(current_user)):
 
 
 async def _maybe_low_battery_alert(user: dict, battery: Optional[int]):
-    """Alert the family guardian once when a member's battery drops below 15%.
-    Re-arms after the phone charges back to >=20% (hysteresis, no spam)."""
+    """Alert the family guardian once when a member's battery drops below the
+    guardian's chosen threshold. Re-arms after charging back to threshold+5%."""
     if battery is None:
         return
-    prior = await db.user_locations.find_one({"user_id": user["id"]})
-    was = bool((prior or {}).get("low_batt_notified"))
-    if battery >= 20 and was:
-        await db.user_locations.update_one({"user_id": user["id"]}, {"$set": {"low_batt_notified": False}})
-        return
-    if battery >= 15 or was:
-        return
-    await db.user_locations.update_one({"user_id": user["id"]}, {"$set": {"low_batt_notified": True}})
     fm = await db.family_members.find_one({"user_id": user["id"]})
     if not fm:
         return
     fam = await db.families.find_one({"id": fm["family_id"]})
     if not fam or not fam.get("guardian_id") or fam["guardian_id"] == user["id"]:
         return
+    threshold = int(fam.get("low_battery_threshold", 15))
+    rearm = threshold + 5
+    prior = await db.user_locations.find_one({"user_id": user["id"]})
+    was = bool((prior or {}).get("low_batt_notified"))
+    if battery >= rearm and was:
+        await db.user_locations.update_one({"user_id": user["id"]}, {"$set": {"low_batt_notified": False}})
+        return
+    if battery >= threshold or was:
+        return
+    await db.user_locations.update_one({"user_id": user["id"]}, {"$set": {"low_batt_notified": True}})
     who = user.get("name") or "Your family member"
     msg = f"{who}'s phone battery is low ({battery}%). You may want to check in."
     try:
@@ -2229,6 +2244,7 @@ class AlertRulesIn(BaseModel):
     place_alert_direction: Literal["both", "enter", "exit"] = "both"
     quiet_start: Optional[int] = Field(default=None, ge=0, le=23)
     quiet_end: Optional[int] = Field(default=None, ge=0, le=23)
+    low_battery_threshold: int = Field(default=15, ge=5, le=50)
 
 
 @api.get("/family/alert-rules")
@@ -2239,7 +2255,8 @@ async def get_alert_rules(user: dict = Depends(current_user)):
     return {"is_guardian": fam["guardian_id"] == user["id"],
             "place_alerts_enabled": fam.get("place_alerts_enabled", True),
             "place_alert_direction": fam.get("place_alert_direction", "both"),
-            "quiet_start": fam.get("quiet_start"), "quiet_end": fam.get("quiet_end")}
+            "quiet_start": fam.get("quiet_start"), "quiet_end": fam.get("quiet_end"),
+            "low_battery_threshold": fam.get("low_battery_threshold", 15)}
 
 
 @api.put("/family/alert-rules")
@@ -2284,6 +2301,167 @@ async def mute_family_zone(zone_id: str, payload: ZoneMuteIn, user: dict = Depen
     op = "$addToSet" if payload.muted else "$pull"
     await db.families.update_one({"id": fam["id"]}, {op: {"muted_zones": zone_id}})
     return {"zone_id": zone_id, "muted": payload.muted}
+
+
+# ---------------------------------------------------------------------------
+# Check-In Request — guardian taps a member to ask "Are you okay?"; the member
+# replies one-tap safe (or "need help"), which notifies the guardian back.
+# ---------------------------------------------------------------------------
+class CheckInIn(BaseModel):
+    member_id: str
+
+
+class CheckInRespondIn(BaseModel):
+    status: Literal["safe", "need_help"]
+
+
+@api.post("/family/check-in")
+async def request_check_in(payload: CheckInIn, user: dict = Depends(current_user)):
+    fam = await _my_family(user["id"])
+    if not fam or fam["guardian_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the guardian can request a check-in.")
+    m = await db.family_members.find_one({"id": payload.member_id, "family_id": fam["id"]})
+    if not m or m["user_id"] == user["id"]:
+        raise HTTPException(status_code=400, detail="Pick a family member.")
+    doc = {"id": new_id(), "family_id": fam["id"], "guardian_id": user["id"],
+           "member_user_id": m["user_id"], "member_name": m.get("name"),
+           "guardian_name": user.get("name"), "status": "pending", "created_at": now_utc()}
+    await db.check_ins.insert_one(dict(doc))
+    msg = f"{user.get('name','Your guardian')} is checking in — are you okay? Open Nek Sathi to reply."
+    try:
+        await send_push(recipients=[m["user_id"]], data={"title": "👋 Are you okay?", "message": msg, "action_url": "/family"}, idempotency_key=doc["id"])
+    except Exception:
+        pass
+    mu = await db.users.find_one({"id": m["user_id"]})
+    if mu and mu.get("phone"):
+        try:
+            await notify_whatsapp(mu["phone"], f"👋 Nek Sathi check-in: {msg}", meta={"kind": "check_in", "user_id": m["user_id"]})
+        except Exception:
+            pass
+    return {"requested": True, "id": doc["id"]}
+
+
+@api.get("/family/check-ins")
+async def list_check_ins(user: dict = Depends(current_user)):
+    fam = await _my_family(user["id"])
+    if not fam:
+        return {"incoming": [], "outgoing": []}
+    incoming, outgoing = [], []
+    async for c in db.check_ins.find({"member_user_id": user["id"], "status": "pending"}).sort("created_at", -1).limit(10):
+        incoming.append(clean(c))
+    if fam["guardian_id"] == user["id"]:
+        async for c in db.check_ins.find({"guardian_id": user["id"]}).sort("created_at", -1).limit(20):
+            outgoing.append(clean(c))
+    return {"incoming": incoming, "outgoing": outgoing}
+
+
+@api.post("/family/check-in/{check_id}/respond")
+async def respond_check_in(check_id: str, payload: CheckInRespondIn, user: dict = Depends(current_user)):
+    c = await db.check_ins.find_one({"id": check_id, "member_user_id": user["id"]})
+    if not c:
+        raise HTTPException(status_code=404, detail="Check-in not found.")
+    await db.check_ins.update_one({"id": check_id}, {"$set": {"status": payload.status, "responded_at": now_utc()}})
+    who = user.get("name") or "Your family member"
+    verb = "is safe ✅" if payload.status == "safe" else "needs help ‼️"
+    msg = f"{who} replied to your check-in: {who} {verb}."
+    try:
+        await send_push(recipients=[c["guardian_id"]], data={"title": "Check-in reply", "message": msg, "action_url": "/family"}, idempotency_key=new_id())
+    except Exception:
+        pass
+    g = await db.users.find_one({"id": c["guardian_id"]})
+    if g and g.get("phone"):
+        try:
+            await notify_whatsapp(g["phone"], f"Nek Sathi: {msg}", meta={"kind": "check_in_reply", "user_id": c["guardian_id"]})
+        except Exception:
+            pass
+    return {"responded": True, "status": payload.status}
+
+
+# ---------------------------------------------------------------------------
+# SOS Auto-Escalation — if an SOS is not acknowledged within a few minutes,
+# ring the guardian's phone (Vobiz voice call) and send an urgent alert.
+# ---------------------------------------------------------------------------
+SOS_ESCALATION_MIN = 3
+
+
+async def _guardian_of(user_id: str) -> Optional[dict]:
+    fm = await db.family_members.find_one({"user_id": user_id})
+    if not fm:
+        return None
+    fam = await db.families.find_one({"id": fm["family_id"]})
+    if not fam or not fam.get("guardian_id") or fam["guardian_id"] == user_id:
+        return None
+    return await db.users.find_one({"id": fam["guardian_id"]})
+
+
+async def _escalate_sos(sos: dict):
+    owner = await db.users.find_one({"id": sos["user_id"]})
+    who = (owner or {}).get("name") or "A Nek Sathi user"
+    loc = ""
+    if sos.get("latitude") is not None:
+        loc = f" Location: https://maps.google.com/?q={sos['latitude']},{sos['longitude']}."
+    body = (f"🆘 UNANSWERED SOS from {who}! They raised an SOS {SOS_ESCALATION_MIN} minutes ago "
+            f"and it's still not handled.{loc} Please respond now.")
+    guardian = await _guardian_of(sos["user_id"])
+    targets = []
+    if guardian and guardian.get("phone"):
+        targets.append(guardian["phone"])
+    else:
+        async for c in db.emergency_contacts.find({"user_id": sos["user_id"]}).sort([("is_primary", -1)]).limit(1):
+            if c.get("phone"):
+                targets.append(c["phone"])
+    for phone in targets:
+        try:
+            await notify_whatsapp(phone, body, meta={"kind": "sos_escalation", "user_id": sos["user_id"]})
+        except Exception:
+            pass
+        try:
+            await send_sms(phone, body, meta={"kind": "sos_escalation", "user_id": sos["user_id"]})
+        except Exception:
+            pass
+    # Ring the guardian/primary contact with a spoken SOS message (Vobiz).
+    if targets and comms.vobiz_live():
+        token = new_id()
+        await db.sos_call_sessions.insert_one({"token": token, "sos_id": sos["id"],
+                                               "message": f"Urgent. {who} raised an S O S on Nek Sathi and has not responded. Please check on them immediately.",
+                                               "created_at": now_utc()})
+        base = (os.environ.get("PUBLIC_APP_URL") or "").rstrip("/")
+        try:
+            await comms.vobiz_place_call(comms.e164(targets[0]), f"{base}/api/vobiz/sos-answer?token={token}")
+        except Exception as _e:
+            log.warning("sos escalation call failed: %s", _e)
+    if guardian:
+        try:
+            await send_push(recipients=[guardian["id"]], data={"title": "🆘 Unanswered SOS", "message": body, "action_url": "/safety"}, idempotency_key=new_id())
+        except Exception:
+            pass
+
+
+async def _sos_escalation_scanner():
+    """Every minute, escalate SOS events that are still unacknowledged after the
+    threshold, ringing the guardian. Each SOS escalates at most once. A lower
+    time bound prevents ancient/historical events from escalating on restart."""
+    while True:
+        try:
+            now = now_utc()
+            cutoff = now - timedelta(minutes=SOS_ESCALATION_MIN)
+            floor = now - timedelta(minutes=30)
+            async for sos in db.sos_events.find({"acknowledged": {"$ne": True}, "escalated": {"$ne": True},
+                                                 "created_at": {"$lt": cutoff, "$gt": floor}}):
+                await db.sos_events.update_one({"id": sos["id"]}, {"$set": {"escalated": True, "escalated_at": now_utc()}})
+                await _escalate_sos(sos)
+        except Exception as e:
+            log.warning("sos escalation scanner: %s", e)
+        await asyncio.sleep(60)
+
+
+@api.post("/vobiz/sos-answer")
+async def vobiz_sos_answer(token: str = ""):
+    sess = await db.sos_call_sessions.find_one({"token": token}) if token else None
+    msg = (sess or {}).get("message") or "Urgent SOS alert from Nek Sathi. Please check on your family member."
+    xml = (f'<?xml version="1.0" encoding="UTF-8"?><Response><Speak>{msg}</Speak>'
+           f'<Speak>{msg}</Speak><Hangup/></Response>')
+    return _vobiz_xml(xml)
 
 
 async def _build_family_digest(fam: dict) -> dict:
@@ -6413,6 +6591,7 @@ async def _startup():
             log.info("Promoted existing user %s to admin", admin_email)
     await _seed_blackspots()
     asyncio.create_task(_digest_scheduler())
+    asyncio.create_task(_sos_escalation_scanner())
     log.info("Nek Sathi indexes ensured")
 
 

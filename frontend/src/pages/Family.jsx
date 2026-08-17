@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { loadLeaflet } from "@/lib/leaflet";
-import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle } from "lucide-react";
+import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
 
@@ -42,6 +42,7 @@ export default function Family() {
   const [placeEvents, setPlaceEvents] = useState([]);
   const [rules, setRules] = useState(null);
   const [zones, setZones] = useState([]);
+  const [checkIns, setCheckIns] = useState({ incoming: [], outgoing: [] });
   const [digest, setDigest] = useState(null);
   const [sending, setSending] = useState(false);
   const [sentMsg, setSentMsg] = useState("");
@@ -63,6 +64,7 @@ export default function Family() {
         try { setPlaceEvents((await api.get("/family/place-events")).data.items || []); } catch (_) {}
         try { setRules((await api.get("/family/alert-rules")).data); } catch (_) {}
         try { setZones((await api.get("/family/zones")).data.items || []); } catch (_) {}
+        try { setCheckIns((await api.get("/family/check-ins")).data); } catch (_) {}
         try { setDigest((await api.get("/family/digest")).data); } catch (_) {}
       }
     } finally { setLoading(false); }
@@ -88,6 +90,8 @@ export default function Family() {
     setZones(zones.map((x) => x.id === z.id ? { ...x, muted: !z.muted } : x));
     await api.put(`/family/zones/${z.id}/mute`, { muted: !z.muted });
   };
+  const requestCheckIn = async (memberId) => { await api.post("/family/check-in", { member_id: memberId }); await load(); };
+  const respondCheckIn = async (id, status) => { await api.post(`/family/check-in/${id}/respond`, { status }); await load(); };
 
   useEffect(() => {
     if (!data?.in_family) return;
@@ -158,6 +162,20 @@ export default function Family() {
             </div>
           </div>
 
+          {checkIns.incoming.length > 0 && (
+            <div className="glass" style={{ padding: 16, borderRadius: 14, marginBottom: 16, borderColor: "rgba(245,165,36,.5)", background: "rgba(245,165,36,.06)" }} data-testid="checkin-incoming">
+              {checkIns.incoming.map((ci) => (
+                <div key={ci.id} data-testid={`checkin-incoming-${ci.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}><HeartHandshake size={20} style={{ color: "#f5a524" }} /><span style={{ fontSize: 14, fontWeight: 600 }}>{ci.guardian_name || "Your guardian"} is checking in — are you okay?</span></div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn btn-primary btn-sm" onClick={() => respondCheckIn(ci.id, "safe")} data-testid={`checkin-safe-${ci.id}`}><CheckCircle2 size={14} /> I'm safe</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => respondCheckIn(ci.id, "need_help")} data-testid={`checkin-help-${ci.id}`}><AlertTriangle size={14} /> I need help</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {data.members.some((m) => m.latitude != null) && (
             <div ref={mapEl} data-testid="family-map" style={{ height: 300, borderRadius: 14, overflow: "hidden", border: "1px solid var(--panel-brd)", marginBottom: 16 }} />
           )}
@@ -187,6 +205,7 @@ export default function Family() {
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
+                    {data.is_guardian && !m.is_me && <button className="btn btn-ghost btn-sm" onClick={() => requestCheckIn(m.member_id)} data-testid={`member-checkin-${m.member_id}`}><HeartHandshake size={14} /> Check in</button>}
                     {m.latitude != null && <a className="btn btn-ghost btn-sm" href={`https://maps.google.com/?q=${m.latitude},${m.longitude}`} target="_blank" rel="noreferrer" data-testid={`member-map-${m.member_id}`}><MapPin size={14} /></a>}
                     {(data.is_guardian || m.is_me) && <button className="btn btn-ghost btn-sm" onClick={() => setOpenMember(openMember === m.member_id ? null : m.member_id)} data-testid={`member-activity-btn-${m.member_id}`}><Activity size={14} /> Activity</button>}
                     {data.is_guardian && m.role !== "guardian" && <button className="btn btn-ghost btn-sm" onClick={() => removeMember(m.member_id)} data-testid={`member-remove-${m.member_id}`}><UserMinus size={14} /></button>}
@@ -244,6 +263,12 @@ export default function Family() {
                     {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
                   </select>
                 </div>
+              </div>
+              <div className="field" style={{ marginTop: 12 }}>
+                <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><BatteryLow size={14} /> Alert me when a member's battery drops below</label>
+                <select className="input" value={rules.low_battery_threshold ?? 15} onChange={(e) => saveRules({ low_battery_threshold: Number(e.target.value) })} data-testid="rules-battery-threshold">
+                  {[5, 10, 15, 20, 25, 30, 40, 50].map((p) => <option key={p} value={p}>{p}%</option>)}
+                </select>
               </div>
               {zones.length > 0 && (
                 <div style={{ marginTop: 16, borderTop: "1px solid var(--panel-brd)", paddingTop: 14 }} data-testid="zone-rules">

@@ -111,6 +111,8 @@ function Sos({ contactsCount, onSent }) {
     }, 1000);
   };
   const cancel = () => { clearInterval(timer.current); setArming(false); setCount(3); };
+  const [acked, setAcked] = useState(false);
+  const ackSafe = async () => { try { await api.post(`/me/sos-events/${result.id}/ack`); setAcked(true); } catch (_) {} };
 
   return (
     <div className="glass" style={{ padding: 28, borderRadius: 20, textAlign: "center", position: "relative", overflow: "hidden" }} data-testid="sos-panel">
@@ -158,6 +160,16 @@ function Sos({ contactsCount, onSent }) {
         <div data-testid="sos-result" className="glass" style={{ marginTop: 16, padding: "12px 14px", borderRadius: 12, borderColor: "rgba(52,211,153,.4)", color: "#34d399", fontWeight: 700 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}><CheckCircle2 size={18} /> SOS sent to {result.notified} contact{result.notified === 1 ? "" : "s"} · {result.channels?.join(", ")}</div>
           {result._photo && <img src={result._photo} alt="evidence" data-testid="sos-result-photo" style={{ marginTop: 10, width: 120, height: 90, objectFit: "cover", borderRadius: 8 }} />}
+          <div style={{ marginTop: 12, fontWeight: 500, color: "var(--text)", fontSize: 12.5 }}>
+            {acked ? (
+              <span style={{ color: "#34d399", display: "inline-flex", alignItems: "center", gap: 6 }} data-testid="sos-acked"><CheckCircle2 size={14} /> Marked safe — escalation cancelled.</span>
+            ) : (
+              <>
+                <p className="muted" style={{ margin: "0 0 8px" }}>If nobody responds in {3} minutes, we'll automatically ring your guardian. Was this a mistake?</p>
+                <button className="btn btn-ghost btn-sm" onClick={ackSafe} data-testid="sos-ack-btn"><CheckCircle2 size={14} /> I'm safe — cancel escalation</button>
+              </>
+            )}
+          </div>
         </div>
       )}
       {result?.error && (
