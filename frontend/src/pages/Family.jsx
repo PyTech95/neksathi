@@ -41,6 +41,7 @@ export default function Family() {
   const [data, setData] = useState(null);
   const [placeEvents, setPlaceEvents] = useState([]);
   const [rules, setRules] = useState(null);
+  const [zones, setZones] = useState([]);
   const [digest, setDigest] = useState(null);
   const [sending, setSending] = useState(false);
   const [sentMsg, setSentMsg] = useState("");
@@ -61,6 +62,7 @@ export default function Family() {
       if (d.in_family) {
         try { setPlaceEvents((await api.get("/family/place-events")).data.items || []); } catch (_) {}
         try { setRules((await api.get("/family/alert-rules")).data); } catch (_) {}
+        try { setZones((await api.get("/family/zones")).data.items || []); } catch (_) {}
         try { setDigest((await api.get("/family/digest")).data); } catch (_) {}
       }
     } finally { setLoading(false); }
@@ -78,9 +80,13 @@ export default function Family() {
   };
   const sendDigest = async () => {
     setSending(true); setSentMsg("");
-    try { const r = (await api.post("/family/digest/send")).data; setSentMsg(`Sent to ${r.sent} member${r.sent === 1 ? "" : "s"} on WhatsApp.`); load(); }
+    try { const r = (await api.post("/family/digest/send")).data; setSentMsg(`Sent to ${r.sent} on WhatsApp${r.emailed ? ` and ${r.emailed} by email` : ""}.`); load(); }
     catch (e) { setSentMsg(e?.response?.data?.detail || "Could not send."); }
     finally { setSending(false); }
+  };
+  const muteZone = async (z) => {
+    setZones(zones.map((x) => x.id === z.id ? { ...x, muted: !z.muted } : x));
+    await api.put(`/family/zones/${z.id}/mute`, { muted: !z.muted });
   };
 
   useEffect(() => {
@@ -239,6 +245,20 @@ export default function Family() {
                   </select>
                 </div>
               </div>
+              {zones.length > 0 && (
+                <div style={{ marginTop: 16, borderTop: "1px solid var(--panel-brd)", paddingTop: 14 }} data-testid="zone-rules">
+                  <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 8 }}>Mute specific places</div>
+                  <p className="muted" style={{ fontSize: 12.5, marginTop: 0, marginBottom: 10 }}>Turn off alerts for places you don't need to hear about — like a member's own home.</p>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {zones.map((z) => (
+                      <label key={z.id} data-testid={`zone-mute-${z.id}`} onClick={() => muteZone(z)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, cursor: "pointer", padding: "8px 12px", borderRadius: 10, background: "rgba(255,255,255,.03)" }}>
+                        <span style={{ fontSize: 13.5, display: "flex", alignItems: "center", gap: 8 }}><MapPin size={14} className={z.muted ? "muted" : "neon"} /> {z.name} <span className="muted" style={{ fontSize: 12 }}>· {z.member_name}</span></span>
+                        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: z.muted ? "var(--muted)" : "#34d399" }}>{z.muted ? <><EyeOff size={14} /> Muted</> : <><Bell size={14} /> On</>}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -246,9 +266,9 @@ export default function Family() {
             <div className="glass" style={{ padding: 16, borderRadius: 14, marginTop: 18 }} data-testid="digest-card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <h2 style={{ fontSize: 18, margin: 0, display: "flex", alignItems: "center", gap: 8 }}><BarChart3 size={17} className="neon" /> Weekly safety digest</h2>
-                {digest.is_guardian && <button className="btn btn-primary btn-sm" onClick={sendDigest} disabled={sending} data-testid="digest-send-btn">{sending ? <Loader2 className="spin" size={14} /> : <><Send size={14} /> Send now on WhatsApp</>}</button>}
+                {digest.is_guardian && <button className="btn btn-primary btn-sm" onClick={sendDigest} disabled={sending} data-testid="digest-send-btn">{sending ? <Loader2 className="spin" size={14} /> : <><Send size={14} /> Send now</>}</button>}
               </div>
-              <p className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>Auto-sent every Sunday morning{digest.last_sent_at ? ` · last sent ${new Date(digest.last_sent_at).toLocaleString()}` : ""}. Last 7 days:</p>
+              <p className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>Auto-sent every Sunday morning by WhatsApp + email{digest.last_sent_at ? ` · last sent ${new Date(digest.last_sent_at).toLocaleString()}` : ""}. Last 7 days:</p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginTop: 6 }}>
                 <div style={{ textAlign: "center", padding: "12px 6px", borderRadius: 10, background: "rgba(34,211,238,.08)" }}><MapPin size={18} className="neon" /><div style={{ fontSize: 22, fontWeight: 800 }} data-testid="digest-visits">{digest.place_visits}</div><div className="muted" style={{ fontSize: 12 }}>Place visits</div></div>
                 <div style={{ textAlign: "center", padding: "12px 6px", borderRadius: 10, background: "rgba(255,59,92,.08)" }}><AlertTriangle size={18} style={{ color: "#ff3b5c" }} /><div style={{ fontSize: 22, fontWeight: 800 }} data-testid="digest-sos">{digest.sos_events}</div><div className="muted" style={{ fontSize: 12 }}>SOS alerts</div></div>

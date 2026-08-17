@@ -1233,7 +1233,7 @@ async def _evaluate_geofences(user: dict, lat: float, lng: float) -> list:
                     fm = await db.family_members.find_one({"user_id": user["id"]})
                     if fm:
                         fam = await db.families.find_one({"id": fm["family_id"]})
-                        if fam and fam.get("guardian_id") and fam["guardian_id"] != user["id"] and fam.get("place_alerts_enabled", True):
+                        if fam and fam.get("guardian_id") and fam["guardian_id"] != user["id"] and fam.get("place_alerts_enabled", True) and z["id"] not in fam.get("muted_zones", []):
                             direction = fam.get("place_alert_direction", "both")
                             want = direction == "both" or (direction == "enter" and inside) or (direction == "exit" and not inside)
                             if want and not _in_quiet_hours(fam):
@@ -2121,9 +2121,44 @@ async def push_status(payload: StatusIn, user: dict = Depends(current_user)):
         upd["latitude"] = payload.latitude
         upd["longitude"] = payload.longitude
     await db.user_locations.update_one({"user_id": user["id"]}, {"$set": upd}, upsert=True)
+    await _maybe_low_battery_alert(user, payload.battery)
     if payload.latitude is not None and payload.longitude is not None:
         transitions = await _evaluate_geofences(user, payload.latitude, payload.longitude)
     return {"ok": True, "transitions": transitions}
+
+
+async def _maybe_low_battery_alert(user: dict, battery: Optional[int]):
+    """Alert the family guardian once when a member's battery drops below 15%.
+    Re-arms after the phone charges back to >=20% (hysteresis, no spam)."""
+    if battery is None:
+        return
+    prior = await db.user_locations.find_one({"user_id": user["id"]})
+    was = bool((prior or {}).get("low_batt_notified"))
+    if battery >= 20 and was:
+        await db.user_locations.update_one({"user_id": user["id"]}, {"$set": {"low_batt_notified": False}})
+        return
+    if battery >= 15 or was:
+        return
+    await db.user_locations.update_one({"user_id": user["id"]}, {"$set": {"low_batt_notified": True}})
+    fm = await db.family_members.find_one({"user_id": user["id"]})
+    if not fm:
+        return
+    fam = await db.families.find_one({"id": fm["family_id"]})
+    if not fam or not fam.get("guardian_id") or fam["guardian_id"] == user["id"]:
+        return
+    who = user.get("name") or "Your family member"
+    msg = f"{who}'s phone battery is low ({battery}%). You may want to check in."
+    try:
+        await send_push(recipients=[fam["guardian_id"]], data={
+            "title": "🔋 Low battery", "message": msg, "action_url": "/family"}, idempotency_key=new_id())
+    except Exception:
+        pass
+    guardian = await db.users.find_one({"id": fam["guardian_id"]})
+    if guardian and guardian.get("phone"):
+        try:
+            await notify_whatsapp(guardian["phone"], f"🔋 Nek Sathi: {msg}", meta={"kind": "low_battery", "user_id": user["id"]})
+        except Exception:
+            pass
 
 
 @api.post("/family/activity")
@@ -2216,6 +2251,41 @@ async def put_alert_rules(payload: AlertRulesIn, user: dict = Depends(current_us
     return {"updated": True, **payload.model_dump()}
 
 
+class ZoneMuteIn(BaseModel):
+    muted: bool
+
+
+@api.get("/family/zones")
+async def family_zones(user: dict = Depends(current_user)):
+    """List safe zones across the circle so the guardian can mute alerts for
+    specific places (e.g. the member's own home)."""
+    fam = await _my_family(user["id"])
+    if not fam:
+        raise HTTPException(status_code=404, detail="Not in a family circle.")
+    is_guardian = fam["guardian_id"] == user["id"]
+    names, ids = {}, []
+    async for m in db.family_members.find({"family_id": fam["id"]}):
+        names[m["user_id"]] = m.get("name")
+        if m["user_id"] == user["id"] or (is_guardian and m.get("share_location", True)):
+            ids.append(m["user_id"])
+    muted = set(fam.get("muted_zones", []))
+    items = []
+    async for z in db.safe_zones.find({"user_id": {"$in": ids}}):
+        items.append({"id": z["id"], "name": z.get("name"), "member_name": names.get(z["user_id"]),
+                      "muted": z["id"] in muted})
+    return {"is_guardian": is_guardian, "items": items}
+
+
+@api.put("/family/zones/{zone_id}/mute")
+async def mute_family_zone(zone_id: str, payload: ZoneMuteIn, user: dict = Depends(current_user)):
+    fam = await _my_family(user["id"])
+    if not fam or fam["guardian_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the guardian can mute places.")
+    op = "$addToSet" if payload.muted else "$pull"
+    await db.families.update_one({"id": fam["id"]}, {op: {"muted_zones": zone_id}})
+    return {"zone_id": zone_id, "muted": payload.muted}
+
+
 async def _build_family_digest(fam: dict) -> dict:
     since = now_utc() - timedelta(days=7)
     member_ids = [m["user_id"] async for m in db.family_members.find({"family_id": fam["id"]})]
@@ -2243,19 +2313,45 @@ def _digest_text(d: dict) -> str:
     return "\n".join(lines)
 
 
+def _digest_html(d: dict) -> str:
+    rows = "".join(f"<tr><td style='padding:6px 14px 6px 0'>{lbl}</td><td style='font-weight:700'>{val}</td></tr>"
+                   for lbl, val in [("📍 Place visits", d["place_visits"]), ("🚨 SOS alerts", d["sos_events"]),
+                                    ("🔋 Low-battery moments", d["low_battery"])])
+    top = ""
+    if d["top_places"]:
+        top = "<p style='color:#555'>Most visited: " + ", ".join(f"{p['name']} ({p['count']})" for p in d["top_places"]) + "</p>"
+    return (f"<div style='font-family:sans-serif;max-width:480px'>"
+            f"<h2>📅 Weekly safety recap</h2>"
+            f"<p><b>{d['family_name']}</b> · last 7 days</p>"
+            f"<table style='font-size:15px'>{rows}</table>{top}"
+            f"<p style='color:#7c3aed'>Stay safe with Nek Sathi 💜</p></div>")
+
+
 async def _send_family_digest(fam: dict) -> dict:
     d = await _build_family_digest(fam)
     body = _digest_text(d)
-    sent = 0
+    html = _digest_html(d)
+    sent, emailed = 0, 0
     async for m in db.family_members.find({"family_id": fam["id"]}):
         u = await db.users.find_one({"id": m["user_id"]})
-        if u and u.get("phone"):
+        if not u:
+            continue
+        if u.get("phone"):
             try:
                 await notify_whatsapp(u["phone"], body, meta={"kind": "digest", "family_id": fam["id"]})
                 sent += 1
             except Exception:
                 pass
-    return {"sent": sent, "digest": d}
+        # Also email real inboxes (skip phone-placeholder addresses) so families
+        # without WhatsApp still get the recap.
+        email = u.get("email")
+        if email and not email.endswith("@phone.neksaathi.app"):
+            try:
+                await send_email(email, "📅 Nek Sathi — your weekly safety recap", html)
+                emailed += 1
+            except Exception:
+                pass
+    return {"sent": sent, "emailed": emailed, "digest": d}
 
 
 @api.get("/family/digest")
