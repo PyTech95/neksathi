@@ -1587,6 +1587,434 @@ async def admin_set_gdrive(payload: GDriveConfigIn, _: dict = Depends(require_ad
     return {"saved": True, "configured": bool(cfg["client_id"] and cfg["client_secret"])}
 
 
+# ---------------------------------------------------------------------------
+# Theft Protection (#20/#22) — anti-theft for the NATIVE mobile app.
+# The mobile app captures an intruder photo on failed unlocks and calls
+# POST /devices/{id}/intruder; the backend stores it, auto-locks the device
+# past the threshold, and alerts family + guardian + super admin.
+# ---------------------------------------------------------------------------
+class DeviceIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    platform: Optional[str] = Field(default=None, max_length=20)
+    push_token: Optional[str] = Field(default=None, max_length=400)
+    lock_threshold: int = Field(default=3, ge=2, le=5)
+    guardian_contact_id: Optional[str] = None
+    super_admin_alerts: bool = True
+
+
+class DeviceOut(BaseModel):
+    id: str
+    name: str
+    platform: Optional[str] = None
+    lock_threshold: int = 3
+    guardian_contact_id: Optional[str] = None
+    super_admin_alerts: bool = True
+    locked: bool = False
+    created_at: datetime
+    last_seen: Optional[datetime] = None
+
+
+class IntruderIn(BaseModel):
+    photo_base64: Optional[str] = None
+    attempt_count: int = Field(default=1, ge=1, le=50)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class IntruderEventOut(BaseModel):
+    id: str
+    device_id: str
+    device_name: str
+    attempt_count: int
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    has_photo: bool = False
+    view_token: str
+    triggered_lock: bool = False
+    created_at: datetime
+
+
+def _device_out(d: dict) -> DeviceOut:
+    return DeviceOut(**{k: v for k, v in clean(d).items() if k in DeviceOut.model_fields})
+
+
+@api.post("/devices", response_model=DeviceOut)
+async def register_device(payload: DeviceIn, user: dict = Depends(current_user)):
+    doc = {"id": new_id(), "user_id": user["id"], "locked": False, "created_at": now_utc(),
+           "last_seen": now_utc(), **payload.model_dump()}
+    await db.devices.insert_one(dict(doc))
+    return _device_out(doc)
+
+
+@api.get("/devices", response_model=List[DeviceOut])
+async def list_devices(user: dict = Depends(current_user)):
+    items = []
+    async for d in db.devices.find({"user_id": user["id"]}).sort("created_at", -1):
+        items.append(_device_out(d))
+    return items
+
+
+@api.put("/devices/{device_id}", response_model=DeviceOut)
+async def update_device(device_id: str, payload: DeviceIn, user: dict = Depends(current_user)):
+    d = await db.devices.find_one({"id": device_id, "user_id": user["id"]})
+    if not d:
+        raise HTTPException(status_code=404, detail="Device not found")
+    await db.devices.update_one({"id": device_id}, {"$set": payload.model_dump()})
+    d.update(payload.model_dump())
+    return _device_out(d)
+
+
+@api.delete("/devices/{device_id}")
+async def delete_device(device_id: str, user: dict = Depends(current_user)):
+    r = await db.devices.delete_one({"id": device_id, "user_id": user["id"]})
+    if not r.deleted_count:
+        raise HTTPException(status_code=404, detail="Device not found")
+    await db.intruder_events.delete_many({"device_id": device_id, "user_id": user["id"]})
+    return {"deleted": True}
+
+
+@api.get("/devices/{device_id}/lock-state")
+async def device_lock_state(device_id: str, user: dict = Depends(current_user)):
+    d = await db.devices.find_one({"id": device_id, "user_id": user["id"]})
+    if not d:
+        raise HTTPException(status_code=404, detail="Device not found")
+    await db.devices.update_one({"id": device_id}, {"$set": {"last_seen": now_utc()}})
+    return {"locked": bool(d.get("locked")), "lock_threshold": d.get("lock_threshold", 3)}
+
+
+@api.post("/devices/{device_id}/lock")
+async def lock_device(device_id: str, user: dict = Depends(current_user)):
+    r = await db.devices.update_one({"id": device_id, "user_id": user["id"]}, {"$set": {"locked": True}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {"locked": True}
+
+
+@api.post("/devices/{device_id}/unlock")
+async def unlock_device(device_id: str, user: dict = Depends(current_user)):
+    r = await db.devices.update_one({"id": device_id, "user_id": user["id"]}, {"$set": {"locked": False}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {"locked": False}
+
+
+async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str):
+    who = user.get("name") or "A Nek Sathi user"
+    loc = ""
+    if event.get("latitude") is not None:
+        loc = f" Location: https://maps.google.com/?q={event['latitude']},{event['longitude']}."
+    body = (f"🚨 Nek Sathi THEFT ALERT: {event['attempt_count']} failed unlock attempts on {who}'s "
+            f"phone '{device.get('name','device')}'."
+            f"{' The phone is now LOCKED.' if event.get('triggered_lock') else ''}"
+            f"{loc} View intruder photo: {public_link}")
+    # Recipients: emergency contacts + chosen guardian.
+    phones = []
+    async for c in db.emergency_contacts.find({"user_id": user["id"]}):
+        if c.get("phone"):
+            phones.append(c["phone"])
+    gid = device.get("guardian_contact_id")
+    if gid:
+        g = await db.emergency_contacts.find_one({"id": gid, "user_id": user["id"]})
+        if g and g.get("phone") and g["phone"] not in phones:
+            phones.append(g["phone"])
+    admin_phones, admin_emails = [], []
+    if device.get("super_admin_alerts", True):
+        async for a in db.users.find({"is_admin": True}):
+            if a.get("phone"):
+                admin_phones.append(a["phone"])
+            if a.get("email"):
+                admin_emails.append(a["email"])
+    for p in phones + admin_phones:
+        try:
+            await notify_whatsapp(p, body, meta={"kind": "theft", "user_id": user["id"]})
+        except Exception:
+            pass
+        try:
+            await send_sms(p, body, meta={"kind": "theft", "user_id": user["id"]})
+        except Exception:
+            pass
+    try:
+        if _prefs(user).get("push"):
+            await send_push(recipients=[user["id"]], data={
+                "title": "🚨 Intruder detected", "message": f"{event['attempt_count']} failed unlocks on {device.get('name','your device')}.",
+                "action_url": "/theft-protection"}, idempotency_key=event["id"])
+    except Exception:
+        pass
+    # Email the photo inline to the owner + super admins.
+    email_targets = [e for e in ([user.get("email")] + admin_emails) if e]
+    if email_targets and event.get("photo_base64"):
+        img = event["photo_base64"]
+        if not img.startswith("data:"):
+            img = "data:image/jpeg;base64," + img
+        html = (f"<div style='font-family:sans-serif'><h2>🚨 Theft alert</h2>"
+                f"<p>{event['attempt_count']} failed unlock attempts on <b>{who}'s</b> phone "
+                f"'<b>{device.get('name','device')}</b>'.{' The phone has been locked.' if event.get('triggered_lock') else ''}</p>"
+                f"<p><img src='{img}' style='max-width:320px;border-radius:8px'/></p>"
+                f"<p><a href='{public_link}'>Open the intruder capture</a></p></div>")
+        for e in set(email_targets):
+            try:
+                await send_email(e, "🚨 Nek Sathi Theft Alert", html)
+            except Exception:
+                pass
+
+
+@api.post("/devices/{device_id}/intruder", response_model=IntruderEventOut)
+@rate_limit("20/minute")
+async def report_intruder(request: Request, device_id: str, payload: IntruderIn, user: dict = Depends(current_user)):
+    device = await db.devices.find_one({"id": device_id, "user_id": user["id"]})
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    threshold = device.get("lock_threshold", 3)
+    triggered_lock = payload.attempt_count >= threshold
+    if triggered_lock and not device.get("locked"):
+        await db.devices.update_one({"id": device_id}, {"$set": {"locked": True}})
+    event = {"id": new_id(), "user_id": user["id"], "device_id": device_id,
+             "device_name": device.get("name", "device"), "photo_base64": payload.photo_base64,
+             "attempt_count": payload.attempt_count, "latitude": payload.latitude, "longitude": payload.longitude,
+             "view_token": uuid.uuid4().hex, "triggered_lock": triggered_lock, "created_at": now_utc(), "viewed": False}
+    await db.intruder_events.insert_one(dict(event))
+    front = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+    public_link = f"{front}/intruder/{event['view_token']}"
+    await _theft_fanout(user, device, event, public_link)
+    if payload.photo_base64:
+        asyncio.create_task(_gdrive_autobackup(user["id"], payload.photo_base64, f"intruder-{event['id']}.jpg", "image/jpeg"))
+    out = {k: v for k, v in clean(event).items() if k in IntruderEventOut.model_fields}
+    out["has_photo"] = bool(payload.photo_base64)
+    return IntruderEventOut(**out)
+
+
+@api.get("/intruder-events", response_model=List[IntruderEventOut])
+async def list_intruder_events(user: dict = Depends(current_user), limit: int = 50):
+    items = []
+    async for e in db.intruder_events.find({"user_id": user["id"]}).sort("created_at", -1).limit(min(limit, 200)):
+        e = clean(e); e["has_photo"] = bool(e.get("photo_base64")); e.pop("photo_base64", None)
+        items.append(IntruderEventOut(**{k: v for k, v in e.items() if k in IntruderEventOut.model_fields}))
+    return items
+
+
+@api.get("/intruder-events/{event_id}/photo")
+async def get_intruder_photo(event_id: str, user: dict = Depends(current_user)):
+    e = await db.intruder_events.find_one({"id": event_id, "user_id": user["id"]})
+    if not e or not e.get("photo_base64"):
+        raise HTTPException(status_code=404, detail="No photo for this event.")
+    return {"photo_base64": e["photo_base64"]}
+
+
+@api.get("/public/intruder/{token}")
+@rate_limit("30/minute")
+async def public_intruder(request: Request, token: str):
+    e = await db.intruder_events.find_one({"view_token": token})
+    if not e:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"device_name": e.get("device_name"), "attempt_count": e.get("attempt_count"),
+            "photo_base64": e.get("photo_base64"), "latitude": e.get("latitude"),
+            "longitude": e.get("longitude"), "triggered_lock": e.get("triggered_lock"),
+            "created_at": e.get("created_at")}
+
+
+@api.get("/admin/intruder-events")
+async def admin_intruder_events(_: dict = Depends(require_admin), limit: int = 100):
+    items = []
+    async for e in db.intruder_events.find({}).sort("created_at", -1).limit(min(limit, 300)):
+        e = clean(e)
+        owner = await db.users.find_one({"id": e.get("user_id")})
+        e["owner_name"] = (owner or {}).get("name")
+        e["owner_phone"] = (owner or {}).get("phone")
+        e["has_photo"] = bool(e.get("photo_base64"))
+        items.append(e)
+    return {"count": len(items), "items": items}
+
+
+# ---------------------------------------------------------------------------
+# Family Guardian Circle (#23 activity + live location) — one guardian invites
+# up to 5 members total; sees each member's live location + day-to-day activity
+# (app usage / screen time / check-ins reported by the member's mobile app).
+# Members control their own sharing. Life360 + Family Link style.
+# ---------------------------------------------------------------------------
+FAMILY_MAX = 5
+
+
+class FamilyCreateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class FamilyJoinIn(BaseModel):
+    invite_code: str = Field(min_length=4, max_length=12)
+
+
+class SharingIn(BaseModel):
+    share_location: bool = True
+    share_activity: bool = True
+
+
+class ActivityIn(BaseModel):
+    type: str = Field(pattern="^(app_usage|screen_time|checkin|battery|app_install)$")
+    app_name: Optional[str] = Field(default=None, max_length=80)
+    seconds: Optional[int] = Field(default=None, ge=0)
+    note: Optional[str] = Field(default=None, max_length=200)
+    battery: Optional[int] = Field(default=None, ge=0, le=100)
+
+
+class StatusIn(BaseModel):
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    battery: Optional[int] = Field(default=None, ge=0, le=100)
+
+
+async def _my_family(user_id: str) -> Optional[dict]:
+    fm = await db.family_members.find_one({"user_id": user_id})
+    if not fm:
+        return None
+    return await db.families.find_one({"id": fm["family_id"]})
+
+
+@api.post("/family")
+async def create_family(payload: FamilyCreateIn, user: dict = Depends(current_user)):
+    if await db.family_members.find_one({"user_id": user["id"]}):
+        raise HTTPException(status_code=400, detail="You are already in a family circle.")
+    fam = {"id": new_id(), "name": payload.name, "guardian_id": user["id"],
+           "invite_code": secrets.token_hex(3).upper(), "max_members": FAMILY_MAX, "created_at": now_utc()}
+    await db.families.insert_one(dict(fam))
+    await db.family_members.insert_one({"id": new_id(), "family_id": fam["id"], "user_id": user["id"],
+                                        "role": "guardian", "name": user.get("name", "Guardian"),
+                                        "share_location": True, "share_activity": True, "joined_at": now_utc()})
+    return {"id": fam["id"], "name": fam["name"], "invite_code": fam["invite_code"], "is_guardian": True}
+
+
+@api.post("/family/join")
+async def join_family(payload: FamilyJoinIn, user: dict = Depends(current_user)):
+    if await db.family_members.find_one({"user_id": user["id"]}):
+        raise HTTPException(status_code=400, detail="You are already in a family circle.")
+    fam = await db.families.find_one({"invite_code": payload.invite_code.strip().upper()})
+    if not fam:
+        raise HTTPException(status_code=404, detail="Invalid invite code.")
+    if await db.family_members.count_documents({"family_id": fam["id"]}) >= fam.get("max_members", FAMILY_MAX):
+        raise HTTPException(status_code=400, detail="This family circle is full.")
+    await db.family_members.insert_one({"id": new_id(), "family_id": fam["id"], "user_id": user["id"],
+                                        "role": "member", "name": user.get("name", "Member"),
+                                        "share_location": True, "share_activity": True, "joined_at": now_utc()})
+    return {"joined": True, "family_name": fam["name"]}
+
+
+@api.get("/family")
+async def get_family(user: dict = Depends(current_user)):
+    fam = await _my_family(user["id"])
+    if not fam:
+        return {"in_family": False}
+    is_guardian = fam["guardian_id"] == user["id"]
+    members = []
+    async for m in db.family_members.find({"family_id": fam["id"]}):
+        loc = await db.user_locations.find_one({"user_id": m["user_id"]})
+        # Guardian sees members' location/last-seen only when the member shares it.
+        show_loc = m.get("share_location", True) or m["user_id"] == user["id"]
+        members.append({
+            "member_id": m["id"], "user_id": m["user_id"], "name": m.get("name"), "role": m.get("role"),
+            "is_me": m["user_id"] == user["id"],
+            "share_location": m.get("share_location", True), "share_activity": m.get("share_activity", True),
+            "latitude": (loc or {}).get("latitude") if (loc and show_loc) else None,
+            "longitude": (loc or {}).get("longitude") if (loc and show_loc) else None,
+            "battery": (loc or {}).get("battery") if (loc and show_loc) else None,
+            "last_seen": (loc or {}).get("recorded_at") if (loc and show_loc) else None,
+        })
+    return {"in_family": True, "id": fam["id"], "name": fam["name"], "is_guardian": is_guardian,
+            "invite_code": fam["invite_code"] if is_guardian else None,
+            "max_members": fam.get("max_members", FAMILY_MAX), "members": members}
+
+
+@api.put("/family/my-sharing")
+async def update_my_sharing(payload: SharingIn, user: dict = Depends(current_user)):
+    r = await db.family_members.update_one({"user_id": user["id"]}, {"$set": payload.model_dump()})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="You are not in a family circle.")
+    return {"updated": True}
+
+
+@api.post("/family/leave")
+async def leave_family(user: dict = Depends(current_user)):
+    fam = await _my_family(user["id"])
+    if not fam:
+        raise HTTPException(status_code=400, detail="You are not in a family circle.")
+    if fam["guardian_id"] == user["id"]:
+        # Guardian leaving dissolves the circle (cascade activity for privacy).
+        await db.family_members.delete_many({"family_id": fam["id"]})
+        await db.activity_reports.delete_many({"family_id": fam["id"]})
+        await db.families.delete_one({"id": fam["id"]})
+        return {"left": True, "dissolved": True}
+    await db.family_members.delete_one({"user_id": user["id"], "family_id": fam["id"]})
+    await db.activity_reports.delete_many({"family_id": fam["id"], "user_id": user["id"]})
+    return {"left": True}
+
+
+@api.delete("/family/members/{member_id}")
+async def remove_member(member_id: str, user: dict = Depends(current_user)):
+    fam = await _my_family(user["id"])
+    if not fam or fam["guardian_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the guardian can remove members.")
+    m = await db.family_members.find_one({"id": member_id, "family_id": fam["id"]})
+    if not m or m["role"] == "guardian":
+        raise HTTPException(status_code=400, detail="Cannot remove this member.")
+    await db.family_members.delete_one({"id": member_id})
+    await db.activity_reports.delete_many({"family_id": fam["id"], "user_id": m["user_id"]})
+    return {"removed": True}
+
+
+@api.post("/me/status")
+async def push_status(payload: StatusIn, user: dict = Depends(current_user)):
+    upd = {"user_id": user["id"], "recorded_at": now_utc()}
+    if payload.battery is not None:
+        upd["battery"] = payload.battery
+    transitions = []
+    if payload.latitude is not None and payload.longitude is not None:
+        upd["latitude"] = payload.latitude
+        upd["longitude"] = payload.longitude
+    await db.user_locations.update_one({"user_id": user["id"]}, {"$set": upd}, upsert=True)
+    if payload.latitude is not None and payload.longitude is not None:
+        transitions = await _evaluate_geofences(user, payload.latitude, payload.longitude)
+    return {"ok": True, "transitions": transitions}
+
+
+@api.post("/family/activity")
+@rate_limit("60/minute")
+async def report_activity(request: Request, payload: ActivityIn, user: dict = Depends(current_user)):
+    fm = await db.family_members.find_one({"user_id": user["id"]})
+    if not fm:
+        raise HTTPException(status_code=400, detail="Join a family circle first.")
+    if not fm.get("share_activity", True):
+        return {"stored": False, "reason": "activity sharing off"}
+    doc = {"id": new_id(), "family_id": fm["family_id"], "user_id": user["id"],
+           "type": payload.type, "app_name": payload.app_name, "seconds": payload.seconds,
+           "note": payload.note, "battery": payload.battery, "created_at": now_utc()}
+    await db.activity_reports.insert_one(dict(doc))
+    return {"stored": True}
+
+
+@api.get("/family/members/{member_id}/activity")
+async def member_activity(member_id: str, user: dict = Depends(current_user), limit: int = 50):
+    fam = await _my_family(user["id"])
+    if not fam:
+        raise HTTPException(status_code=404, detail="Not in a family circle.")
+    m = await db.family_members.find_one({"id": member_id, "family_id": fam["id"]})
+    if not m:
+        raise HTTPException(status_code=404, detail="Member not found.")
+    # Only the guardian (or the member themselves) may read, and only if shared.
+    if user["id"] != m["user_id"] and fam["guardian_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Not allowed.")
+    if not m.get("share_activity", True) and user["id"] != m["user_id"]:
+        return {"shared": False, "items": []}
+    items = []
+    async for a in db.activity_reports.find({"user_id": m["user_id"]}).sort("created_at", -1).limit(min(limit, 200)):
+        items.append(clean(a))
+    # Aggregate screen-time / app-usage totals for today.
+    today = now_utc().replace(hour=0, minute=0, second=0, microsecond=0)
+    totals = {}
+    async for a in db.activity_reports.find({"user_id": m["user_id"], "type": {"$in": ["app_usage", "screen_time"]}, "created_at": {"$gte": today}}):
+        key = a.get("app_name") or a.get("type")
+        totals[key] = totals.get(key, 0) + (a.get("seconds") or 0)
+    return {"shared": True, "member_name": m.get("name"), "items": items, "today_totals": totals}
+
+
+
+
 
 
 

@@ -97,6 +97,9 @@ export default function Admin() {
           <Link to="/admin/integrations" className="glass glass-hover card-pad" data-testid="link-admin-integrations" style={{ textDecoration: "none", color: "inherit" }}>
             <HardDrive size={22} color="#22d3ee" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Integrations</h3><p className="muted" style={{ fontSize: 13 }}>Configure Google Drive backup & other keys</p>
           </Link>
+          <Link to="/admin/intruder" className="glass glass-hover card-pad" data-testid="link-admin-intruder" style={{ textDecoration: "none", color: "inherit" }}>
+            <ShieldAlert size={22} color="#ff3b5c" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Intruder captures</h3><p className="muted" style={{ fontSize: 13 }}>Theft-protection photos from all users' devices</p>
+          </Link>
         </div>
 
         <div className="grid grid-4" style={{ marginBottom: 16 }}>

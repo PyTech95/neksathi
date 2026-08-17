@@ -38,8 +38,12 @@ import LiveView from "@/pages/LiveView";
 import Community from "@/pages/Community";
 import StolenPhone from "@/pages/StolenPhone";
 import SafeZones from "@/pages/SafeZones";
+import TheftProtection from "@/pages/TheftProtection";
+import IntruderView from "@/pages/IntruderView";
+import Family from "@/pages/Family";
 import AdminComms from "@/pages/AdminComms";
 import AdminIntegrations from "@/pages/AdminIntegrations";
+import AdminIntruder from "@/pages/AdminIntruder";
 import PersonaLanding from "@/pages/PersonaLanding";
 import OrgDashboard from "@/pages/OrgDashboard";
 import AdminOrgs from "@/pages/AdminOrgs";
@@ -94,6 +98,9 @@ function Shell() {
           <Route path="/community" element={<Protected><Community /></Protected>} />
           <Route path="/stolen-phone" element={<Protected><StolenPhone /></Protected>} />
           <Route path="/safe-zones" element={<Protected><SafeZones /></Protected>} />
+          <Route path="/theft-protection" element={<Protected><TheftProtection /></Protected>} />
+          <Route path="/family" element={<Protected><Family /></Protected>} />
+          <Route path="/intruder/:token" element={<IntruderView />} />
           <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
           <Route path="/admin/qr" element={<Protected adminOnly><AdminQR /></Protected>} />
           <Route path="/admin/dealers" element={<Protected adminOnly><AdminDealers /></Protected>} />
@@ -105,6 +112,7 @@ function Shell() {
           <Route path="/admin/calls" element={<Protected adminOnly><AdminCalls /></Protected>} />
           <Route path="/admin/comms" element={<Protected adminOnly><AdminComms /></Protected>} />
           <Route path="/admin/integrations" element={<Protected adminOnly><AdminIntegrations /></Protected>} />
+          <Route path="/admin/intruder" element={<Protected adminOnly><AdminIntruder /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
