@@ -33,6 +33,8 @@ import Contact from "@/pages/Contact";
 import AdminContacts from "@/pages/AdminContacts";
 import AdminCalls from "@/pages/AdminCalls";
 import Settings from "@/pages/Settings";
+import Safety from "@/pages/Safety";
+import LiveView from "@/pages/LiveView";
 import PersonaLanding from "@/pages/PersonaLanding";
 import OrgDashboard from "@/pages/OrgDashboard";
 import AdminOrgs from "@/pages/AdminOrgs";
@@ -68,6 +70,7 @@ function Shell() {
           <Route path="/c/:qrId" element={<PublicCard />} />
           <Route path="/invite/:token" element={<Invite />} />
           <Route path="/claim/:serial" element={<Claim />} />
+          <Route path="/live/:token" element={<LiveView />} />
           <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
           <Route path="/dealer" element={<Protected dealerOnly><DealerDashboard /></Protected>} />
           <Route path="/org" element={<Protected orgOnly><OrgDashboard /></Protected>} />
@@ -82,6 +85,7 @@ function Shell() {
           <Route path="/incidents" element={<Protected><Incidents /></Protected>} />
           <Route path="/support" element={<Protected><Support /></Protected>} />
           <Route path="/settings" element={<Protected><Settings /></Protected>} />
+          <Route path="/safety" element={<Protected><Safety /></Protected>} />
           <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
           <Route path="/admin/qr" element={<Protected adminOnly><AdminQR /></Protected>} />
           <Route path="/admin/dealers" element={<Protected adminOnly><AdminDealers /></Protected>} />

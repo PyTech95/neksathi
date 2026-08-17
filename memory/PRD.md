@@ -211,3 +211,18 @@ Original app has ~60 screens; remaining web parity targets:
 - comms.py: `whatsapp_otp_live()`, `send_whatsapp_otp(phone, code)`. server.py: WhatsApp branch in `/api/auth/otp/request` (channel="whatsapp"), verify uses local store.
 - env set: MSG91_WHATSAPP_NUMBER=15553779998, MSG91_WHATSAPP_OTP_TEMPLATE=neksathi1, MSG91_WHATSAPP_LANG=en. Namespace not required for this account.
 - STILL MOCK: SMS OTP (MSG91_OTP_TEMPLATE_ID/SMS_FLOW_ID empty — "SMS later"), general WhatsApp alerts, Stripe payments.
+
+## Update 2026-06 — Personal Safety Suite (Phase 1) — from 26-feature roadmap
+New "Safety Center" at /safety (nav link "SOS"). All backend curl-tested + frontend screenshot-verified.
+DONE:
+- #1 One-Tap SOS — big panic button, 3s countdown, grabs GPS, fans out to all trusted contacts (WhatsApp+SMS+push) w/ Google Maps link. POST /api/me/sos, GET /api/me/sos-events. Collection: sos_events.
+- #5 + #18 Trusted/Emergency Contacts (UNLIMITED) — full CRUD, primary flag. /api/me/emergency-contacts (GET/POST/PUT/DELETE). Collection: emergency_contacts.
+- #6 Important Helplines — tap-to-call directory (112,100,101,102,108,1091,1098,1930,1073,14567,139).
+- #17 Emergency Siren — Web Audio wailing siren (no asset), start/stop.
+- #3 Live Location Sharing — revocable public link /live/:token (Leaflet map, 5s auto-refresh). Sharer device posts /api/me/location via watchPosition. Endpoints: POST /api/me/live-share, GET /api/me/live-shares, POST /api/me/live-share/{id}/stop, POST /api/me/location, GET /api/public/live/{token}. Collections: live_shares, user_locations.
+- #4 Emergency Notifications — already existed; now also driven by SOS fan-out.
+Files: backend/server.py (Personal Safety + Live Location sections), frontend/src/pages/Safety.jsx, LiveView.jsx; routes in App.js; nav in TopNav.jsx.
+
+REMAINING from 26-list (buildable on web): #7 Nearby Police (needs Maps/Places API), #8 Stolen-Mobile FIR guide, #9 Safe Link Checker (needs URL-reputation API), #10 Unsafe File Checker (needs file-scan API), #16 Google Drive upload for SOS evidence, #24 Geo-Fencing/Safe Zones, #26 100-Member Community Group, #14 Surround Audio, #15 Emergency Photo (personal).
+REMAINING comms: live WhatsApp incident alerts (#4 upgrade — set MSG91_WHATSAPP_TEMPLATE), Delivery Reports dashboard, OTP Resend Timer, SMS OTP fallback.
+MOBILE-ONLY (need Expo app): #11,#19,#20,#21,#22,#23,#25.

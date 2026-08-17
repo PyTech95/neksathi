@@ -959,6 +959,234 @@ async def delete_contact(vehicle_id: str, contact_id: str, user: dict = Depends(
 
 
 # ---------------------------------------------------------------------------
+# Personal Safety — User-level Emergency (Trusted) Contacts + One-Tap SOS
+# Unlimited per-user contacts (unlike vehicle contacts capped at 4). SOS fans
+# out WhatsApp + SMS + push with a live Google-Maps location link.
+# ---------------------------------------------------------------------------
+
+class EmergencyContactIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    phone: str = Field(min_length=6, max_length=20)
+    relation: Optional[str] = Field(default=None, max_length=40)
+    is_primary: bool = False
+
+
+class EmergencyContactOut(BaseModel):
+    id: str
+    name: str
+    phone: str
+    relation: Optional[str] = None
+    is_primary: bool = False
+    created_at: datetime
+
+
+class SOSTriggerIn(BaseModel):
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    message: Optional[str] = Field(default=None, max_length=280)
+
+
+class SOSEventOut(BaseModel):
+    id: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    message: Optional[str] = None
+    notified: int = 0
+    channels: List[str] = []
+    created_at: datetime
+
+
+@api.get("/me/emergency-contacts", response_model=List[EmergencyContactOut])
+async def list_emergency_contacts(user: dict = Depends(current_user)):
+    items = []
+    async for c in db.emergency_contacts.find({"user_id": user["id"]}).sort([("is_primary", -1), ("created_at", 1)]):
+        items.append(EmergencyContactOut(**clean(c)))
+    return items
+
+
+@api.post("/me/emergency-contacts", response_model=EmergencyContactOut)
+async def add_emergency_contact(payload: EmergencyContactIn, user: dict = Depends(current_user)):
+    if payload.is_primary:
+        await db.emergency_contacts.update_many({"user_id": user["id"]}, {"$set": {"is_primary": False}})
+    doc = {"id": new_id(), "user_id": user["id"], "created_at": now_utc(), **payload.model_dump()}
+    await db.emergency_contacts.insert_one(dict(doc))
+    return EmergencyContactOut(**clean(doc))
+
+
+@api.put("/me/emergency-contacts/{contact_id}", response_model=EmergencyContactOut)
+async def update_emergency_contact(contact_id: str, payload: EmergencyContactIn, user: dict = Depends(current_user)):
+    c = await db.emergency_contacts.find_one({"id": contact_id, "user_id": user["id"]})
+    if not c:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    if payload.is_primary:
+        await db.emergency_contacts.update_many({"user_id": user["id"]}, {"$set": {"is_primary": False}})
+    await db.emergency_contacts.update_one({"id": contact_id}, {"$set": payload.model_dump()})
+    c.update(payload.model_dump())
+    return EmergencyContactOut(**clean(c))
+
+
+@api.delete("/me/emergency-contacts/{contact_id}")
+async def delete_emergency_contact(contact_id: str, user: dict = Depends(current_user)):
+    r = await db.emergency_contacts.delete_one({"id": contact_id, "user_id": user["id"]})
+    if not r.deleted_count:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    return {"deleted": True}
+
+
+@api.post("/me/sos", response_model=SOSEventOut)
+@rate_limit("6/minute")
+async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depends(current_user)):
+    contacts = []
+    async for c in db.emergency_contacts.find({"user_id": user["id"]}):
+        contacts.append(clean(c))
+    loc_link = ""
+    if payload.latitude is not None and payload.longitude is not None:
+        loc_link = f" Location: https://maps.google.com/?q={payload.latitude},{payload.longitude}"
+    who = user.get("name") or "A Nek Sathi user"
+    extra = f" Message: {payload.message}" if payload.message else ""
+    body = f"🆘 SOS! {who} needs urgent help.{loc_link}{extra} — sent via Nek Sathi."
+    channels: set[str] = set()
+    notified = 0
+    prefs = _prefs(user)
+    for c in contacts:
+        phone = c.get("phone")
+        if not phone:
+            continue
+        notified += 1
+        try:
+            wa = await notify_whatsapp(phone, body, meta={"kind": "sos", "user_id": user["id"]})
+            if wa.get("status") in ("sent", "mock"):
+                channels.add("whatsapp")
+        except Exception as _e:
+            log.warning("sos whatsapp failed: %s", _e)
+        try:
+            sm = await send_sms(phone, body, meta={"kind": "sos", "user_id": user["id"]})
+            if sm.get("status") in ("sent", "mock"):
+                channels.add("sms")
+        except Exception as _e:
+            log.warning("sos sms failed: %s", _e)
+    # Push the user's own devices (and any family accounts sharing) as a record.
+    try:
+        if prefs.get("push"):
+            await send_push(recipients=[user["id"]], data={
+                "title": "🆘 SOS activated",
+                "message": f"Alert sent to {notified} emergency contact(s).",
+                "action_url": "/safety",
+            })
+            channels.add("push")
+    except Exception as _e:
+        log.warning("sos push failed: %s", _e)
+    doc = {
+        "id": new_id(), "user_id": user["id"],
+        "latitude": payload.latitude, "longitude": payload.longitude,
+        "message": payload.message, "notified": notified,
+        "channels": sorted(channels), "created_at": now_utc(),
+    }
+    await db.sos_events.insert_one(dict(doc))
+    return SOSEventOut(**clean(doc))
+
+
+@api.get("/me/sos-events", response_model=List[SOSEventOut])
+async def list_sos_events(user: dict = Depends(current_user), limit: int = 30):
+    items = []
+    async for e in db.sos_events.find({"user_id": user["id"]}).sort("created_at", -1).limit(min(limit, 100)):
+        items.append(SOSEventOut(**clean(e)))
+    return items
+
+
+# ---------------------------------------------------------------------------
+# Live Location Sharing — a personal, revocable public link that shows the
+# user's live position on a map. The sharer's device posts /me/location pings;
+# viewers open /live/{token} (no auth) which reads the latest ping.
+# ---------------------------------------------------------------------------
+
+class LiveShareStartIn(BaseModel):
+    duration_min: int = Field(default=60, ge=5, le=1440)
+    label: Optional[str] = Field(default=None, max_length=60)
+
+
+class LiveShareOut(BaseModel):
+    id: str
+    token: str
+    label: Optional[str] = None
+    active: bool = True
+    expires_at: datetime
+    created_at: datetime
+
+
+class UserLocationIn(BaseModel):
+    latitude: float
+    longitude: float
+    accuracy: Optional[float] = None
+    speed_kmh: Optional[float] = None
+
+
+@api.post("/me/live-share", response_model=LiveShareOut)
+async def start_live_share(payload: LiveShareStartIn, user: dict = Depends(current_user)):
+    doc = {
+        "id": new_id(), "user_id": user["id"], "token": uuid.uuid4().hex,
+        "label": payload.label, "active": True,
+        "expires_at": now_utc() + timedelta(minutes=payload.duration_min),
+        "created_at": now_utc(),
+    }
+    await db.live_shares.insert_one(dict(doc))
+    return LiveShareOut(**clean(doc))
+
+
+@api.get("/me/live-shares", response_model=List[LiveShareOut])
+async def list_live_shares(user: dict = Depends(current_user)):
+    items = []
+    async for s in db.live_shares.find({"user_id": user["id"], "active": True}).sort("created_at", -1):
+        items.append(LiveShareOut(**clean(s)))
+    return items
+
+
+@api.post("/me/live-share/{share_id}/stop")
+async def stop_live_share(share_id: str, user: dict = Depends(current_user)):
+    r = await db.live_shares.update_one({"id": share_id, "user_id": user["id"]}, {"$set": {"active": False}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Share not found")
+    return {"stopped": True}
+
+
+@api.post("/me/location")
+async def push_user_location(payload: UserLocationIn, user: dict = Depends(current_user)):
+    await db.user_locations.update_one(
+        {"user_id": user["id"]},
+        {"$set": {"user_id": user["id"], "latitude": payload.latitude, "longitude": payload.longitude,
+                  "accuracy": payload.accuracy, "speed_kmh": payload.speed_kmh, "recorded_at": now_utc()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.get("/public/live/{token}")
+async def public_live_location(token: str):
+    s = await db.live_shares.find_one({"token": token})
+    if not s:
+        raise HTTPException(status_code=404, detail="Link not found")
+    exp = s.get("expires_at")
+    if exp and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    expired = bool(exp and exp < now_utc())
+    active = bool(s.get("active")) and not expired
+    owner = await db.users.find_one({"id": s["user_id"]})
+    last = await db.user_locations.find_one({"user_id": s["user_id"]})
+    out = {
+        "label": s.get("label"),
+        "name": ((owner or {}).get("name") or "Nek Sathi user").split(" ")[0],
+        "active": active, "expired": expired,
+        "expires_at": s.get("expires_at"),
+        "last": None,
+    }
+    if active and last:
+        out["last"] = {"latitude": last["latitude"], "longitude": last["longitude"], "recorded_at": last["recorded_at"]}
+    return out
+
+
+
+
+# ---------------------------------------------------------------------------
 # Location & track routes
 # ---------------------------------------------------------------------------
 
