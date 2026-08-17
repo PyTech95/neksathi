@@ -26,6 +26,7 @@ import secrets
 import stripe
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response, status, UploadFile, File
+from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
@@ -1090,6 +1091,8 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
         "photo_base64": payload.photo_base64, "has_photo": bool(payload.photo_base64),
     }
     await db.sos_events.insert_one(dict(doc))
+    if payload.photo_base64:
+        asyncio.create_task(_gdrive_autobackup(user["id"], payload.photo_base64, f"sos-{doc['id']}.jpg", "image/jpeg"))
     return SOSEventOut(**{k: v for k, v in clean(doc).items() if k != "photo_base64"})
 
 
@@ -1243,6 +1246,7 @@ async def add_audio_evidence(request: Request, payload: AudioEvidenceIn, user: d
            "duration_ms": payload.duration_ms, "mime": payload.mime or "audio/webm",
            "sos_event_id": payload.sos_event_id, "created_at": now_utc()}
     await db.audio_evidence.insert_one(dict(doc))
+    asyncio.create_task(_gdrive_autobackup(user["id"], payload.audio_base64, f"sos-audio-{doc['id']}.webm", "audio/webm"))
     return AudioEvidenceOut(**{k: v for k, v in clean(doc).items() if k != "audio_base64"})
 
 
@@ -1333,6 +1337,257 @@ async def list_geofence_events(user: dict = Depends(current_user), limit: int = 
     async for e in db.geofence_events.find({"user_id": user["id"]}).sort("created_at", -1).limit(min(limit, 100)):
         items.append(GeofenceEventOut(**clean(e)))
     return items
+
+
+# ---------------------------------------------------------------------------
+# Google Drive Backup (#16) — per-user OAuth. Each user connects THEIR OWN
+# Drive; SOS photos + audio evidence auto-upload to a "Nek Sathi" folder.
+# Uses drive.file scope (least privilege). Graceful when not configured.
+# ---------------------------------------------------------------------------
+from google.oauth2.credentials import Credentials as GCredentials
+from google_auth_oauthlib.flow import Flow as GFlow
+from googleapiclient.discovery import build as gbuild
+from googleapiclient.http import MediaInMemoryUpload
+from google.auth.transport.requests import Request as GAuthRequest
+
+GDRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+
+
+async def _gdrive_cfg() -> dict:
+    """Google Drive OAuth config — admin-managed (DB) overrides env fallback."""
+    doc = await db.app_settings.find_one({"key": "google_drive"}) or {}
+    default_redirect = os.environ.get("PUBLIC_APP_URL", "").rstrip("/") + "/api/google-drive/oauth/callback"
+    default_front = (os.environ.get("PUBLIC_APP_URL", "")).rstrip("/")
+    return {
+        "client_id": doc.get("client_id") or os.environ.get("GOOGLE_CLIENT_ID") or "",
+        "client_secret": doc.get("client_secret") or os.environ.get("GOOGLE_CLIENT_SECRET") or "",
+        "redirect_uri": doc.get("redirect_uri") or os.environ.get("GOOGLE_OAUTH_REDIRECT_URI") or default_redirect,
+        "frontend_url": (doc.get("frontend_url") or os.environ.get("FRONTEND_URL") or default_front).rstrip("/"),
+    }
+
+
+def _gdrive_client_config(cfg: dict) -> dict:
+    return {"web": {
+        "client_id": cfg["client_id"],
+        "client_secret": cfg["client_secret"],
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "redirect_uris": [cfg["redirect_uri"]],
+    }}
+
+
+def _decode_data_url(s: str) -> bytes:
+    if "," in s and s.strip().startswith("data:"):
+        s = s.split(",", 1)[1]
+    return base64.b64decode(s)
+
+
+def _gdrive_upload_sync(token_doc: dict, data: bytes, filename: str, mime: str, client_id: str, client_secret: str) -> dict:
+    creds = GCredentials(
+        token=token_doc.get("access_token"), refresh_token=token_doc["refresh_token"],
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=client_id, client_secret=client_secret,
+        scopes=GDRIVE_SCOPES,
+    )
+    if not creds.valid or creds.expired:
+        creds.refresh(GAuthRequest())
+    service = gbuild("drive", "v3", credentials=creds, cache_discovery=False)
+    folder_id = token_doc.get("folder_id")
+    if not folder_id:
+        resp = service.files().list(
+            q="name='Nek Sathi' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            spaces="drive", fields="files(id,name)", pageSize=5).execute()
+        folder_id = resp["files"][0]["id"] if resp.get("files") else service.files().create(
+            body={"name": "Nek Sathi", "mimeType": "application/vnd.google-apps.folder"}, fields="id").execute()["id"]
+    media = MediaInMemoryUpload(data, mimetype=mime, resumable=False)
+    result = service.files().create(
+        body={"name": filename, "parents": [folder_id], "mimeType": mime},
+        media_body=media, fields="id,name,webViewLink").execute()
+    return {"access_token": creds.token, "folder_id": folder_id, "file": result}
+
+
+async def _gdrive_upload(user_id: str, data: bytes, filename: str, mime: str) -> dict:
+    cfg = await _gdrive_cfg()
+    if not (cfg["client_id"] and cfg["client_secret"]):
+        raise HTTPException(status_code=400, detail="Google Drive is not configured.")
+    td = await db.google_drive_tokens.find_one({"user_id": user_id})
+    if not td or not td.get("refresh_token"):
+        raise HTTPException(status_code=409, detail="Connect Google Drive first.")
+    try:
+        out = await asyncio.to_thread(_gdrive_upload_sync, td, data, filename, mime, cfg["client_id"], cfg["client_secret"])
+    except Exception as e:
+        msg = str(e)
+        if "invalid_grant" in msg or "unauthorized" in msg.lower():
+            await db.google_drive_tokens.update_one({"user_id": user_id}, {"$set": {"status": "reauth_required"}})
+            raise HTTPException(status_code=401, detail="Google Drive access expired — please reconnect.")
+        raise HTTPException(status_code=502, detail="Google Drive upload failed.")
+    await db.google_drive_tokens.update_one(
+        {"user_id": user_id}, {"$set": {"access_token": out["access_token"], "folder_id": out["folder_id"],
+                                         "status": "connected", "updated_at": now_utc()}})
+    return out["file"]
+
+
+async def _gdrive_autobackup(user_id: str, data_url: Optional[str], filename: str, mime: str):
+    """Fire-and-forget: silently upload if the user has Drive connected."""
+    try:
+        td = await db.google_drive_tokens.find_one({"user_id": user_id})
+        if not td or not td.get("refresh_token") or not data_url:
+            return
+        cfg = await _gdrive_cfg()
+        if not (cfg["client_id"] and cfg["client_secret"]):
+            return
+        data = _decode_data_url(data_url)
+        out = await asyncio.to_thread(_gdrive_upload_sync, td, data, filename, mime, cfg["client_id"], cfg["client_secret"])
+        await db.google_drive_tokens.update_one(
+            {"user_id": user_id}, {"$set": {"access_token": out["access_token"], "folder_id": out["folder_id"]}})
+    except Exception as e:
+        log.warning("gdrive autobackup failed for %s: %s", user_id, e)
+
+
+class DriveEvidenceIn(BaseModel):
+    filename: str = Field(min_length=1, max_length=120)
+    mime_type: str = Field(min_length=3, max_length=60)
+    data_base64: str = Field(min_length=8)
+
+
+@api.get("/google-drive/status")
+async def gdrive_status(user: dict = Depends(current_user)):
+    cfg = await _gdrive_cfg()
+    td = await db.google_drive_tokens.find_one({"user_id": user["id"]})
+    connected = bool(td and td.get("refresh_token") and td.get("status") != "reauth_required")
+    return {"configured": bool(cfg["client_id"] and cfg["client_secret"]), "connected": connected,
+            "status": (td or {}).get("status") if td else None}
+
+
+@api.get("/google-drive/connect-ticket")
+async def gdrive_connect_ticket(user: dict = Depends(current_user)):
+    cfg = await _gdrive_cfg()
+    if not (cfg["client_id"] and cfg["client_secret"]):
+        raise HTTPException(status_code=400, detail="Google Drive is not configured.")
+    ticket = jwt.encode(
+        {"sub": user["id"], "typ": "gdrive_connect", "exp": datetime.now(timezone.utc) + timedelta(minutes=5)},
+        JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return {"ticket": ticket}
+
+
+@api.get("/google-drive/connect")
+async def gdrive_connect(ticket: str):
+    cfg = await _gdrive_cfg()
+    if not (cfg["client_id"] and cfg["client_secret"]):
+        raise HTTPException(status_code=400, detail="Google Drive is not configured.")
+    try:
+        payload = jwt.decode(ticket, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("typ") != "gdrive_connect":
+            raise ValueError("bad ticket")
+        user_id = payload["sub"]
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid or expired connect link.")
+    state = secrets.token_urlsafe(32)
+    await db.google_oauth_states.update_one(
+        {"state_hash": hashlib.sha256(state.encode()).hexdigest()},
+        {"$set": {"state_hash": hashlib.sha256(state.encode()).hexdigest(), "user_id": user_id,
+                  "expires_at": now_utc() + timedelta(minutes=10), "used": False}}, upsert=True)
+    flow = GFlow.from_client_config(_gdrive_client_config(cfg), scopes=GDRIVE_SCOPES, state=state)
+    flow.redirect_uri = cfg["redirect_uri"]
+    url, _ = flow.authorization_url(access_type="offline", prompt="consent", include_granted_scopes="true")
+    return RedirectResponse(url)
+
+
+@api.get("/google-drive/oauth/callback")
+async def gdrive_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    cfg = await _gdrive_cfg()
+    front = cfg["frontend_url"]
+    if error or not code or not state:
+        return RedirectResponse(f"{front}/settings?drive=denied")
+    sd = await db.google_oauth_states.find_one_and_update(
+        {"state_hash": hashlib.sha256(state.encode()).hexdigest(), "used": False,
+         "expires_at": {"$gt": now_utc()}}, {"$set": {"used": True}})
+    if not sd:
+        return RedirectResponse(f"{front}/settings?drive=error")
+    try:
+        flow = GFlow.from_client_config(_gdrive_client_config(cfg), scopes=GDRIVE_SCOPES, state=state)
+        flow.redirect_uri = cfg["redirect_uri"]
+        await asyncio.to_thread(flow.fetch_token, code=code)
+        creds = flow.credentials
+    except Exception as e:
+        log.warning("gdrive token exchange failed: %s", e)
+        return RedirectResponse(f"{front}/settings?drive=error")
+    old = await db.google_drive_tokens.find_one({"user_id": sd["user_id"]})
+    refresh_token = creds.refresh_token or (old or {}).get("refresh_token")
+    if not refresh_token:
+        return RedirectResponse(f"{front}/settings?drive=norefresh")
+    await db.google_drive_tokens.update_one(
+        {"user_id": sd["user_id"]},
+        {"$set": {"user_id": sd["user_id"], "access_token": creds.token, "refresh_token": refresh_token,
+                  "scope": " ".join(creds.scopes or GDRIVE_SCOPES), "status": "connected",
+                  "folder_id": (old or {}).get("folder_id"), "updated_at": now_utc()}}, upsert=True)
+    return RedirectResponse(f"{front}/settings?drive=connected")
+
+
+@api.delete("/google-drive/disconnect")
+async def gdrive_disconnect(user: dict = Depends(current_user)):
+    td = await db.google_drive_tokens.find_one({"user_id": user["id"]})
+    if td and td.get("refresh_token"):
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                await c.post("https://oauth2.googleapis.com/revoke", params={"token": td["refresh_token"]})
+        except Exception:
+            pass
+    await db.google_drive_tokens.delete_one({"user_id": user["id"]})
+    return {"disconnected": True}
+
+
+@api.post("/google-drive/evidence")
+async def gdrive_evidence(payload: DriveEvidenceIn, user: dict = Depends(current_user)):
+    try:
+        raw = _decode_data_url(payload.data_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid file data.")
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file.")
+    file = await _gdrive_upload(user["id"], raw, payload.filename, payload.mime_type)
+    return {"uploaded": True, "file": file}
+
+
+class GDriveConfigIn(BaseModel):
+    client_id: str = Field(default="", max_length=200)
+    client_secret: Optional[str] = Field(default=None, max_length=200)
+    redirect_uri: str = Field(default="", max_length=300)
+    frontend_url: str = Field(default="", max_length=200)
+
+
+@api.get("/admin/integrations/google-drive")
+async def admin_get_gdrive(_: dict = Depends(require_admin)):
+    doc = await db.app_settings.find_one({"key": "google_drive"}) or {}
+    cfg = await _gdrive_cfg()
+    return {
+        "client_id": doc.get("client_id", ""),
+        "has_secret": bool(doc.get("client_secret") or os.environ.get("GOOGLE_CLIENT_SECRET")),
+        "redirect_uri": doc.get("redirect_uri") or cfg["redirect_uri"],
+        "frontend_url": doc.get("frontend_url") or cfg["frontend_url"],
+        "default_redirect_uri": os.environ.get("PUBLIC_APP_URL", "").rstrip("/") + "/api/google-drive/oauth/callback",
+        "configured": bool(cfg["client_id"] and cfg["client_secret"]),
+    }
+
+
+@api.put("/admin/integrations/google-drive")
+async def admin_set_gdrive(payload: GDriveConfigIn, _: dict = Depends(require_admin)):
+    update = {
+        "key": "google_drive",
+        "client_id": payload.client_id.strip(),
+        "redirect_uri": payload.redirect_uri.strip(),
+        "frontend_url": payload.frontend_url.strip(),
+        "updated_at": now_utc(),
+    }
+    # Only overwrite the secret when a new (non-empty) value is provided.
+    if payload.client_secret:
+        update["client_secret"] = payload.client_secret.strip()
+    await db.app_settings.update_one({"key": "google_drive"}, {"$set": update}, upsert=True)
+    cfg = await _gdrive_cfg()
+    return {"saved": True, "configured": bool(cfg["client_id"] and cfg["client_secret"])}
+
+
+
 
 
 @api.get("/public/live/{token}")

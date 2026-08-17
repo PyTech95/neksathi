@@ -253,3 +253,19 @@ Files: backend/server.py (safe-zones, geofence, audio-evidence, sos photo, _eval
 STILL PENDING — NEEDS CREDS: #16 Google Drive upload (OAuth), SMS OTP fallback (DLT SMS template). NEEDS KEY: activate #9 Safe Link + #10 File Checker with VIRUSTOTAL_API_KEY.
 MOBILE-ONLY: #11,#19,#20,#21,#22,#23,#25.
 NOTE (non-blocking, deferred per scope): server.py ~5.3k lines could be split into routers; safe_zones could use 2dsphere index at scale.
+
+## Update 2026-06 — Google Drive Backup (#16) — BUILT, awaiting OAuth credentials
+Per-user OAuth (drive.file scope). Each user connects their OWN Drive; SOS photos + audio auto-upload (fire-and-forget) to a private "Nek Sathi" folder.
+- Backend (server.py Google Drive section): GET /api/google-drive/status, GET /api/google-drive/connect-ticket (auth, 5-min JWT ticket), GET /api/google-drive/connect?ticket= (redirects to Google), GET /api/google-drive/oauth/callback (exchange + store tokens, redirect FRONTEND_URL/settings?drive=), DELETE /api/google-drive/disconnect (revokes), POST /api/google-drive/evidence (manual upload). Auto-backup wired into trigger_sos (photo) + add_audio_evidence (audio) via asyncio.create_task(_gdrive_autobackup). Collections: google_drive_tokens, google_oauth_states. Sync google client calls run via asyncio.to_thread.
+- Frontend: GoogleDriveCard in Settings.jsx (connect via ticket redirect, disconnect, status, reads ?drive= query). Graceful "not set up" when unconfigured.
+- Libs added (requirements.txt): google-auth, google-auth-oauthlib, google-api-python-client, google-auth-httplib2.
+- env placeholders (backend/.env): GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_OAUTH_REDIRECT_URI, FRONTEND_URL (all empty).
+- NEEDS FROM USER: Google Cloud OAuth Web Client ID + Secret; register redirect URIs (preview: https://qrscan-preview-1.preview.emergentagent.com/api/google-drive/oauth/callback ; prod: https://neksathi.in/api/google-drive/oauth/callback). Enable Drive API, consent screen (External + test users), scope drive.file.
+- Verified graceful paths via curl (status configured:false, connect-ticket 400, evidence 409) + Settings card screenshot.
+
+## Update 2026-06 — Google Drive #16 made ADMIN-CONFIGURABLE (user request)
+- Config now stored in Mongo collection app_settings {key:'google_drive', client_id, client_secret, redirect_uri, frontend_url} with env fallback. Helper _gdrive_cfg() merges DB over env; all gdrive endpoints + _gdrive_upload_sync now take config (no more hardcoded env reads).
+- Admin endpoints: GET/PUT /api/admin/integrations/google-drive (require_admin). GET masks secret (has_secret bool) + returns default_redirect_uri. PUT only overwrites secret when a non-empty value given.
+- Admin UI: /admin/integrations (AdminIntegrations.jsx) — shows redirect URIs to register (copy buttons: preview + neksathi.in prod), Drive-API/scope note, and credential form. Linked from Admin hub (link-admin-integrations, HardDrive icon). Verified: GET/PUT curl (configured toggles true), status reflects config, admin page screenshot.
+- Still needs: app owner to paste real Google OAuth Client ID + Secret in Admin → Integrations (test creds were saved then cleared). Then users connect their own Drive from Settings → Google Drive backup.
+ALL 26-feature web-buildable items now BUILT. Remaining activation: VirusTotal key (#9,#10 via .env), Google OAuth creds (#16 via Admin→Integrations), SMS OTP fallback (DLT template). Mobile-only: #11,19,20,21,22,23,25.

@@ -39,6 +39,7 @@ import Community from "@/pages/Community";
 import StolenPhone from "@/pages/StolenPhone";
 import SafeZones from "@/pages/SafeZones";
 import AdminComms from "@/pages/AdminComms";
+import AdminIntegrations from "@/pages/AdminIntegrations";
 import PersonaLanding from "@/pages/PersonaLanding";
 import OrgDashboard from "@/pages/OrgDashboard";
 import AdminOrgs from "@/pages/AdminOrgs";
@@ -103,6 +104,7 @@ function Shell() {
           <Route path="/admin/orgs" element={<Protected adminOnly><AdminOrgs /></Protected>} />
           <Route path="/admin/calls" element={<Protected adminOnly><AdminCalls /></Protected>} />
           <Route path="/admin/comms" element={<Protected adminOnly><AdminComms /></Protected>} />
+          <Route path="/admin/integrations" element={<Protected adminOnly><AdminIntegrations /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

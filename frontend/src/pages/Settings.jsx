@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
-import api from "@/lib/api";
+import { useState, useRef, useEffect } from "react";
+import api, { API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2 } from "lucide-react";
+import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink } from "lucide-react";
 
 const DEFAULT_PREFS = { whatsapp: true, email: true, push: true, incident_alerts: true, speed_alerts: true, marketing: false };
 
@@ -21,6 +21,60 @@ function Toggle({ on, onClick, testid }) {
         background: on ? "linear-gradient(100deg,#7c3aed,#22d3ee)" : "rgba(255,255,255,.14)", position: "relative", transition: "background .2s" }}>
       <span style={{ position: "absolute", top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left .2s" }} />
     </button>
+  );
+}
+
+function GoogleDriveCard() {
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = async () => { try { setStatus((await api.get("/google-drive/status")).data); } catch (_) {} };
+  useEffect(() => {
+    load();
+    const p = new URLSearchParams(window.location.search).get("drive");
+    if (p === "connected") setMsg("Google Drive connected — evidence will back up automatically.");
+    else if (p === "denied") setMsg("Connection cancelled.");
+    else if (p === "norefresh") setMsg("Google didn't return a refresh token. Please remove Nek Sathi's access in your Google account and reconnect.");
+    else if (p === "error") setMsg("Something went wrong connecting Drive. Please try again.");
+    if (p) window.history.replaceState({}, "", "/settings");
+  }, []);
+
+  const connect = async () => {
+    setBusy(true); setMsg("");
+    try {
+      const r = await api.get("/google-drive/connect-ticket");
+      window.location.assign(`${API}/google-drive/connect?ticket=${encodeURIComponent(r.data.ticket)}`);
+    } catch (e) { setMsg(e?.response?.data?.detail || "Could not start Google connection."); setBusy(false); }
+  };
+  const disconnect = async () => {
+    if (!window.confirm("Disconnect Google Drive? Future evidence won't be backed up.")) return;
+    setBusy(true);
+    try { await api.delete("/google-drive/disconnect"); await load(); setMsg("Google Drive disconnected."); }
+    finally { setBusy(false); }
+  };
+
+  if (!status) return null;
+  const connected = status.connected;
+
+  return (
+    <div className="glass card-pad" style={{ padding: 26, marginBottom: 18 }} data-testid="gdrive-card">
+      <h2 style={{ fontSize: 20, marginBottom: 6 }}><HardDrive size={18} style={{ verticalAlign: "-3px" }} /> Google Drive backup</h2>
+      <p className="muted" style={{ fontSize: 13.5, marginTop: 0 }}>Connect your own Google Drive so SOS photos and audio evidence are safely backed up to a private "Nek Sathi" folder.</p>
+
+      {!status.configured ? (
+        <div className="glass" style={{ padding: "12px 14px", borderRadius: 10, fontSize: 13 }} data-testid="gdrive-unconfigured">Google Drive isn't set up on this server yet.</div>
+      ) : connected ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#34d399", fontWeight: 700 }} data-testid="gdrive-connected"><CheckCircle2 size={18} /> Connected</span>
+          <button className="btn btn-ghost btn-sm" onClick={disconnect} disabled={busy} data-testid="gdrive-disconnect-btn"><Unlink size={15} /> Disconnect</button>
+        </div>
+      ) : (
+        <button className="btn btn-primary" onClick={connect} disabled={busy} data-testid="gdrive-connect-btn">{busy ? <Loader2 size={16} className="spin" /> : <><Link2 size={16} /> Connect Google Drive</>}</button>
+      )}
+      {status.status === "reauth_required" && <p style={{ color: "#f5a524", fontSize: 13, marginTop: 10 }} data-testid="gdrive-reauth">Access expired — please reconnect.</p>}
+      {msg && <p style={{ color: "#22d3ee", fontSize: 13, marginTop: 10 }} data-testid="gdrive-msg">{msg}</p>}
+    </div>
   );
 }
 
@@ -127,6 +181,8 @@ export default function Settings() {
           {err && <p style={{ color: "var(--danger)", fontSize: 13, marginTop: 14 }} data-testid="settings-error">{err}</p>}
           <button className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16 }} data-testid="save-settings">{busy ? <Loader2 size={16} className="spin" /> : <Save size={16} />} {busy ? "Saving…" : "Save changes"}</button>
         </form>
+
+        <GoogleDriveCard />
 
         <form onSubmit={changePassword} className="glass card-pad" style={{ padding: 26 }}>
           <h2 style={{ fontSize: 20, marginBottom: 14 }}><KeyRound size={18} style={{ verticalAlign: "-3px" }} /> Change password</h2>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox, Mail, Building2, Phone, MessageSquare } from "lucide-react";
+import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox, Mail, Building2, Phone, MessageSquare, HardDrive } from "lucide-react";
 
 function Badge({ n }) {
   if (!n) return null;
@@ -93,6 +93,9 @@ export default function Admin() {
           </Link>
           <Link to="/admin/comms" className="glass glass-hover card-pad" data-testid="link-admin-comms" style={{ textDecoration: "none", color: "inherit" }}>
             <MessageSquare size={22} color="#25d366" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Delivery reports</h3><p className="muted" style={{ fontSize: 13 }}>WhatsApp & SMS delivery status for every alert</p>
+          </Link>
+          <Link to="/admin/integrations" className="glass glass-hover card-pad" data-testid="link-admin-integrations" style={{ textDecoration: "none", color: "inherit" }}>
+            <HardDrive size={22} color="#22d3ee" /><h3 style={{ fontSize: 18, margin: "8px 0 4px" }}>Integrations</h3><p className="muted" style={{ fontSize: 13 }}>Configure Google Drive backup & other keys</p>
           </Link>
         </div>
 
