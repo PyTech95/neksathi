@@ -226,3 +226,12 @@ Files: backend/server.py (Personal Safety + Live Location sections), frontend/sr
 REMAINING from 26-list (buildable on web): #7 Nearby Police (needs Maps/Places API), #8 Stolen-Mobile FIR guide, #9 Safe Link Checker (needs URL-reputation API), #10 Unsafe File Checker (needs file-scan API), #16 Google Drive upload for SOS evidence, #24 Geo-Fencing/Safe Zones, #26 100-Member Community Group, #14 Surround Audio, #15 Emergency Photo (personal).
 REMAINING comms: live WhatsApp incident alerts (#4 upgrade — set MSG91_WHATSAPP_TEMPLATE), Delivery Reports dashboard, OTP Resend Timer, SMS OTP fallback.
 MOBILE-ONLY (need Expo app): #11,#19,#20,#21,#22,#23,#25.
+
+## Update 2026-06 — Safety Suite (Phase 2) — 4 more features (testing_agent iter13: BE 12/12, FE ~95%)
+- #7 Nearby Police Stations — GET /api/safety/nearby-police?lat&lng&radius via OpenStreetMap Overpass (3 mirrors + User-Agent, 30-min Mongo cache db.police_cache). Frontend: Safety page NearbyPolice card (Leaflet map + list + retry btn). FREE, no key. DONE.
+- #26 Community Safety Group — one neighbourhood group, cap 100. Endpoints: GET /api/community, POST /community/join|leave, POST /community/posts (needs membership), POST /community/posts/{id}/like (toggle), DELETE /community/posts/{id} (own/admin). Collections: community_members, community_posts. Frontend: /community page (nav "Community"). DONE.
+- #9 Safe Link Checker — POST /api/safety/link-check via VirusTotal v3 (submit + poll, 24h cache db.url_checks). Graceful {configured:false} until VIRUSTOTAL_API_KEY set in backend/.env. Frontend: Safety page LinkChecker card. BUILT — NEEDS VT API KEY to go live.
+- #4 Live WhatsApp Alerts — flipped ON: MSG91_WHATSAPP_TEMPLATE=nek_sathi_alert. comms.send_whatsapp confirmed MSG91 accepts (hasError:false, request_id). All notify_whatsapp (incident + SOS) now live.
+Files touched: backend/server.py (link_check, nearby_police, community_*), frontend Safety.jsx (LinkChecker, NearbyPolice), Community.jsx, App.js routes (/community), TopNav.jsx (nav-community). backend/.env (VIRUSTOTAL_API_KEY="", MSG91_WHATSAPP_TEMPLATE).
+STILL PENDING (buildable on web): #8 Stolen-Mobile FIR guide, #10 Unsafe File Checker (VirusTotal file scan — same key), #16 Google Drive upload, #24 Geo-Fencing, #14 Surround Audio, #15 personal Emergency Photo, Delivery Reports dashboard, OTP Resend Timer, SMS OTP fallback.
+MOBILE-ONLY: #11,#19,#20,#21,#22,#23,#25.

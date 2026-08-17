@@ -35,6 +35,7 @@ import AdminCalls from "@/pages/AdminCalls";
 import Settings from "@/pages/Settings";
 import Safety from "@/pages/Safety";
 import LiveView from "@/pages/LiveView";
+import Community from "@/pages/Community";
 import PersonaLanding from "@/pages/PersonaLanding";
 import OrgDashboard from "@/pages/OrgDashboard";
 import AdminOrgs from "@/pages/AdminOrgs";
@@ -86,6 +87,7 @@ function Shell() {
           <Route path="/support" element={<Protected><Support /></Protected>} />
           <Route path="/settings" element={<Protected><Settings /></Protected>} />
           <Route path="/safety" element={<Protected><Safety /></Protected>} />
+          <Route path="/community" element={<Protected><Community /></Protected>} />
           <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
           <Route path="/admin/qr" element={<Protected adminOnly><AdminQR /></Protected>} />
           <Route path="/admin/dealers" element={<Protected adminOnly><AdminDealers /></Protected>} />

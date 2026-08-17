@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
-import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square } from "lucide-react";
+import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Link2, ShieldCheck, ShieldX, Search, Building2, Navigation } from "lucide-react";
+import { loadLeaflet } from "@/lib/leaflet";
 
 const HELPLINES = [
   { num: "112", label: "All-in-one Emergency", icon: <ShieldAlert size={18} />, tone: "#ff3b5c" },
@@ -219,6 +220,138 @@ function LiveShare() {
   );
 }
 
+function LinkChecker() {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState("");
+
+  const check = async (e) => {
+    e.preventDefault(); setErr(""); setRes(null); setBusy(true);
+    try {
+      const r = await api.post("/safety/link-check", { url });
+      setRes(r.data);
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not scan this link."); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="glass" style={{ padding: 22, borderRadius: 18, marginTop: 18 }} data-testid="link-checker-panel">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <Link2 size={20} className="neon" />
+        <div>
+          <h2 style={{ margin: 0, fontSize: 18 }}>Safe Link Checker</h2>
+          <p className="muted" style={{ margin: "2px 0 0", fontSize: 12.5 }}>Scan a link for phishing or malware before you open it.</p>
+        </div>
+      </div>
+      <form onSubmit={check} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder="Paste a link e.g. https://…" data-testid="link-checker-input" style={{ flex: "1 1 260px", minWidth: 0 }} />
+        <button className="btn btn-primary" disabled={busy} type="submit" data-testid="link-checker-btn">
+          {busy ? <Loader2 className="spin" size={16} /> : <><Search size={16} /> Check</>}
+        </button>
+      </form>
+      {err && <div style={{ color: "#ff7591", fontSize: 13, marginTop: 12 }} data-testid="link-checker-error">{err}</div>}
+      {res && res.configured === false && (
+        <div className="muted" style={{ marginTop: 12, fontSize: 13 }} data-testid="link-checker-unconfigured">Scanner isn't configured yet — add a VirusTotal API key to enable it.</div>
+      )}
+      {res?.verdict === "pending" && <div className="muted" style={{ marginTop: 12, fontSize: 13 }} data-testid="link-checker-pending">Still analysing — please check again in a few seconds.</div>}
+      {(res?.verdict === "safe" || res?.verdict === "unsafe") && (
+        <div data-testid="link-checker-result" className="glass" style={{ marginTop: 14, padding: 16, borderRadius: 12, borderColor: res.verdict === "unsafe" ? "rgba(255,59,92,.5)" : "rgba(52,211,153,.5)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, color: res.verdict === "unsafe" ? "#ff7591" : "#34d399", fontWeight: 800, fontSize: 16 }}>
+            {res.verdict === "unsafe" ? <><ShieldX size={22} /> Unsafe — avoid this link</> : <><ShieldCheck size={22} /> No known threat detected</>}
+          </div>
+          {res.stats && (
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, fontSize: 12.5 }} className="muted">
+              <span style={{ color: "#ff7591" }}>Malicious: {res.stats.malicious ?? 0}</span>
+              <span style={{ color: "#f5a524" }}>Suspicious: {res.stats.suspicious ?? 0}</span>
+              <span style={{ color: "#34d399" }}>Harmless: {res.stats.harmless ?? 0}</span>
+              <span>Undetected: {res.stats.undetected ?? 0}</span>
+            </div>
+          )}
+          <p className="muted" style={{ fontSize: 11.5, marginTop: 10, marginBottom: 0 }}>Powered by VirusTotal · a strong signal, not an absolute guarantee.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NearbyPolice() {
+  const [busy, setBusy] = useState(false);
+  const [stations, setStations] = useState(null);
+  const [err, setErr] = useState("");
+  const mapEl = useRef(null);
+  const mapObj = useRef(null);
+
+  const find = async () => {
+    setErr(""); setBusy(true); setStations(null);
+    try {
+      const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000, enableHighAccuracy: true }));
+      const { latitude, longitude } = pos.coords;
+      const r = await api.get(`/safety/nearby-police?lat=${latitude}&lng=${longitude}&radius=8000`);
+      setStations(r.data.stations);
+      drawMap(latitude, longitude, r.data.stations);
+    } catch (e) {
+      setErr(e?.code === 1 ? "Location permission denied. Allow location to find nearby stations." : (e?.response?.data?.detail || "Could not find nearby police stations."));
+    } finally { setBusy(false); }
+  };
+
+  const drawMap = (lat, lng, list) => {
+    loadLeaflet().then((L) => {
+      if (!mapEl.current) return;
+      if (mapObj.current) { mapObj.current.remove(); mapObj.current = null; }
+      const map = L.map(mapEl.current, { zoomControl: true }).setView([lat, lng], 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }).addTo(map);
+      L.circleMarker([lat, lng], { radius: 8, color: "#22d3ee", fillColor: "#7c3aed", fillOpacity: 1, weight: 3 }).addTo(map).bindPopup("You are here");
+      list.forEach((s) => {
+        L.marker([s.latitude, s.longitude]).addTo(map).bindPopup(`<b>${s.name}</b><br/>${s.distance_km} km away`);
+      });
+      mapObj.current = map;
+    });
+  };
+  useEffect(() => () => { if (mapObj.current) mapObj.current.remove(); }, []);
+
+  return (
+    <div className="glass" style={{ padding: 22, borderRadius: 18, marginTop: 18 }} data-testid="police-panel">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Building2 size={20} className="neon" />
+          <div>
+            <h2 style={{ margin: 0, fontSize: 18 }}>Nearby Police Stations</h2>
+            <p className="muted" style={{ margin: "2px 0 0", fontSize: 12.5 }}>Find the closest stations around you, with directions.</p>
+          </div>
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={find} disabled={busy} data-testid="police-find-btn">
+          {busy ? <Loader2 className="spin" size={16} /> : <><Navigation size={16} /> Find near me</>}
+        </button>
+      </div>
+      {err && <div style={{ color: "#ff7591", fontSize: 13, marginBottom: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }} data-testid="police-error">{err}<button className="btn btn-ghost btn-sm" onClick={find} disabled={busy} data-testid="police-retry-btn">Retry</button></div>}
+      {stations && (
+        <>
+          <div ref={mapEl} data-testid="police-map" style={{ height: 300, borderRadius: 12, overflow: "hidden", border: "1px solid var(--panel-brd)", marginBottom: 12 }} />
+          {stations.length === 0 ? (
+            <p className="muted" data-testid="police-empty">No police stations found within 8 km.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {stations.slice(0, 8).map((s) => (
+                <div key={s.id} data-testid="police-row" className="glass" style={{ padding: "10px 14px", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>{s.name}</div>
+                    <div className="muted" style={{ fontSize: 12.5 }}>{s.distance_km} km away{s.address ? ` · ${s.address}` : ""}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    {s.phone && <a className="btn btn-ghost btn-sm" href={`tel:${s.phone}`}><Phone size={14} /></a>}
+                    <a className="btn btn-ghost btn-sm" href={`https://maps.google.com/?q=${s.latitude},${s.longitude}`} target="_blank" rel="noreferrer"><Navigation size={14} /></a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Safety() {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -336,6 +469,12 @@ export default function Safety() {
 
       {/* Live location sharing */}
       <LiveShare />
+
+      {/* Safe link checker */}
+      <LinkChecker />
+
+      {/* Nearby police */}
+      <NearbyPolice />
 
       {/* Helplines */}
       <div className="glass" style={{ padding: 22, borderRadius: 18, marginTop: 18 }} data-testid="helplines-panel">

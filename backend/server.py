@@ -7,10 +7,13 @@ JWT (HS256).
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import logging
 import os
 import types
 import uuid
+import httpx
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Literal, Optional
@@ -1182,6 +1185,231 @@ async def public_live_location(token: str):
     if active and last:
         out["last"] = {"latitude": last["latitude"], "longitude": last["longitude"], "recorded_at": last["recorded_at"]}
     return out
+
+# ---------------------------------------------------------------------------
+# Safe Link Checker (#9) — VirusTotal URL reputation. Graceful "not configured"
+# when VIRUSTOTAL_API_KEY is absent. Cached 24h by url identifier to save quota.
+# ---------------------------------------------------------------------------
+VT_BASE = "https://www.virustotal.com/api/v3"
+
+
+def _vt_key() -> Optional[str]:
+    return os.environ.get("VIRUSTOTAL_API_KEY")
+
+
+def _vt_url_id(url: str) -> str:
+    return base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+
+
+class LinkCheckIn(BaseModel):
+    url: str = Field(min_length=4, max_length=2048)
+
+
+@api.post("/safety/link-check")
+@rate_limit("10/minute")
+async def link_check(request: Request, payload: LinkCheckIn, user: dict = Depends(current_user)):
+    url = payload.url.strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        url = "http://" + url
+    if not _vt_key():
+        return {"configured": False, "message": "Safe Link Checker is not configured yet."}
+    url_id = _vt_url_id(url)
+    # 24h cache
+    cached = await db.url_checks.find_one({"url_id": url_id})
+    if cached:
+        ts = cached.get("checked_at")
+        if ts and (ts.replace(tzinfo=timezone.utc) if ts.tzinfo is None else ts) > now_utc() - timedelta(hours=24):
+            return {"configured": True, "url": url, "verdict": cached["verdict"], "stats": cached["stats"], "cached": True}
+    headers = {"x-apikey": _vt_key(), "Accept": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=30) as c:
+            r = await c.post(f"{VT_BASE}/urls", data={"url": url}, headers=headers)
+            if r.status_code == 429:
+                raise HTTPException(status_code=503, detail="Scanner is busy (rate limit). Try again shortly.")
+            if r.status_code >= 400:
+                raise HTTPException(status_code=502, detail="Scanner request failed.")
+            analysis_id = r.json()["data"]["id"]
+            attrs = {}
+            for i in range(3):
+                await asyncio.sleep(2 if i == 0 else 6)
+                ar = await c.get(f"{VT_BASE}/analyses/{analysis_id}", headers=headers)
+                attrs = ar.json().get("data", {}).get("attributes", {})
+                if attrs.get("status") == "completed":
+                    break
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.warning("link-check failed: %s", e)
+        raise HTTPException(status_code=502, detail="Could not scan this link right now.")
+    if attrs.get("status") != "completed":
+        return {"configured": True, "url": url, "verdict": "pending", "status": attrs.get("status", "unknown")}
+    stats = {k: int(v) for k, v in attrs.get("stats", {}).items()}
+    verdict = "unsafe" if (stats.get("malicious", 0) > 0 or stats.get("suspicious", 0) > 0) else "safe"
+    await db.url_checks.update_one(
+        {"url_id": url_id},
+        {"$set": {"url": url, "url_id": url_id, "verdict": verdict, "stats": stats, "checked_at": now_utc()}},
+        upsert=True,
+    )
+    return {"configured": True, "url": url, "verdict": verdict, "stats": stats, "cached": False}
+
+
+# ---------------------------------------------------------------------------
+# Nearby Police Stations (#7) — OpenStreetMap Overpass (free, no key). Proxied
+# server-side to avoid CORS and keep the frontend simple.
+# ---------------------------------------------------------------------------
+def _haversine_km(a_lat, a_lng, b_lat, b_lng) -> float:
+    from math import radians, sin, cos, asin, sqrt
+    dlat = radians(b_lat - a_lat); dlng = radians(b_lng - a_lng)
+    h = sin(dlat / 2) ** 2 + cos(radians(a_lat)) * cos(radians(b_lat)) * sin(dlng / 2) ** 2
+    return round(2 * 6371 * asin(sqrt(h)), 2)
+
+
+@api.get("/safety/nearby-police")
+@rate_limit("20/minute")
+async def nearby_police(request: Request, lat: float, lng: float, radius: int = 6000, user: dict = Depends(current_user)):
+    radius = max(1000, min(radius, 25000))
+    # 30-min cache keyed by rounded coords + radius to smooth Overpass hiccups.
+    cache_key = f"{round(lat, 3)},{round(lng, 3)},{radius}"
+    cached = await db.police_cache.find_one({"key": cache_key})
+    if cached:
+        ts = cached.get("checked_at")
+        if ts and (ts.replace(tzinfo=timezone.utc) if ts.tzinfo is None else ts) > now_utc() - timedelta(minutes=30):
+            return {"count": len(cached["stations"]), "stations": cached["stations"], "cached": True}
+    q = (
+        f"[out:json][timeout:20];"
+        f'(node["amenity"="police"](around:{radius},{lat},{lng});'
+        f'way["amenity"="police"](around:{radius},{lat},{lng});'
+        f'relation["amenity"="police"](around:{radius},{lat},{lng}););'
+        f"out center 40;"
+    )
+    stations = []
+    elements = []
+    mirrors = [
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass-api.de/api/interpreter",
+    ]
+    headers = {"User-Agent": "NekSathi-Safety/1.0 (personal safety app)"}
+    for murl in mirrors:
+        try:
+            async with httpx.AsyncClient(timeout=22) as c:
+                r = await c.post(murl, data={"data": q}, headers=headers)
+            if r.status_code == 200 and r.headers.get("content-type", "").startswith("application/json"):
+                elements = r.json().get("elements", [])
+                break
+        except Exception as e:
+            log.warning("overpass mirror %s failed: %s", murl, e)
+            continue
+    else:
+        raise HTTPException(status_code=502, detail="Could not fetch nearby police stations. Try again.")
+    for el in elements:
+        p = el.get("center") if el.get("type") != "node" else el
+        plat = (p or {}).get("lat") if el.get("type") != "node" else el.get("lat")
+        plng = (p or {}).get("lon") if el.get("type") != "node" else el.get("lon")
+        if plat is None or plng is None:
+            continue
+        tags = el.get("tags", {})
+        stations.append({
+            "id": f"{el.get('type')}/{el.get('id')}",
+            "name": tags.get("name") or "Police Station",
+            "phone": tags.get("phone") or tags.get("contact:phone"),
+            "address": tags.get("addr:full") or ", ".join(filter(None, [tags.get("addr:street"), tags.get("addr:city")])) or None,
+            "latitude": plat, "longitude": plng,
+            "distance_km": _haversine_km(lat, lng, plat, plng),
+        })
+    stations.sort(key=lambda s: s["distance_km"])
+    result = stations[:20]
+    await db.police_cache.update_one({"key": cache_key}, {"$set": {"key": cache_key, "stations": result, "checked_at": now_utc()}}, upsert=True)
+    return {"count": len(result), "stations": result, "cached": False}
+
+
+# ---------------------------------------------------------------------------
+# Community Safety Group (#26) — one neighbourhood group, max 100 members.
+# Members post text + optional photo; everyone sees a live feed.
+# ---------------------------------------------------------------------------
+COMMUNITY_CAP = 100
+
+
+class CommunityPostIn(BaseModel):
+    text: str = Field(min_length=1, max_length=1000)
+    photo_base64: Optional[str] = None
+
+
+def _post_out(p: dict, uid: str) -> dict:
+    likes = p.get("likes", [])
+    return {
+        "id": p["id"], "author_name": p.get("author_name", "Member"),
+        "text": p.get("text", ""), "photo_base64": p.get("photo_base64"),
+        "created_at": p.get("created_at"), "like_count": len(likes),
+        "liked_by_me": uid in likes, "mine": p.get("user_id") == uid,
+    }
+
+
+@api.get("/community")
+async def community_overview(user: dict = Depends(current_user)):
+    member_count = await db.community_members.count_documents({})
+    is_member = bool(await db.community_members.find_one({"user_id": user["id"]}))
+    posts = []
+    if is_member:
+        async for p in db.community_posts.find().sort("created_at", -1).limit(60):
+            posts.append(_post_out(clean(p), user["id"]))
+    return {"member_count": member_count, "cap": COMMUNITY_CAP, "is_member": is_member, "posts": posts}
+
+
+@api.post("/community/join")
+async def community_join(user: dict = Depends(current_user)):
+    if await db.community_members.find_one({"user_id": user["id"]}):
+        return {"joined": True}
+    if await db.community_members.count_documents({}) >= COMMUNITY_CAP:
+        raise HTTPException(status_code=400, detail="This community group is full (100 members).")
+    await db.community_members.insert_one({"id": new_id(), "user_id": user["id"], "name": user.get("name", "Member"), "joined_at": now_utc()})
+    return {"joined": True}
+
+
+@api.post("/community/leave")
+async def community_leave(user: dict = Depends(current_user)):
+    await db.community_members.delete_one({"user_id": user["id"]})
+    return {"left": True}
+
+
+@api.post("/community/posts")
+@rate_limit("20/minute")
+async def community_post(request: Request, payload: CommunityPostIn, user: dict = Depends(current_user)):
+    if not await db.community_members.find_one({"user_id": user["id"]}):
+        raise HTTPException(status_code=403, detail="Join the group to post.")
+    if payload.photo_base64 and len(payload.photo_base64) > 3_500_000:
+        raise HTTPException(status_code=400, detail="Photo too large (max ~2.5MB).")
+    doc = {
+        "id": new_id(), "user_id": user["id"], "author_name": user.get("name", "Member"),
+        "text": payload.text.strip(), "photo_base64": payload.photo_base64,
+        "likes": [], "created_at": now_utc(),
+    }
+    await db.community_posts.insert_one(dict(doc))
+    return _post_out(clean(doc), user["id"])
+
+
+@api.post("/community/posts/{post_id}/like")
+async def community_like(post_id: str, user: dict = Depends(current_user)):
+    p = await db.community_posts.find_one({"id": post_id})
+    if not p:
+        raise HTTPException(status_code=404, detail="Post not found")
+    likes = set(p.get("likes", []))
+    likes.symmetric_difference_update({user["id"]})
+    await db.community_posts.update_one({"id": post_id}, {"$set": {"likes": list(likes)}})
+    return {"like_count": len(likes), "liked_by_me": user["id"] in likes}
+
+
+@api.delete("/community/posts/{post_id}")
+async def community_delete(post_id: str, user: dict = Depends(current_user)):
+    p = await db.community_posts.find_one({"id": post_id})
+    if not p:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if p["user_id"] != user["id"] and not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="You can only delete your own posts.")
+    await db.community_posts.delete_one({"id": post_id})
+    return {"deleted": True}
+
+
 
 
 

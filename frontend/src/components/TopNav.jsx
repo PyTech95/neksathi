@@ -48,6 +48,7 @@ export default function TopNav() {
             <Link to="/tags" className={`nav-link ${isActive("/tags") ? "active" : ""}`} data-testid="nav-tags">Tags</Link>
             <Link to="/cards" className={`nav-link ${isActive("/cards") ? "active" : ""}`} data-testid="nav-cards">Cards</Link>
             <Link to="/safety" className={`nav-link ${isActive("/safety") ? "active" : ""}`} data-testid="nav-safety" style={{ color: isActive("/safety") ? undefined : "#ff7591" }}>SOS</Link>
+            <Link to="/community" className={`nav-link ${isActive("/community") ? "active" : ""}`} data-testid="nav-community">Community</Link>
             <Link to="/alerts" className={`nav-link ${isActive("/alerts") ? "active" : ""}`} data-testid="nav-alerts">Alerts</Link>
             <Link to="/incidents" className={`nav-link ${isActive("/incidents") ? "active" : ""}`} data-testid="nav-incidents">Incidents</Link>
             <Link to="/subscription" className={`nav-link ${isActive("/subscription") ? "active" : ""}`} data-testid="nav-plans">Plans</Link>
