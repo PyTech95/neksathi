@@ -1,59 +1,150 @@
 import { Link } from "react-router-dom";
-import { ShieldCheck, QrCode, Bell, MapPin, Users, EyeOff, Zap, Car, ParkingCircle, Siren, ShieldAlert, Phone, Clock, CheckCircle2, Factory, Store, UserCheck, Video, Gauge, IdCard, Tag } from "lucide-react";
+import {
+  ShieldCheck, QrCode, Bell, MapPin, Users, EyeOff, Car, ParkingCircle, Siren, ShieldAlert,
+  Phone, Clock, CheckCircle2, ScanLine, Link2, Volume2, Lock, Camera, Signal, BatteryLow,
+  HeartHandshake, BarChart3, Route, ArrowRight, Baby, Dog, Luggage, Fingerprint, LifeBuoy,
+} from "lucide-react";
 
 const DEMO_SCAN = "/scan/45805f3a-f10a-4534-bc7d-29699029b2cf";
 
-const features = [
-  { icon: <EyeOff size={22} />, title: "Number stays hidden", desc: "Strangers alert you without ever seeing your personal phone number." },
-  { icon: <Bell size={22} />, title: "Instant scan alerts", desc: "Wrong-parking, accident, theft, fire or towing — you're notified in real time." },
-  { icon: <Users size={22} />, title: "Family safety circle", desc: "Add trusted contacts per vehicle who also receive every alert." },
-  { icon: <MapPin size={22} />, title: "Location on every alert", desc: "Scanners can attach GPS so help reaches the exact spot." },
-  { icon: <Gauge size={22} />, title: "Live tracking & speed", desc: "Follow the vehicle live and get overspeed alerts automatically." },
-  { icon: <Tag size={22} />, title: "One sticker, any asset", desc: "Cars, bags, pets, keys — a single QR turns anyone into a first-responder." },
-  { icon: <IdCard size={22} />, title: "Digital Share-Tap cards", desc: "Share a contact card with a scan — save-to-phone vCard included." },
-  { icon: <ShieldCheck size={22} />, title: "Lost mode & rewards", desc: "Flip an asset to lost mode and turn every scan into a recovery lead." },
+const IMG = {
+  personalSafety: "https://images.unsplash.com/photo-1642326343988-bcba5111079f?crop=entropy&cs=srgb&fm=jpg&q=85&w=900",
+  family: "https://images.pexels.com/photos/28700034/pexels-photo-28700034.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+  antiTheft: "https://images.pexels.com/photos/33335189/pexels-photo-33335189.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+  smartQr: "https://images.unsplash.com/photo-1595079676339-1534801ad6cf?crop=entropy&cs=srgb&fm=jpg&q=85&w=900",
+  child: "https://images.pexels.com/photos/207697/pexels-photo-207697.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+  elderly: "https://images.pexels.com/photos/4894604/pexels-photo-4894604.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+  pet: "https://images.pexels.com/photos/14520081/pexels-photo-14520081.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+  luggage: "https://images.pexels.com/photos/30782813/pexels-photo-30782813.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+  vehicle: "https://images.unsplash.com/photo-1623346483743-b968a27ed34c?crop=entropy&cs=srgb&fm=jpg&q=85&w=940",
+};
+
+const pillars = [
+  {
+    key: "personal-safety", chip: "Personal Safety", icon: <LifeBuoy size={26} />,
+    accent: "#22d3ee", tint: "rgba(34,211,238,.14)", brd: "rgba(34,211,238,.4)",
+    title: "Help is always one tap away",
+    blurb: "A panic button that actually works. Trigger a silent SOS, blast a siren, share your live location and reach the right helpline — instantly.",
+    img: IMG.personalSafety, link: "/safety", linkLabel: "Open Safety",
+    features: [
+      { icon: <Siren size={17} />, label: "One-Tap SOS with auto-escalation" },
+      { icon: <Volume2 size={17} />, label: "Loud emergency siren" },
+      { icon: <Users size={17} />, label: "Trusted emergency contacts" },
+      { icon: <MapPin size={17} />, label: "Live location share link" },
+      { icon: <Phone size={17} />, label: "National & local helplines" },
+      { icon: <Link2 size={17} />, label: "Safe link & file scanner" },
+    ],
+  },
+  {
+    key: "family-guardian", chip: "Family Guardian", icon: <Users size={26} />,
+    accent: "#8b5cf6", tint: "rgba(124,58,237,.18)", brd: "rgba(124,58,237,.45)",
+    title: "Know your loved ones are safe",
+    blurb: "See your family on one live map, get pinged when kids reach school, check in with a tap and never miss a low battery or an unanswered SOS.",
+    img: IMG.family, link: "/family", linkLabel: "Open Family", reverse: true,
+    features: [
+      { icon: <MapPin size={17} />, label: "Live family map" },
+      { icon: <Bell size={17} />, label: "Place alerts (arrive / leave)" },
+      { icon: <HeartHandshake size={17} />, label: "\"Are you okay?\" check-ins" },
+      { icon: <BatteryLow size={17} />, label: "Low-battery alerts" },
+      { icon: <ShieldAlert size={17} />, label: "Portal-wide SOS alarm" },
+      { icon: <BarChart3 size={17} />, label: "Weekly safety digest" },
+    ],
+  },
+  {
+    key: "anti-theft", chip: "Anti-Theft & Mobile Security", icon: <Lock size={26} />,
+    accent: "#ff3b5c", tint: "rgba(255,59,92,.14)", brd: "rgba(255,59,92,.45)",
+    title: "Outsmart phone thieves",
+    blurb: "Register your devices and fight back remotely — lock the phone, sound a siren, catch the intruder's selfie and get alerted the moment the SIM is swapped.",
+    img: IMG.antiTheft, link: "/theft-protection", linkLabel: "Open Anti-Theft",
+    features: [
+      { icon: <Lock size={17} />, label: "Remote device lock" },
+      { icon: <Camera size={17} />, label: "Intruder selfie capture" },
+      { icon: <Signal size={17} />, label: "SIM-change alert" },
+      { icon: <Volume2 size={17} />, label: "Remote siren" },
+      { icon: <MapPin size={17} />, label: "Geo-fenced safe zones" },
+      { icon: <Fingerprint size={17} />, label: "Device registry & FIR guide" },
+    ],
+  },
+  {
+    key: "smart-qr", chip: "Smart QR", icon: <QrCode size={26} />,
+    accent: "#2dd4bf", tint: "rgba(45,212,191,.14)", brd: "rgba(45,212,191,.4)",
+    title: "One sticker turns strangers into helpers",
+    blurb: "Put a smart QR on cars, kids, pets and bags. Anyone can scan to reach you for wrong-parking, an accident or a lost item — your number always stays hidden.",
+    img: IMG.smartQr, link: DEMO_SCAN, linkLabel: "Try a live scan", reverse: true,
+    features: [
+      { icon: <ScanLine size={17} />, label: "Scan-to-alert, no app needed" },
+      { icon: <EyeOff size={17} />, label: "Private masked calling" },
+      { icon: <ParkingCircle size={17} />, label: "Wrong-parking 15-min window" },
+      { icon: <Car size={17} />, label: "Live vehicle tracking" },
+      { icon: <ShieldCheck size={17} />, label: "Lost mode & rewards" },
+      { icon: <QrCode size={17} />, label: "Digital share-tap cards" },
+    ],
+  },
 ];
 
-const actions = [
-  { icon: <ParkingCircle size={30} />, title: "Wrong Parking", desc: "Alert the owner to move — a 15-minute window starts, with a private call fallback.", bg: "linear-gradient(100deg,#f59e0b,#f5a524)" },
-  { icon: <Siren size={30} />, title: "Accident", desc: "Instant alert to owner + family and a one-tap private call for fast help.", bg: "linear-gradient(100deg,#e11d48,#ff3b5c)" },
-  { icon: <ShieldAlert size={30} />, title: "Theft / Suspicious", desc: "Flag suspicious activity, notify the family circle and connect privately.", bg: "linear-gradient(100deg,#7c3aed,#8b5cf6)" },
-];
-
-const lifecycle = [
-  { icon: <Factory size={24} />, n: "Admin", t: "Generate & print", d: "Bulk-generate unique QR stickers, export & print them." },
-  { icon: <Store size={24} />, n: "Dealer", t: "Distribute & sell", d: "Stickers are assigned to dealers who sell them to customers." },
-  { icon: <UserCheck size={24} />, n: "Customer", t: "Scan & activate", d: "Scan, register the vehicle with OTP — QR becomes Active." },
-  { icon: <ShieldCheck size={24} />, n: "Anyone", t: "Scan & help", d: "A stranger scans to alert the owner — privately, no app needed." },
-];
-
-const parkingSteps = [
-  { icon: <Bell size={18} />, t: "Alert sent", d: "Reporter taps 'Alarm / Alert Owner'." },
-  { icon: <Clock size={18} />, t: "15-min window", d: "Owner + family notified via app & WhatsApp." },
-  { icon: <CheckCircle2 size={18} />, t: "I AM COMING", d: "Owner responds; reporter sees 'owner is coming'." },
-  { icon: <Phone size={18} />, t: "Private call", d: "Still stuck? Call the owner — number stays hidden." },
+const flow = [
+  { icon: <Siren size={22} />, t: "Tap SOS or scan a QR", d: "You raise an alert — or a stranger scans your smart QR. No app, no login needed to help." },
+  { icon: <Route size={22} />, t: "We alert & auto-escalate", d: "Your family and trusted contacts get a WhatsApp, push and a private call — and it escalates if unanswered." },
+  { icon: <CheckCircle2 size={22} />, t: "Help reaches you", d: "Live location, siren and check-ins bring the right help to the exact spot, fast." },
 ];
 
 const personas = [
-  { img: "https://images.unsplash.com/photo-1630830844072-b7ad174db3bc?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "School kids", title: "Safe to & from school", desc: "An ID tag with guardian contact and medical info. A teacher or stranger can privately reach a parent, or tap 'Kid needs help'.", link: "/for/schools" },
-  { img: "https://images.unsplash.com/photo-1586324304780-c9a5031a3599?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Patients & elderly", title: "Emergency ICE profile", desc: "Blood group, allergies and a one-tap masked call to the guardian — so first-responders can act in seconds.", link: "/for/hospitals" },
-  { img: "https://images.unsplash.com/photo-1690378820474-b468b8ee64d3?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Office & workplace", title: "Staff ID & lost-and-found", desc: "Staff badges, laptops and access cards become traceable — found items reach the owner without exposing anyone.", link: "/for/offices" },
-  { img: "https://images.unsplash.com/photo-1534361960057-19889db9621e?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Pets", title: "Bring them home", desc: "A collar QR lets any finder reach you instantly and share the pet's live location." },
-  { img: "https://images.unsplash.com/photo-1532968899863-5b52ef155913?crop=entropy&cs=srgb&fm=jpg&q=85&w=800", tag: "Travel & luggage", title: "Never lose a bag", desc: "Tag suitcases, backpacks and gadgets — a finder pings you, no personal details revealed." },
+  { img: IMG.child, tag: "School kids", title: "Safe to & from school", desc: "A guardian tag + place alerts when they arrive or leave. A teacher or stranger can reach you privately.", link: "/for/schools" },
+  { img: IMG.elderly, tag: "Patients & elderly", title: "Emergency ICE profile", desc: "Blood group, allergies and a one-tap masked call to the guardian — first-responders act in seconds.", link: "/for/hospitals" },
+  { img: IMG.pet, tag: "Pets", title: "Bring them home", desc: "A collar QR lets any finder reach you instantly and share your pet's live location." },
+  { img: IMG.luggage, tag: "Travel & luggage", title: "Never lose a bag", desc: "Tag suitcases and gadgets — a finder pings you, no personal details revealed." },
+  { img: IMG.vehicle, tag: "Vehicles", title: "Cars, bikes & more", desc: "Wrong-parking, accident and theft response with a private masked call and live tracking." },
 ];
 
 const testimonials = [
   { quote: "My son's school bag has a Nek Sathi tag. When he got lost at a fair, a volunteer scanned it and called me in seconds — without ever seeing my number.", name: "Priya, parent", place: "Pune" },
   { quote: "We put ICE tags on every elderly patient. Paramedics instantly see blood group and reach the family. It has genuinely saved time in emergencies.", name: "Dr. Mehta", place: "City Care Hospital" },
-  { quote: "Lost my laptop bag at the airport. Someone scanned the tag and I had it back the same evening. Brilliant.", name: "Arjun", place: "Bengaluru" },
+  { quote: "Someone tried to grab my phone. The remote lock + siren kicked in and I got the intruder's selfie. Got it back the same day.", name: "Arjun", place: "Bengaluru" },
 ];
 
 const faqs = [
-  { q: "Does the person scanning see my phone number?", a: "Never. All alerts and calls are routed through the Nek Sathi portal, so your number (and your family's) stays completely private." },
-  { q: "Do people need to install an app to report an issue?", a: "No. Anyone can scan the QR and report wrong-parking, accident or theft straight from their browser — no login, no install." },
-  { q: "What happens to a QR after it's activated?", a: "It's permanently linked to that vehicle. Re-scanning the sticker opens the emergency screen, not the setup screen." },
-  { q: "Can my family get the alerts too?", a: "Yes — add up to 4 trusted contacts per vehicle and control who gets notified." },
+  { q: "Does the person scanning or my SOS reveal my phone number?", a: "Never. All alerts and calls are routed through the Nek Sathi portal, so your number (and your family's) stays completely private." },
+  { q: "Do people need an app to report an issue or help?", a: "No. Anyone can scan the QR and report wrong-parking, accident or theft straight from their browser — no login, no install." },
+  { q: "How does the SOS reach my family?", a: "It fans out over WhatsApp, push and a private masked call to your trusted contacts and family circle — and auto-escalates if nobody responds in time." },
+  { q: "Can I control who gets which alerts?", a: "Yes — set trusted contacts, safe zones, quiet hours, place-alert rules and the low-battery threshold, all from the app." },
 ];
+
+function Pillar({ p, i }) {
+  const media = (
+    <div className="fade-up" style={{ position: "relative", borderRadius: 20, overflow: "hidden", border: `1px solid ${p.brd}`, minHeight: 300, background: "#0d0d1a" }}>
+      <img src={p.img} alt={p.chip} loading="lazy" style={{ width: "100%", height: "100%", minHeight: 300, objectFit: "cover", opacity: 0.9, display: "block" }} />
+      <div style={{ position: "absolute", inset: 0, background: `linear-gradient(180deg, rgba(3,3,8,0) 40%, rgba(3,3,8,.75) 100%)` }} />
+      <span className="chip" style={{ position: "absolute", left: 16, top: 16, background: "rgba(3,3,8,.6)", backdropFilter: "blur(6px)", color: p.accent, borderColor: p.brd }}>
+        {p.icon} {p.chip}
+      </span>
+    </div>
+  );
+  const text = (
+    <div>
+      <div style={{ width: 58, height: 58, borderRadius: 16, background: p.tint, color: p.accent, display: "grid", placeItems: "center", marginBottom: 16, border: `1px solid ${p.brd}` }}>{p.icon}</div>
+      <h2 style={{ fontSize: 32, lineHeight: 1.1, margin: "0 0 10px" }}>{p.title}</h2>
+      <p className="muted" style={{ fontSize: 16, lineHeight: 1.6, maxWidth: 520 }}>{p.blurb}</p>
+      <div className="grid grid-2" style={{ gap: 10, marginTop: 20 }}>
+        {p.features.map((f, k) => (
+          <div key={k} data-testid={`pillar-${p.key}-feature-${k}`} className="glass" style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 13px", borderRadius: 12 }}>
+            <span style={{ color: p.accent, flexShrink: 0, display: "grid", placeItems: "center" }}>{f.icon}</span>
+            <span style={{ fontSize: 13.5, fontWeight: 600 }}>{f.label}</span>
+          </div>
+        ))}
+      </div>
+      <Link to={p.link} data-testid={`pillar-${p.key}-link`} className="btn btn-ghost" style={{ marginTop: 22, borderColor: p.brd, color: p.accent }}>
+        {p.linkLabel} <ArrowRight size={16} />
+      </Link>
+    </div>
+  );
+  return (
+    <section className="container-nk" style={{ padding: "56px 22px" }}>
+      <div className="grid grid-2" style={{ alignItems: "center", gap: 44 }}>
+        {p.reverse ? <>{media}{text}</> : <>{text}{media}</>}
+      </div>
+    </section>
+  );
+}
 
 export default function Landing() {
   return (
@@ -64,20 +155,24 @@ export default function Landing() {
           <div className="fade-up">
             <span className="chip" data-testid="landing-tagline">Har Musibat Mein, Ek Nek Sathi</span>
             <h1 style={{ fontSize: 52, lineHeight: 1.04, margin: "18px 0 16px" }}>
-              One QR turns any stranger into a <span className="neon">first-responder</span>.
+              Total safety, <span className="neon">one tap</span> away.
             </h1>
-            <p className="muted" style={{ fontSize: 18, maxWidth: 520, lineHeight: 1.6 }}>
-              Nek Sathi puts a smart safety QR on the people and things you love — school kids,
-              patients & elderly, staff, pets, bags and vehicles. Emergencies, lost-and-found and
-              private contact — all while your phone number stays hidden.
+            <p className="muted" style={{ fontSize: 18, maxWidth: 540, lineHeight: 1.6 }}>
+              Nek Sathi is your all-in-one safety companion — a panic-button SOS, a live family guardian,
+              anti-theft for your phone, and a smart QR that turns any stranger into a first-responder.
+              All while your phone number stays completely private.
             </p>
             <div style={{ display: "flex", gap: 12, marginTop: 28, flexWrap: "wrap" }}>
-              <Link to="/register" className="btn btn-primary" data-testid="hero-get-started"><QrCode size={18} /> Create your QR</Link>
-              <Link to={DEMO_SCAN} className="btn btn-ghost" data-testid="hero-try-scan"><ShieldCheck size={17} /> Try a live scan demo</Link>
+              <Link to="/register" className="btn btn-primary" data-testid="hero-get-started"><QrCode size={18} /> Get started free</Link>
+              <Link to={DEMO_SCAN} className="btn btn-ghost" data-testid="hero-try-scan"><ScanLine size={17} /> Try a live scan demo</Link>
             </div>
-            <p className="muted" style={{ marginTop: 18, fontSize: 13 }}>
-              Admin demo: <b style={{ color: "#d9c9ff" }}>admin@safeqr.com</b> / <b style={{ color: "#d9c9ff" }}>admin1234</b>
-            </p>
+            <div style={{ display: "flex", gap: 8, marginTop: 22, flexWrap: "wrap" }}>
+              {pillars.map((p) => (
+                <a key={p.key} href={`#${p.key}`} data-testid={`hero-jump-${p.key}`} className="chip" style={{ textDecoration: "none", color: p.accent, borderColor: p.brd, background: p.tint }}>
+                  {p.icon} {p.chip}
+                </a>
+              ))}
+            </div>
           </div>
           <div className="fade-up" style={{ animationDelay: ".15s" }}>
             <div className="glass card-pad" style={{ padding: 34 }}>
@@ -87,8 +182,8 @@ export default function Landing() {
                 <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}><QrCode size={120} color="#22d3ee" strokeWidth={1.2} /></div>
               </div>
               <div className="center" style={{ marginTop: 20 }}>
-                <div className="chip"><Car size={13} /> Scanning MH12 AB 1234</div>
-                <p className="muted" style={{ marginTop: 10, fontSize: 13 }}>Wrong parking · Accident · Theft · Live track</p>
+                <div className="chip"><ShieldCheck size={13} /> SOS · Family · Anti-Theft · Smart QR</div>
+                <p className="muted" style={{ marginTop: 10, fontSize: 13 }}>One app for every emergency, big or small.</p>
               </div>
             </div>
           </div>
@@ -96,18 +191,54 @@ export default function Landing() {
       </section>
 
       {/* STAT BAND */}
-      <section className="container-nk" style={{ padding: "10px 22px 30px" }}>
+      <section className="container-nk" style={{ padding: "10px 22px 20px" }}>
         <div className="glass card-pad grid grid-4" style={{ padding: 24, textAlign: "center" }}>
-          {[["10,000+", "QR / batch"], ["3 taps", "to report & help"], ["0", "numbers exposed"], ["15 min", "response window"]].map(([n, l], i) => (
+          {[["4-in-1", "safety suite"], ["3 taps", "to alert & help"], ["0", "numbers exposed"], ["24×7", "auto-escalation"]].map(([n, l], i) => (
             <div key={i} data-testid={`stat-band-${i}`}><div className="stat-num neon">{n}</div><div className="muted" style={{ fontSize: 13 }}>{l}</div></div>
           ))}
         </div>
       </section>
 
-      {/* BUILT FOR EVERYONE */}
+      {/* FEATURE PILLARS */}
+      <div style={{ position: "relative" }}>
+        {pillars.map((p, i) => (
+          <div id={p.key} key={p.key} data-testid={`pillar-${p.key}`} style={{ scrollMarginTop: 90 }}>
+            <Pillar p={p} i={i} />
+          </div>
+        ))}
+      </div>
+
+      {/* HOW IT WORKS */}
       <section className="container-nk" style={{ padding: "40px 22px" }}>
-        <h2 style={{ fontSize: 34, marginBottom: 6 }}>Not just cars — <span className="neon">built for everyone</span></h2>
-        <p className="muted" style={{ marginBottom: 26, fontSize: 16 }}>One smart QR for the people and things you care about most.</p>
+        <h2 style={{ fontSize: 34, marginBottom: 6 }}>How it <span className="neon">works</span></h2>
+        <p className="muted" style={{ marginBottom: 26, fontSize: 16 }}>The same simple flow behind every Nek Sathi feature.</p>
+        <div className="grid grid-3">
+          {flow.map((s, i) => (
+            <div key={i} className="glass card-pad fade-up" data-testid={`flow-step-${i}`} style={{ animationDelay: `${i * 0.07}s`, position: "relative" }}>
+              <div style={{ position: "absolute", right: 18, top: 14, fontFamily: "Chakra Petch", fontSize: 40, fontWeight: 700, color: "rgba(124,58,237,.18)" }}>{i + 1}</div>
+              <div className="alert-ico" style={{ background: "rgba(34,211,238,.14)", color: "#22d3ee" }}>{s.icon}</div>
+              <h3 style={{ fontSize: 19, margin: "12px 0 6px" }}>{s.t}</h3>
+              <p className="muted" style={{ fontSize: 14.5, lineHeight: 1.55 }}>{s.d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* PRIVACY BAND */}
+      <section className="container-nk" style={{ padding: "20px 22px" }}>
+        <div className="glass card-pad" style={{ padding: 40, display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap", borderColor: "rgba(34,211,238,.4)" }}>
+          <EyeOff size={54} color="#22d3ee" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <h2 style={{ fontSize: 28, marginBottom: 6 }}>Privacy is the <span className="neon">whole point</span></h2>
+            <p className="muted" style={{ fontSize: 15.5, lineHeight: 1.6 }}>Reporters and helpers never see your number, address or family details. Every call is bridged through the Nek Sathi portal, and every alert shows only what's needed to help.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* PERSONAS */}
+      <section className="container-nk" style={{ padding: "40px 22px" }}>
+        <h2 style={{ fontSize: 34, marginBottom: 6 }}>Protects <span className="neon">everyone you love</span></h2>
+        <p className="muted" style={{ marginBottom: 26, fontSize: 16 }}>One smart safety network for the people and things that matter most.</p>
         <div className="grid grid-3">
           {personas.map((p, i) => (
             <div key={i} className="glass glass-hover fade-up" data-testid={`persona-${i}`} style={{ overflow: "hidden", animationDelay: `${i * 0.06}s` }}>
@@ -122,90 +253,13 @@ export default function Landing() {
               </div>
             </div>
           ))}
-          <div className="glass card-pad fade-up" data-testid="persona-vehicles" style={{ display: "flex", flexDirection: "column", justifyContent: "center", animationDelay: ".3s" }}>
-            <div style={{ color: "#22d3ee", marginBottom: 12 }}><Car size={34} /></div>
-            <h3 style={{ fontSize: 19, marginBottom: 6 }}>Cars, bikes & more</h3>
-            <p className="muted" style={{ fontSize: 14, lineHeight: 1.55 }}>Wrong-parking, accident and theft response with a private masked call and live tracking.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* EMERGENCY ACTIONS */}
-      <section className="container-nk" style={{ padding: "40px 22px" }}>
-        <h2 style={{ fontSize: 34, marginBottom: 6 }}>Scan → pick a problem → <span className="neon">help instantly</span></h2>
-        <p className="muted" style={{ marginBottom: 26, fontSize: 16 }}>No app, no login. A stranger taps one button and you're alerted — privately.</p>
-        <div className="grid grid-3">
-          {actions.map((a, i) => (
-            <div key={i} className="glass glass-hover card-pad fade-up" data-testid={`action-${i}`} style={{ animationDelay: `${i * 0.06}s` }}>
-              <div style={{ width: 56, height: 56, borderRadius: 16, background: a.bg, display: "grid", placeItems: "center", color: "#fff", marginBottom: 14 }}>{a.icon}</div>
-              <h3 style={{ fontSize: 21, marginBottom: 8 }}>{a.title}</h3>
-              <p className="muted" style={{ fontSize: 14.5, lineHeight: 1.55 }}>{a.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* WRONG PARKING TIMELINE */}
-      <section className="container-nk" style={{ padding: "30px 22px" }}>
-        <div className="glass card-pad" style={{ padding: 30 }}>
-          <h2 style={{ fontSize: 28, marginBottom: 6 }}>How a <span className="neon">wrong-parking</span> alert plays out</h2>
-          <p className="muted" style={{ marginBottom: 22 }}>Fast, fair and private — for both sides.</p>
-          <div className="grid grid-4">
-            {parkingSteps.map((s, i) => (
-              <div key={i} data-testid={`parking-step-${i}`} style={{ display: "flex", gap: 12 }}>
-                <div className="alert-ico" style={{ background: "rgba(34,211,238,.14)", color: "#22d3ee", flexShrink: 0 }}>{s.icon}</div>
-                <div><h3 style={{ fontSize: 16 }}>{s.t}</h3><p className="muted" style={{ fontSize: 13.5 }}>{s.d}</p></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* LIFECYCLE */}
-      <section className="container-nk" style={{ padding: "40px 22px" }}>
-        <h2 style={{ fontSize: 34, marginBottom: 6 }}>From factory to <span className="neon">family</span></h2>
-        <p className="muted" style={{ marginBottom: 26, fontSize: 16 }}>One QR sticker, tracked at every step.</p>
-        <div className="grid grid-4">
-          {lifecycle.map((s, i) => (
-            <div key={i} className="glass card-pad" data-testid={`lifecycle-${i}`}>
-              <div className="brand-badge" style={{ borderRadius: 12 }}>{s.icon}</div>
-              <div className="chip" style={{ marginTop: 12 }}>{s.n}</div>
-              <h3 style={{ fontSize: 18, margin: "10px 0 4px" }}>{s.t}</h3>
-              <p className="muted" style={{ fontSize: 14 }}>{s.d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* FEATURES */}
-      <section className="container-nk" style={{ padding: "40px 22px" }}>
-        <h2 style={{ fontSize: 34, marginBottom: 8 }}>Everything a modern <span className="neon">safety network</span> needs</h2>
-        <div className="grid grid-4" style={{ marginTop: 20 }}>
-          {features.map((f, i) => (
-            <div key={i} className="glass glass-hover card-pad fade-up" data-testid={`feature-${i}`} style={{ animationDelay: `${i * 0.04}s` }}>
-              <div style={{ color: "#22d3ee", marginBottom: 12 }}>{f.icon}</div>
-              <h3 style={{ fontSize: 17, marginBottom: 8 }}>{f.title}</h3>
-              <p className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* PRIVACY BAND */}
-      <section className="container-nk" style={{ padding: "30px 22px" }}>
-        <div className="glass card-pad" style={{ padding: 40, display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap", borderColor: "rgba(34,211,238,.4)" }}>
-          <EyeOff size={54} color="#22d3ee" />
-          <div style={{ flex: 1, minWidth: 260 }}>
-            <h2 style={{ fontSize: 28, marginBottom: 6 }}>Privacy is the <span className="neon">whole point</span></h2>
-            <p className="muted" style={{ fontSize: 15.5, lineHeight: 1.6 }}>Reporters never see your number, address, or family details. Every call is bridged through the Nek Sathi portal, and every alert shows only what's needed to help your vehicle.</p>
-          </div>
         </div>
       </section>
 
       {/* TESTIMONIALS */}
       <section className="container-nk" style={{ padding: "40px 22px" }}>
         <h2 style={{ fontSize: 34, marginBottom: 6 }}>Trusted by <span className="neon">families & teams</span></h2>
-        <p className="muted" style={{ marginBottom: 26, fontSize: 16 }}>Real moments where one scan made all the difference.</p>
+        <p className="muted" style={{ marginBottom: 26, fontSize: 16 }}>Real moments where Nek Sathi made all the difference.</p>
         <div className="grid grid-3">
           {testimonials.map((t, i) => (
             <div key={i} className="glass card-pad fade-up" data-testid={`testimonial-${i}`} style={{ padding: 24, animationDelay: `${i * 0.06}s` }}>
@@ -232,12 +286,12 @@ export default function Landing() {
 
       {/* CTA */}
       <section className="container-nk" style={{ padding: "30px 22px 90px" }}>
-        <div className="glass card-pad center" style={{ padding: 50 }}>
-          <h2 style={{ fontSize: 36, marginBottom: 12 }}>Ready to make your vehicle <span className="neon">safer</span>?</h2>
-          <p className="muted" style={{ fontSize: 17, marginBottom: 26 }}>Create your first QR sticker free. No app install required to scan.</p>
+        <div className="glass card-pad center" style={{ padding: 50, borderColor: "rgba(124,58,237,.4)" }}>
+          <h2 style={{ fontSize: 36, marginBottom: 12 }}>Your safety net, <span className="neon">ready in minutes</span></h2>
+          <p className="muted" style={{ fontSize: 17, marginBottom: 26 }}>Create your free account and set up SOS, family and anti-theft in one place.</p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             <Link to="/register" className="btn btn-primary" data-testid="cta-register"><QrCode size={18} /> Get started now</Link>
-            <Link to={DEMO_SCAN} className="btn btn-ghost" data-testid="cta-try-scan"><ShieldCheck size={17} /> Try a live scan</Link>
+            <Link to={DEMO_SCAN} className="btn btn-ghost" data-testid="cta-try-scan"><ScanLine size={17} /> Try a live scan</Link>
           </div>
         </div>
         <p className="center muted" style={{ marginTop: 40, fontSize: 13 }}>

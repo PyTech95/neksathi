@@ -85,7 +85,7 @@ export default function FamilyAlarm() {
       {showSos && sos.map((s) => (
         <div key={s.id} data-testid={`global-sos-${s.id}`} className="glass" style={{ padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(255,59,92,.7)", background: "rgba(35,10,16,.96)", boxShadow: "0 12px 40px rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <ShieldAlert size={22} style={{ color: "#ff3b5c", animation: "sosPulse .7s infinite" }} />
+            <ShieldAlert size={22} style={{ color: "#ff3b5c", animation: "alarmRing .9s infinite" }} />
             <div><div style={{ fontWeight: 800, color: "#ff3b5c", fontSize: 14 }}>🆘 {s.member_name} raised an SOS</div><div style={{ fontSize: 12, opacity: .8 }}>{new Date(s.created_at).toLocaleTimeString()}{s.escalated ? " · escalated" : ""}</div></div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
@@ -98,7 +98,7 @@ export default function FamilyAlarm() {
       {nudge.active && (
         <div data-testid="global-nudge" className="glass" style={{ padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(34,211,238,.7)", background: "rgba(8,24,30,.96)", boxShadow: "0 12px 40px rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <BellRing size={22} className="neon" style={{ animation: "sosPulse .7s infinite" }} />
+            <BellRing size={22} className="neon" style={{ animation: "alarmRing .9s infinite" }} />
             <div style={{ fontWeight: 700, fontSize: 14 }}>{nudge.guardian_name || "Your guardian"} is trying to reach you!</div>
           </div>
           <button className="btn btn-primary btn-sm" onClick={dismissNudge} data-testid="global-nudge-dismiss"><CheckCircle2 size={14} /> I'm here</button>
