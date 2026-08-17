@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { QrCode, LogOut, ChevronDown, School, HeartPulse, Briefcase, ShieldAlert, Users, Car, MoreHorizontal, Settings as SettingsIcon, Siren, Lock, MapPin, Bell, FileWarning, LifeBuoy, CreditCard } from "lucide-react";
+import { QrCode, LogOut, ChevronDown, School, HeartPulse, Briefcase, ShieldAlert, Users, Car, MoreHorizontal, Settings as SettingsIcon, Siren, Lock, MapPin, Bell, FileWarning, LifeBuoy, CreditCard, Menu, X, ScanLine } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
@@ -15,6 +15,9 @@ export default function TopNav() {  const { user, logout } = useAuth();
   const [inboxTotal, setInboxTotal] = useState(0);
   const [solOpen, setSolOpen] = useState(false);
   const [menu, setMenu] = useState(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => { setMobileOpen(false); }, [loc.pathname]);
 
   useEffect(() => {
     const h = (e) => { if (!e.target.closest(".nav-drop")) setMenu(null); };
@@ -36,7 +39,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
         <span className="brand-badge"><QrCode size={20} /></span>
         Nek<span className="neon">&nbsp;Sathi</span>
       </Link>
-      <div className="nav-links">
+      <div className="nav-links nav-desktop">
         {user && user.is_org ? (
           <>
             <Link to="/org" className="nav-link active" data-testid="nav-org">Organization portal</Link>
@@ -135,6 +138,64 @@ export default function TopNav() {  const { user, logout } = useAuth();
           </>
         )}
       </div>
+
+      {/* Mobile hamburger */}
+      <button className="nav-hamburger" data-testid="mobile-menu-btn" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
+        <Menu size={22} />
+      </button>
+      {mobileOpen && (
+        <>
+          <div className="mobile-overlay" data-testid="mobile-overlay" onClick={() => setMobileOpen(false)} />
+          <div className="mobile-drawer" data-testid="mobile-drawer">
+            <div className="mobile-drawer-head">
+              <span className="brand" style={{ fontSize: 18 }}><span className="brand-badge"><QrCode size={18} /></span>Nek<span className="neon">&nbsp;Sathi</span></span>
+              <button aria-label="Close menu" data-testid="mobile-close-btn" onClick={() => setMobileOpen(false)} style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer" }}><X size={22} /></button>
+            </div>
+            <div className="mobile-drawer-body">
+              {user && user.is_org ? (
+                <>
+                  <Link to="/org" data-testid="m-org">Organization portal</Link>
+                  <button data-testid="m-logout" onClick={() => { setMobileOpen(false); logout(); nav("/"); }}><LogOut size={18} /> Logout</button>
+                </>
+              ) : user && user.is_dealer ? (
+                <>
+                  <Link to="/dealer" data-testid="m-dealer">Dealer portal</Link>
+                  <button data-testid="m-logout" onClick={() => { setMobileOpen(false); logout(); nav("/"); }}><LogOut size={18} /> Logout</button>
+                </>
+              ) : user ? (
+                <>
+                  <Link to="/dashboard" data-testid="m-home">Home</Link>
+                  <Link to="/safety" data-testid="m-safety" style={{ color: "#ff7591" }}><Siren size={18} /> SOS</Link>
+                  <Link to="/family" data-testid="m-family"><Users size={18} /> Family</Link>
+                  <div className="mobile-drawer-sep">Vehicle & QR</div>
+                  <Link to="/tags" data-testid="m-tags"><QrCode size={18} /> Tags</Link>
+                  <Link to="/cards" data-testid="m-cards"><CreditCard size={18} /> Cards</Link>
+                  <Link to="/theft-protection" data-testid="m-theft"><Lock size={18} /> Anti-Theft</Link>
+                  <Link to="/safe-zones" data-testid="m-zones"><MapPin size={18} /> Safe Zones</Link>
+                  <div className="mobile-drawer-sep">More</div>
+                  <Link to="/alerts" data-testid="m-alerts"><Bell size={18} /> Alerts</Link>
+                  <Link to="/incidents" data-testid="m-incidents"><FileWarning size={18} /> Incidents</Link>
+                  <Link to="/community" data-testid="m-community"><Users size={18} /> Community</Link>
+                  <Link to="/subscription" data-testid="m-plans"><QrCode size={18} /> Plans</Link>
+                  <Link to="/support" data-testid="m-support"><LifeBuoy size={18} /> Support</Link>
+                  <Link to="/settings" data-testid="m-settings"><SettingsIcon size={18} /> Settings</Link>
+                  {user.is_admin && <Link to="/admin" data-testid="m-admin"><ShieldAlert size={18} /> Admin{inboxTotal > 0 ? ` (${inboxTotal})` : ""}</Link>}
+                  <button data-testid="m-logout" style={{ color: "#ff7591" }} onClick={() => { setMobileOpen(false); logout(); nav("/"); }}><LogOut size={18} /> Logout</button>
+                </>
+              ) : (
+                <>
+                  <Link to="/for/schools" data-testid="m-schools"><School size={18} /> For Schools</Link>
+                  <Link to="/for/hospitals" data-testid="m-hospitals"><HeartPulse size={18} /> For Hospitals</Link>
+                  <Link to="/for/offices" data-testid="m-offices"><Briefcase size={18} /> For Offices</Link>
+                  <Link to="/scan/45805f3a-f10a-4534-bc7d-29699029b2cf" data-testid="m-demo"><ScanLine size={18} /> Emergency? Try live demo</Link>
+                  <Link to="/login" data-testid="m-login">Login</Link>
+                  <Link to="/register" className="btn btn-primary" data-testid="m-register" style={{ justifyContent: "center", marginTop: 8, color: "#fff" }}><QrCode size={18} /> Launch Nek Sathi</Link>
+                </>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </nav>
   );
 }

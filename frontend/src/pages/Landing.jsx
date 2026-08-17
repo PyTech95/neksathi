@@ -1,9 +1,10 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   ShieldCheck, QrCode, Bell, MapPin, Users, EyeOff, Car, ParkingCircle, Siren, ShieldAlert,
   Phone, Clock, CheckCircle2, ScanLine, Link2, Volume2, Lock, Camera, Signal, BatteryLow,
   HeartHandshake, BarChart3, Route, ArrowRight, Baby, Dog, Luggage, Fingerprint, LifeBuoy,
-  User, HeartPulse, Smartphone, Check, Sparkles,
+  User, HeartPulse, Smartphone, Check, Sparkles, PlayCircle, X,
 } from "lucide-react";
 
 const DEMO_SCAN = "/scan/45805f3a-f10a-4534-bc7d-29699029b2cf";
@@ -100,6 +101,85 @@ const catalog = [
   { group: "Anti-Theft & Mobile", accent: "#ff3b5c", items: ["Remote device lock", "Intruder selfie", "SIM-change alert", "Remote siren", "Safe zones", "Device registry", "Stolen-phone FIR guide", "Google Drive backup"] },
   { group: "Smart QR & Assets", accent: "#2dd4bf", items: ["Scan-to-alert QR", "Private masked calls", "Wrong-parking flow", "Accident / theft report", "Live vehicle tracking", "Lost mode & rewards", "Digital share-tap cards", "Nearby police stations"] },
 ];
+
+const plans = [
+  { code: "free", name: "Free", price: "₹0", sub: "forever", badge: "Best for students", accent: "#22d3ee",
+    features: ["One-Tap SOS + live location", "1 smart QR + masked calls", "Trusted contacts & helplines"] },
+  { code: "guardian", name: "Guardian", price: "₹99", sub: "per year", badge: "Family favourite", accent: "#8b5cf6", highlight: true,
+    features: ["Everything in Free", "Family circle + place alerts", "Anti-theft: lock, siren, intruder selfie"] },
+  { code: "super", name: "Super Family", price: "₹499", sub: "per year", badge: "Total protection", accent: "#ff3b5c",
+    features: ["Everything in Guardian", "5 members + vehicles & pets", "Weekly digest, backups & priority help"] },
+];
+
+function HeroDemo() {
+  const [step, setStep] = useState(0);
+  const [modal, setModal] = useState(false);
+  useEffect(() => { const t = setInterval(() => setStep((s) => (s + 1) % 3), 2400); return () => clearInterval(t); }, []);
+  const caption = ["You tap SOS", "Family is alerted instantly", "Help is on the way"][step];
+  const screen = (big) => (
+    <div style={{ position: "relative", width: "100%", height: "100%", background: "radial-gradient(120% 100% at 50% 0%, #14142a, #06060f)", overflow: "hidden" }}>
+      {/* Step 0 — SOS button */}
+      <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", opacity: step === 0 ? 1 : 0, transition: "opacity .5s", pointerEvents: "none" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: big ? 150 : 110, height: big ? 150 : 110, borderRadius: "50%", background: "radial-gradient(circle,#ff5570,#c8203f)", display: "grid", placeItems: "center", margin: "0 auto", animation: "alarmRing 1s infinite", boxShadow: "0 0 40px rgba(255,59,92,.6)" }}>
+            <Siren size={big ? 56 : 42} color="#fff" />
+          </div>
+          <div style={{ marginTop: 16, fontWeight: 800, letterSpacing: ".2em", color: "#ff8098" }}>SOS</div>
+        </div>
+      </div>
+      {/* Step 1 — alert sent */}
+      <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", opacity: step === 1 ? 1 : 0, transition: "opacity .5s", pointerEvents: "none" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 66, height: 66, borderRadius: "50%", background: "rgba(52,211,153,.18)", color: "#34d399", display: "grid", placeItems: "center", margin: "0 auto" }}><CheckCircle2 size={38} /></div>
+          <div style={{ marginTop: 14, fontSize: 13.5, fontWeight: 700 }}>Alert sent to 3 guardians</div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14 }}>
+            {["P", "A", "M"].map((c, i) => <span key={i} style={{ width: 34, height: 34, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#22d3ee)", color: "#fff", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13, animation: `fadeIn .4s ease ${i * 0.15}s both` }}>{c}</span>)}
+          </div>
+          <div className="chip" style={{ marginTop: 14 }}><MapPin size={12} /> Live location shared</div>
+        </div>
+      </div>
+      {/* Step 2 — on the way */}
+      <div style={{ position: "absolute", inset: 0, opacity: step === 2 ? 1 : 0, transition: "opacity .5s", pointerEvents: "none" }}>
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg,#0e2a2e,#0a1430)", opacity: .9 }} />
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(34,211,238,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.12) 1px,transparent 1px)", backgroundSize: "26px 26px" }} />
+        <div style={{ position: "absolute", left: "50%", top: "44%", transform: "translate(-50%,-50%)", color: "#ff3b5c" }}><MapPin size={40} fill="#ff3b5c" /></div>
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: 16, background: "linear-gradient(0deg,#06060f,transparent)" }}>
+          <div className="glass" style={{ padding: 12, borderRadius: 12, textAlign: "left" }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>Priya is on the way</div>
+            <div className="muted" style={{ fontSize: 11.5 }}>Calling you on a private line…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+  return (
+    <div data-testid="hero-demo">
+      <div style={{ margin: "0 auto", width: 260, maxWidth: "100%", height: 460, borderRadius: 34, border: "8px solid #1a1a2e", background: "#06060f", overflow: "hidden", boxShadow: "0 30px 80px rgba(0,0,0,.6)", position: "relative" }}>
+        <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 110, height: 22, background: "#1a1a2e", borderRadius: "0 0 14px 14px", zIndex: 3 }} />
+        {screen(false)}
+      </div>
+      <div className="center" style={{ marginTop: 16 }}>
+        <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10 }}>
+          {[0, 1, 2].map((i) => <span key={i} style={{ width: i === step ? 22 : 7, height: 7, borderRadius: 4, background: i === step ? "#22d3ee" : "rgba(255,255,255,.2)", transition: "all .3s" }} />)}
+        </div>
+        <div className="muted" style={{ fontSize: 13, minHeight: 18 }}>{caption}</div>
+        <button className="btn btn-ghost btn-sm" data-testid="hero-demo-watch" style={{ marginTop: 12 }} onClick={() => setModal(true)}><PlayCircle size={16} /> Watch full demo</button>
+      </div>
+      {modal && (
+        <div data-testid="hero-demo-modal" onClick={() => setModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.8)", backdropFilter: "blur(4px)", zIndex: 5000, display: "grid", placeItems: "center", padding: 20, animation: "fadeIn .2s ease" }}>
+          <div className="glass" onClick={(e) => e.stopPropagation()} style={{ padding: 22, borderRadius: 20, maxWidth: 380, width: "100%" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <h3 style={{ margin: 0, fontSize: 18 }}>How an SOS unfolds</h3>
+              <button data-testid="hero-demo-close" onClick={() => setModal(false)} style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer" }}><X size={20} /></button>
+            </div>
+            <div style={{ width: "100%", height: 380, borderRadius: 18, overflow: "hidden", border: "1px solid var(--panel-brd)" }}>{screen(true)}</div>
+            <Link to="/register" className="btn btn-primary" data-testid="hero-demo-cta" style={{ width: "100%", justifyContent: "center", marginTop: 14 }}><QrCode size={16} /> Set up my SOS</Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const flow = [
   { icon: <Siren size={22} />, t: "Tap SOS or scan a QR", d: "You raise an alert — or a stranger scans your smart QR. No app, no login needed to help." },
@@ -200,17 +280,7 @@ export default function Landing() {
             </div>
           </div>
           <div className="fade-up" style={{ animationDelay: ".15s" }}>
-            <div className="glass card-pad" style={{ padding: 34 }}>
-              <div className="scanner">
-                <span className="corner tl" /><span className="corner tr" /><span className="corner bl" /><span className="corner br" />
-                <span className="sweep" />
-                <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}><QrCode size={120} color="#22d3ee" strokeWidth={1.2} /></div>
-              </div>
-              <div className="center" style={{ marginTop: 20 }}>
-                <div className="chip"><ShieldCheck size={13} /> SOS · Family · Anti-Theft · Smart QR</div>
-                <p className="muted" style={{ marginTop: 10, fontSize: 13 }}>One app for every emergency, big or small.</p>
-              </div>
-            </div>
+            <HeroDemo />
           </div>
         </div>
       </section>
@@ -237,6 +307,32 @@ export default function Landing() {
                 <span className="muted" style={{ fontSize: 12.5 }}>{p.desc}</span>
               </span>
             </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* PLANS TEASER */}
+      <section id="plans" className="container-nk" style={{ padding: "40px 22px", scrollMarginTop: 90 }}>
+        <h2 style={{ fontSize: 32, marginBottom: 4 }}>Choose your <span className="neon">safety plan</span></h2>
+        <p className="muted" style={{ marginBottom: 26, fontSize: 15.5 }}>Start free, upgrade only when your family grows. Cancel anytime.</p>
+        <div className="grid grid-3">
+          {plans.map((p, i) => (
+            <div key={p.code} data-testid={`plan-teaser-${p.code}`} className="glass card-pad fade-up" style={{ padding: 26, position: "relative", animationDelay: `${i * 0.06}s`, border: p.highlight ? `1.5px solid ${p.accent}` : undefined, boxShadow: p.highlight ? `0 0 40px ${p.accent}33` : undefined }}>
+              <span className="chip" style={{ position: "absolute", top: -12, left: 22, background: "#0b0b16", color: p.accent, borderColor: p.accent }}>{p.badge}</span>
+              <h3 style={{ fontSize: 20, margin: "6px 0 2px" }}>{p.name}</h3>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, margin: "6px 0 16px" }}>
+                <span className="head neon" style={{ fontSize: 40, fontWeight: 700, fontFamily: "Chakra Petch" }}>{p.price}</span>
+                <span className="muted" style={{ fontSize: 13 }}>{p.sub}</span>
+              </div>
+              <ul style={{ listStyle: "none", padding: 0, margin: "0 0 20px", display: "grid", gap: 10 }}>
+                {p.features.map((f, k) => (
+                  <li key={k} style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13.5 }}><Check size={16} style={{ color: p.accent, flexShrink: 0, marginTop: 1 }} /> <span>{f}</span></li>
+                ))}
+              </ul>
+              <Link to="/subscription" data-testid={`plan-teaser-cta-${p.code}`} className={`btn ${p.highlight ? "btn-primary" : "btn-ghost"}`} style={{ width: "100%", justifyContent: "center" }}>
+                {p.code === "free" ? "Start free" : "View full plans"} <ArrowRight size={15} />
+              </Link>
+            </div>
           ))}
         </div>
       </section>

@@ -259,3 +259,19 @@ h1, h2, h3, .head { font-family: 'Chakra Petch', sans-serif; letter-spacing: -0.
 .dial-key:active { transform: scale(.94); }
 
 ::-webkit-scrollbar-thumb { background: rgba(124,58,237,.4); border-radius: 8px; }
+
+/* Mobile hamburger + drawer */
+.nav-hamburger { display: none; background: none; border: 1px solid var(--panel-brd); color: var(--text); border-radius: 10px; padding: 7px; cursor: pointer; }
+@media (max-width: 992px) {
+  .nav-desktop { display: none !important; }
+  .nav-hamburger { display: inline-flex; align-items: center; }
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.mobile-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); backdrop-filter: blur(3px); z-index: 3000; animation: fadeIn .2s ease; }
+.mobile-drawer { position: fixed; top: 0; right: 0; height: 100%; width: min(330px, 86vw); background: #0b0b16; border-left: 1px solid var(--panel-brd); z-index: 3001; display: flex; flex-direction: column; animation: drawerIn .25s ease; box-shadow: -20px 0 60px rgba(0,0,0,.55); }
+.mobile-drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--panel-brd); }
+.mobile-drawer-body { padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.mobile-drawer-body a, .mobile-drawer-body button { text-align: left; padding: 12px 14px; border-radius: 12px; font-size: 15px; font-weight: 600; color: var(--text); text-decoration: none; background: none; border: none; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+.mobile-drawer-body a:hover, .mobile-drawer-body button:hover { background: rgba(255,255,255,.05); }
+.mobile-drawer-sep { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 12px 14px 4px; }
