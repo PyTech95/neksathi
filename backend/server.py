@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import logging
 import os
 import types
@@ -24,7 +25,7 @@ import jwt
 import secrets
 import stripe
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response, status, UploadFile, File
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
@@ -1251,6 +1252,78 @@ async def link_check(request: Request, payload: LinkCheckIn, user: dict = Depend
         upsert=True,
     )
     return {"configured": True, "url": url, "verdict": verdict, "stats": stats, "cached": False}
+
+
+# ---------------------------------------------------------------------------
+# Unsafe File Checker (#10) — VirusTotal file scan (same key as link checker).
+# Checks by SHA-256 first (instant if seen before), else uploads + polls.
+# ---------------------------------------------------------------------------
+def _vt_verdict(stats: dict) -> str:
+    return "unsafe" if (int(stats.get("malicious", 0)) > 0 or int(stats.get("suspicious", 0)) > 0) else "safe"
+
+
+@api.post("/safety/file-check")
+@rate_limit("6/minute")
+async def file_check(request: Request, file: UploadFile = File(...), user: dict = Depends(current_user)):
+    if not _vt_key():
+        return {"configured": False, "message": "Unsafe File Checker is not configured yet."}
+    contents = await file.read()
+    size = len(contents)
+    if size == 0:
+        raise HTTPException(status_code=400, detail="Empty file.")
+    if size > 30 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 30 MB).")
+    sha = hashlib.sha256(contents).hexdigest()
+    headers = {"x-apikey": _vt_key(), "Accept": "application/json"}
+    stats = None
+    try:
+        async with httpx.AsyncClient(timeout=60) as c:
+            rep = await c.get(f"{VT_BASE}/files/{sha}", headers=headers)
+            if rep.status_code == 200:
+                stats = rep.json().get("data", {}).get("attributes", {}).get("last_analysis_stats")
+            if stats is None:
+                files = {"file": (file.filename or "upload.bin", contents, file.content_type or "application/octet-stream")}
+                up = await c.post(f"{VT_BASE}/files", headers=headers, files=files)
+                if up.status_code == 429:
+                    raise HTTPException(status_code=503, detail="Scanner busy (rate limit). Try again shortly.")
+                if up.status_code >= 400:
+                    raise HTTPException(status_code=502, detail="Scanner upload failed.")
+                analysis_id = up.json()["data"]["id"]
+                attrs = {}
+                for i in range(3):
+                    await asyncio.sleep(3 if i == 0 else 8)
+                    ar = await c.get(f"{VT_BASE}/analyses/{analysis_id}", headers=headers)
+                    attrs = ar.json().get("data", {}).get("attributes", {})
+                    if attrs.get("status") == "completed":
+                        stats = attrs.get("stats"); break
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.warning("file-check failed: %s", e)
+        raise HTTPException(status_code=502, detail="Could not scan this file right now.")
+    if stats is None:
+        return {"configured": True, "filename": file.filename, "sha256": sha, "verdict": "pending"}
+    stats = {k: int(v) for k, v in stats.items()}
+    return {"configured": True, "filename": file.filename, "size": size, "sha256": sha, "verdict": _vt_verdict(stats), "stats": stats}
+
+
+@api.get("/safety/file-status/{sha}")
+async def file_status(sha: str, user: dict = Depends(current_user)):
+    if not _vt_key():
+        return {"configured": False}
+    try:
+        async with httpx.AsyncClient(timeout=30) as c:
+            rep = await c.get(f"{VT_BASE}/files/{sha}", headers={"x-apikey": _vt_key(), "Accept": "application/json"})
+    except Exception:
+        return {"verdict": "pending"}
+    if rep.status_code != 200:
+        return {"verdict": "pending"}
+    stats = rep.json().get("data", {}).get("attributes", {}).get("last_analysis_stats")
+    if not stats:
+        return {"verdict": "pending"}
+    stats = {k: int(v) for k, v in stats.items()}
+    return {"verdict": _vt_verdict(stats), "stats": stats}
+
 
 
 # ---------------------------------------------------------------------------
@@ -4032,6 +4105,34 @@ async def admin_inbox_summary(_: dict = Depends(require_admin)):
     open_tickets = await db.support_tickets.count_documents({"status": {"$in": ["open", "in_progress"]}})
     new_enquiries = await db.contact_enquiries.count_documents({"status": {"$in": ["new", "in_progress"]}})
     return {"open_tickets": open_tickets, "new_enquiries": new_enquiries, "total": open_tickets + new_enquiries}
+
+
+# ---------------------------------------------------------------------------
+# Delivery Reports — admin view of WhatsApp / SMS notification delivery.
+# ---------------------------------------------------------------------------
+@api.get("/admin/notifications")
+async def admin_notifications(_: dict = Depends(require_admin), channel: Optional[str] = None,
+                              status_filter: Optional[str] = None, limit: int = 100):
+    query: dict = {}
+    if channel and channel != "all":
+        query["channel"] = channel
+    if status_filter and status_filter != "all":
+        query["status"] = status_filter
+    items = []
+    async for n in db.notifications.find(query).sort("created_at", -1).limit(min(limit, 300)):
+        items.append(clean(n))
+    # Aggregate counts for the dashboard cards.
+    stats = {"total": 0, "sent": 0, "mock": 0, "failed": 0, "skipped": 0, "whatsapp": 0, "sms": 0}
+    async for n in db.notifications.find({}):
+        stats["total"] += 1
+        st = n.get("status", "")
+        if st in stats:
+            stats[st] += 1
+        ch = n.get("channel", "")
+        if ch in stats:
+            stats[ch] += 1
+    return {"stats": stats, "items": items}
+
 
 
 # ---------------------------------------------------------------------------

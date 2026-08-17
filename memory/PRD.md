@@ -235,3 +235,12 @@ MOBILE-ONLY (need Expo app): #11,#19,#20,#21,#22,#23,#25.
 Files touched: backend/server.py (link_check, nearby_police, community_*), frontend Safety.jsx (LinkChecker, NearbyPolice), Community.jsx, App.js routes (/community), TopNav.jsx (nav-community). backend/.env (VIRUSTOTAL_API_KEY="", MSG91_WHATSAPP_TEMPLATE).
 STILL PENDING (buildable on web): #8 Stolen-Mobile FIR guide, #10 Unsafe File Checker (VirusTotal file scan — same key), #16 Google Drive upload, #24 Geo-Fencing, #14 Surround Audio, #15 personal Emergency Photo, Delivery Reports dashboard, OTP Resend Timer, SMS OTP fallback.
 MOBILE-ONLY: #11,#19,#20,#21,#22,#23,#25.
+
+## Update 2026-06 — Safety Suite (Phase 3) — 4 more features (curl + screenshot verified)
+- #10 Unsafe File Checker — POST /api/safety/file-check (multipart UploadFile, SHA-256 lookup then upload+poll VirusTotal), GET /api/safety/file-status/{sha} for polling. Graceful {configured:false} without VIRUSTOTAL_API_KEY. Frontend: FileChecker card on Safety page. BUILT — needs VT key (same as #9).
+- #8 Stolen-Mobile FIR Guide + #12 CEIR block — new page /stolen-phone (nav card on Safety page). 6 steps + IMEI tip + official gov links (ceir.gov.in, sancharsaathi.gov.in, cybercrime.gov.in, digitalpolice.gov.in). No key. DONE.
+- OTP Resend Timer — OtpLogin.jsx: 30s countdown resend button (otp-resend-btn), WhatsApp channel note (otp-channel-note). DONE.
+- Delivery Reports — GET /api/admin/notifications (stats + filterable list). Admin page /admin/comms (AdminComms.jsx), linked from Admin hub (link-admin-comms). Shows WhatsApp/SMS sent/mock/failed with filters. DONE. Verified: 134 msgs, live WhatsApp "sent" visible.
+Files: backend/server.py (file_check, file_status, admin_notifications), frontend Safety.jsx (FileChecker + stolen-phone card), StolenPhone.jsx, AdminComms.jsx, OtpLogin.jsx, Admin.jsx, App.js routes (/stolen-phone, /admin/comms).
+STILL PENDING (buildable): #24 Geo-Fencing/Safe Zones, #14 Surround Audio, #15 personal Emergency Photo. NEEDS CREDS: #16 Google Drive (OAuth), SMS OTP fallback (DLT SMS template). NEEDS KEY: activate #9 + #10 with VIRUSTOTAL_API_KEY.
+MOBILE-ONLY: #11,#19,#20,#21,#22,#23,#25.

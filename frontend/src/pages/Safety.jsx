@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
-import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Link2, ShieldCheck, ShieldX, Search, Building2, Navigation } from "lucide-react";
+import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Link2, ShieldCheck, ShieldX, Search, Building2, Navigation, FileScan, Upload, Smartphone, ChevronRight } from "lucide-react";
 import { loadLeaflet } from "@/lib/leaflet";
+import { Link } from "react-router-dom";
 
 const HELPLINES = [
   { num: "112", label: "All-in-one Emergency", icon: <ShieldAlert size={18} />, tone: "#ff3b5c" },
@@ -352,6 +353,84 @@ function NearbyPolice() {
   );
 }
 
+function FileChecker() {
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState("");
+  const [fname, setFname] = useState("");
+  const fileRef = useRef(null);
+  const pollRef = useRef(null);
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  const onPick = async (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    setErr(""); setRes(null); setFname(f.name);
+    if (f.size > 30 * 1024 * 1024) { setErr("File too large (max 30 MB)."); return; }
+    setBusy(true);
+    try {
+      const fd = new FormData(); fd.append("file", f);
+      const r = await api.post("/safety/file-check", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      setRes(r.data);
+      if (r.data.verdict === "pending" && r.data.sha256) startPoll(r.data.sha256);
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not scan this file."); }
+    finally { setBusy(false); if (fileRef.current) fileRef.current.value = ""; }
+  };
+
+  const startPoll = (sha) => {
+    let tries = 0;
+    pollRef.current = setInterval(async () => {
+      tries += 1;
+      try {
+        const r = await api.get(`/safety/file-status/${sha}`);
+        if (r.data.verdict === "safe" || r.data.verdict === "unsafe") {
+          setRes((p) => ({ ...p, verdict: r.data.verdict, stats: r.data.stats }));
+          clearInterval(pollRef.current);
+        }
+      } catch (_) {}
+      if (tries >= 12) clearInterval(pollRef.current);
+    }, 6000);
+  };
+
+  return (
+    <div className="glass" style={{ padding: 22, borderRadius: 18, marginTop: 18 }} data-testid="file-checker-panel">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <FileScan size={20} className="neon" />
+        <div>
+          <h2 style={{ margin: 0, fontSize: 18 }}>Unsafe File Checker</h2>
+          <p className="muted" style={{ margin: "2px 0 0", fontSize: 12.5 }}>Scan a downloaded file (APK, PDF, doc…) for malware.</p>
+        </div>
+      </div>
+      <label className="btn btn-primary" style={{ cursor: "pointer" }} data-testid="file-checker-label">
+        {busy ? <Loader2 className="spin" size={16} /> : <><Upload size={16} /> Choose a file to scan</>}
+        <input ref={fileRef} type="file" onChange={onPick} disabled={busy} style={{ display: "none" }} data-testid="file-checker-input" />
+      </label>
+      {fname && <span className="muted" style={{ marginLeft: 12, fontSize: 13 }}>{fname}</span>}
+      {err && <div style={{ color: "#ff7591", fontSize: 13, marginTop: 12 }} data-testid="file-checker-error">{err}</div>}
+      {res && res.configured === false && (
+        <div className="muted" style={{ marginTop: 12, fontSize: 13 }} data-testid="file-checker-unconfigured">Scanner isn't configured yet — add a VirusTotal API key to enable it.</div>
+      )}
+      {res?.verdict === "pending" && <div className="muted" style={{ marginTop: 12, fontSize: 13 }} data-testid="file-checker-pending"><Loader2 className="spin" size={14} style={{ verticalAlign: "middle" }} /> Analysing file… results will appear shortly.</div>}
+      {(res?.verdict === "safe" || res?.verdict === "unsafe") && (
+        <div data-testid="file-checker-result" className="glass" style={{ marginTop: 14, padding: 16, borderRadius: 12, borderColor: res.verdict === "unsafe" ? "rgba(255,59,92,.5)" : "rgba(52,211,153,.5)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, color: res.verdict === "unsafe" ? "#ff7591" : "#34d399", fontWeight: 800, fontSize: 16 }}>
+            {res.verdict === "unsafe" ? <><ShieldX size={22} /> Unsafe — do not open this file</> : <><ShieldCheck size={22} /> No known threat detected</>}
+          </div>
+          {res.stats && (
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, fontSize: 12.5 }} className="muted">
+              <span style={{ color: "#ff7591" }}>Malicious: {res.stats.malicious ?? 0}</span>
+              <span style={{ color: "#f5a524" }}>Suspicious: {res.stats.suspicious ?? 0}</span>
+              <span style={{ color: "#34d399" }}>Harmless: {res.stats.harmless ?? 0}</span>
+              <span>Undetected: {res.stats.undetected ?? 0}</span>
+            </div>
+          )}
+          <p className="muted" style={{ fontSize: 11.5, marginTop: 10, marginBottom: 0 }}>Powered by VirusTotal · a strong signal, not an absolute guarantee.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Safety() {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -475,6 +554,19 @@ export default function Safety() {
 
       {/* Nearby police */}
       <NearbyPolice />
+
+      {/* Unsafe file checker */}
+      <FileChecker />
+
+      {/* Stolen phone / FIR guide link */}
+      <Link to="/stolen-phone" data-testid="stolen-phone-card" className="glass glass-hover" style={{ display: "flex", alignItems: "center", gap: 14, padding: 20, borderRadius: 18, marginTop: 18, textDecoration: "none", color: "var(--text)" }}>
+        <span style={{ width: 46, height: 46, borderRadius: 12, display: "grid", placeItems: "center", background: "rgba(124,58,237,.15)", color: "#c084fc", flexShrink: 0 }}><Smartphone size={22} /></span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>Lost or stolen phone?</div>
+          <div className="muted" style={{ fontSize: 13 }}>Step-by-step FIR guide + block your device on the official CEIR portal.</div>
+        </div>
+        <ChevronRight size={20} className="muted" />
+      </Link>
 
       {/* Helplines */}
       <div className="glass" style={{ padding: 22, borderRadius: 18, marginTop: 18 }} data-testid="helplines-panel">
