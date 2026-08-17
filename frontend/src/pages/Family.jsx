@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { loadLeaflet } from "@/lib/leaflet";
-import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow } from "lucide-react";
+import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
 
@@ -43,6 +43,7 @@ export default function Family() {
   const [rules, setRules] = useState(null);
   const [zones, setZones] = useState([]);
   const [checkIns, setCheckIns] = useState({ incoming: [], outgoing: [] });
+  const [activeSos, setActiveSos] = useState([]);
   const [digest, setDigest] = useState(null);
   const [sending, setSending] = useState(false);
   const [sentMsg, setSentMsg] = useState("");
@@ -65,11 +66,21 @@ export default function Family() {
         try { setRules((await api.get("/family/alert-rules")).data); } catch (_) {}
         try { setZones((await api.get("/family/zones")).data.items || []); } catch (_) {}
         try { setCheckIns((await api.get("/family/check-ins")).data); } catch (_) {}
+        try { setActiveSos((await api.get("/family/active-sos")).data.items || []); } catch (_) {}
         try { setDigest((await api.get("/family/digest")).data); } catch (_) {}
       }
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+
+  // Poll active SOS every 20s so the guardian sees a live pin.
+  useEffect(() => {
+    if (!data?.in_family) return;
+    const t = setInterval(async () => {
+      try { setActiveSos((await api.get("/family/active-sos")).data.items || []); } catch (_) {}
+    }, 20000);
+    return () => clearInterval(t);
+  }, [data?.in_family]);
 
   const saveRules = async (patch) => {
     const next = { ...rules, ...patch };
@@ -78,6 +89,8 @@ export default function Family() {
       place_alerts_enabled: next.place_alerts_enabled,
       place_alert_direction: next.place_alert_direction,
       quiet_start: next.quiet_start, quiet_end: next.quiet_end,
+      low_battery_threshold: next.low_battery_threshold ?? 15,
+      sos_escalation_min: next.sos_escalation_min ?? 3,
     });
   };
   const sendDigest = async () => {
@@ -96,19 +109,23 @@ export default function Family() {
   useEffect(() => {
     if (!data?.in_family) return;
     const pts = data.members.filter((m) => m.latitude != null);
-    if (!pts.length) return;
+    const sosPts = (activeSos || []).filter((s) => s.latitude != null);
+    if (!pts.length && !sosPts.length) return;
+    const center = pts[0] || sosPts[0];
     loadLeaflet().then((L) => {
       if (!mapEl.current) return;
       if (!mapObj.current) {
-        mapObj.current = L.map(mapEl.current, { zoomControl: true }).setView([pts[0].latitude, pts[0].longitude], 12);
+        mapObj.current = L.map(mapEl.current, { zoomControl: true }).setView([center.latitude, center.longitude], 12);
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }).addTo(mapObj.current);
       }
       if (layer.current) layer.current.remove();
       layer.current = L.layerGroup().addTo(mapObj.current);
       pts.forEach((m) => L.marker([m.latitude, m.longitude]).addTo(layer.current).bindPopup(`<b>${m.name}</b>${m.battery != null ? `<br/>🔋 ${m.battery}%` : ""}`));
-      if (pts.length > 1) mapObj.current.fitBounds(pts.map((m) => [m.latitude, m.longitude]), { padding: [40, 40] });
+      sosPts.forEach((s) => L.circleMarker([s.latitude, s.longitude], { radius: 12, color: "#ff3b5c", fillColor: "#ff3b5c", fillOpacity: 0.6, weight: 3 }).addTo(layer.current).bindPopup(`<b>🆘 ${s.member_name}</b><br/>SOS active`).openPopup());
+      const all = [...pts.map((m) => [m.latitude, m.longitude]), ...sosPts.map((s) => [s.latitude, s.longitude])];
+      if (all.length > 1) mapObj.current.fitBounds(all, { padding: [40, 40] });
     });
-  }, [data]);
+  }, [data, activeSos]);
 
   const create = async () => { setBusy(true); setErr(""); try { await api.post("/family", { name }); await load(); } catch (e) { setErr(e?.response?.data?.detail || "Could not create."); } finally { setBusy(false); } };
   const join = async () => { setBusy(true); setErr(""); try { await api.post("/family/join", { invite_code: code }); await load(); } catch (e) { setErr(e?.response?.data?.detail || "Could not join."); } finally { setBusy(false); } };
@@ -176,7 +193,24 @@ export default function Family() {
             </div>
           )}
 
-          {data.members.some((m) => m.latitude != null) && (
+          {activeSos.length > 0 && (
+            <div className="glass" style={{ padding: 16, borderRadius: 14, marginBottom: 16, borderColor: "rgba(255,59,92,.6)", background: "rgba(255,59,92,.08)" }} data-testid="active-sos-banner">
+              {activeSos.map((s) => (
+                <div key={s.id} data-testid={`active-sos-${s.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "4px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <ShieldAlert size={22} style={{ color: "#ff3b5c" }} />
+                    <div>
+                      <div style={{ fontSize: 14.5, fontWeight: 800, color: "#ff3b5c" }}>🆘 {s.member_name} has an active SOS{s.escalated ? " · escalated" : ""}</div>
+                      <div className="muted" style={{ fontSize: 12.5 }}>{new Date(s.created_at).toLocaleString()}{s.message ? ` · "${s.message}"` : ""}</div>
+                    </div>
+                  </div>
+                  {s.latitude != null && <a className="btn btn-danger btn-sm" href={`https://maps.google.com/?q=${s.latitude},${s.longitude}`} target="_blank" rel="noreferrer" data-testid={`active-sos-nav-${s.id}`}><MapPin size={14} /> Navigate</a>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {(data.members.some((m) => m.latitude != null) || activeSos.some((s) => s.latitude != null)) && (
             <div ref={mapEl} data-testid="family-map" style={{ height: 300, borderRadius: 14, overflow: "hidden", border: "1px solid var(--panel-brd)", marginBottom: 16 }} />
           )}
 
@@ -270,6 +304,12 @@ export default function Family() {
                   {[5, 10, 15, 20, 25, 30, 40, 50].map((p) => <option key={p} value={p}>{p}%</option>)}
                 </select>
               </div>
+              <div className="field" style={{ marginTop: 12 }}>
+                <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><Timer size={14} /> Ring me if an SOS goes unanswered for</label>
+                <select className="input" value={rules.sos_escalation_min ?? 3} onChange={(e) => saveRules({ sos_escalation_min: Number(e.target.value) })} data-testid="rules-sos-escalation">
+                  {[1, 2, 3, 5, 10, 15].map((m) => <option key={m} value={m}>{m} minute{m === 1 ? "" : "s"}</option>)}
+                </select>
+              </div>
               {zones.length > 0 && (
                 <div style={{ marginTop: 16, borderTop: "1px solid var(--panel-brd)", paddingTop: 14 }} data-testid="zone-rules">
                   <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 8 }}>Mute specific places</div>
@@ -284,6 +324,26 @@ export default function Family() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {data.is_guardian && checkIns.outgoing?.length > 0 && (
+            <div className="glass" style={{ padding: 16, borderRadius: 14, marginTop: 18 }} data-testid="checkin-history">
+              <h2 style={{ fontSize: 18, margin: "0 0 10px", display: "flex", alignItems: "center", gap: 8 }}><HeartHandshake size={17} className="neon" /> Check-in history</h2>
+              <div style={{ display: "grid", gap: 8 }}>
+                {checkIns.outgoing.map((ci) => {
+                  const replyMs = ci.responded_at ? new Date(ci.responded_at) - new Date(ci.created_at) : null;
+                  const replyTxt = replyMs != null ? (replyMs < 60000 ? `${Math.max(1, Math.round(replyMs / 1000))}s` : `${Math.round(replyMs / 60000)}m`) : null;
+                  const meta = ci.status === "pending" ? { c: "#f5a524", t: "Awaiting reply" } : ci.status === "safe" ? { c: "#34d399", t: `Replied safe in ${replyTxt}` } : { c: "#ff3b5c", t: `Needs help · replied in ${replyTxt}` };
+                  return (
+                    <div key={ci.id} data-testid={`checkin-hist-${ci.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 12px", borderRadius: 10, background: "rgba(255,255,255,.03)" }}>
+                      <span style={{ fontSize: 13.5 }}>{ci.member_name}</span>
+                      <span style={{ fontSize: 12.5, color: meta.c, fontWeight: 600 }}>{meta.t}</span>
+                      <span className="muted" style={{ fontSize: 12 }}>{new Date(ci.created_at).toLocaleString()}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

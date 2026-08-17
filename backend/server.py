@@ -2245,6 +2245,7 @@ class AlertRulesIn(BaseModel):
     quiet_start: Optional[int] = Field(default=None, ge=0, le=23)
     quiet_end: Optional[int] = Field(default=None, ge=0, le=23)
     low_battery_threshold: int = Field(default=15, ge=5, le=50)
+    sos_escalation_min: int = Field(default=3, ge=1, le=15)
 
 
 @api.get("/family/alert-rules")
@@ -2256,7 +2257,8 @@ async def get_alert_rules(user: dict = Depends(current_user)):
             "place_alerts_enabled": fam.get("place_alerts_enabled", True),
             "place_alert_direction": fam.get("place_alert_direction", "both"),
             "quiet_start": fam.get("quiet_start"), "quiet_end": fam.get("quiet_end"),
-            "low_battery_threshold": fam.get("low_battery_threshold", 15)}
+            "low_battery_threshold": fam.get("low_battery_threshold", 15),
+            "sos_escalation_min": fam.get("sos_escalation_min", 3)}
 
 
 @api.put("/family/alert-rules")
@@ -2377,6 +2379,30 @@ async def respond_check_in(check_id: str, payload: CheckInRespondIn, user: dict 
     return {"responded": True, "status": payload.status}
 
 
+@api.get("/family/active-sos")
+async def family_active_sos(user: dict = Depends(current_user)):
+    """Live pins of any member's active (unacknowledged, last 2h) SOS so the
+    guardian can head over."""
+    fam = await _my_family(user["id"])
+    if not fam:
+        return {"items": []}
+    is_guardian = fam["guardian_id"] == user["id"]
+    names, ids = {}, []
+    async for m in db.family_members.find({"family_id": fam["id"]}):
+        names[m["user_id"]] = m.get("name")
+        if is_guardian or m["user_id"] == user["id"]:
+            ids.append(m["user_id"])
+    since = now_utc() - timedelta(hours=2)
+    items = []
+    async for s in db.sos_events.find({"user_id": {"$in": ids}, "acknowledged": {"$ne": True},
+                                       "created_at": {"$gte": since}}).sort("created_at", -1):
+        items.append({"id": s["id"], "member_name": names.get(s["user_id"]) or "Member",
+                      "latitude": s.get("latitude"), "longitude": s.get("longitude"),
+                      "message": s.get("message"), "escalated": bool(s.get("escalated")),
+                      "created_at": s.get("created_at")})
+    return {"items": items}
+
+
 # ---------------------------------------------------------------------------
 # SOS Auto-Escalation — if an SOS is not acknowledged within a few minutes,
 # ring the guardian's phone (Vobiz voice call) and send an urgent alert.
@@ -2392,6 +2418,13 @@ async def _guardian_of(user_id: str) -> Optional[dict]:
     if not fam or not fam.get("guardian_id") or fam["guardian_id"] == user_id:
         return None
     return await db.users.find_one({"id": fam["guardian_id"]})
+
+
+async def _family_of(user_id: str) -> Optional[dict]:
+    fm = await db.family_members.find_one({"user_id": user_id})
+    if not fm:
+        return None
+    return await db.families.find_one({"id": fm["family_id"]})
 
 
 async def _escalate_sos(sos: dict):
@@ -2438,21 +2471,27 @@ async def _escalate_sos(sos: dict):
 
 
 async def _sos_escalation_scanner():
-    """Every minute, escalate SOS events that are still unacknowledged after the
-    threshold, ringing the guardian. Each SOS escalates at most once. A lower
-    time bound prevents ancient/historical events from escalating on restart."""
+    """Every 30s, escalate SOS events still unacknowledged after the owner's
+    family-chosen delay (default 3 min). Each SOS escalates once. A 60-min floor
+    prevents ancient/historical events from escalating on restart."""
     while True:
         try:
             now = now_utc()
-            cutoff = now - timedelta(minutes=SOS_ESCALATION_MIN)
-            floor = now - timedelta(minutes=30)
+            floor = now - timedelta(minutes=60)
             async for sos in db.sos_events.find({"acknowledged": {"$ne": True}, "escalated": {"$ne": True},
-                                                 "created_at": {"$lt": cutoff, "$gt": floor}}):
+                                                 "created_at": {"$gt": floor}}):
+                fam = await _family_of(sos["user_id"])
+                mins = int((fam or {}).get("sos_escalation_min", SOS_ESCALATION_MIN))
+                created = sos["created_at"]
+                if created.tzinfo is None:
+                    created = created.replace(tzinfo=timezone.utc)
+                if (now - created) < timedelta(minutes=mins):
+                    continue
                 await db.sos_events.update_one({"id": sos["id"]}, {"$set": {"escalated": True, "escalated_at": now_utc()}})
                 await _escalate_sos(sos)
         except Exception as e:
             log.warning("sos escalation scanner: %s", e)
-        await asyncio.sleep(60)
+        await asyncio.sleep(30)
 
 
 @api.post("/vobiz/sos-answer")
