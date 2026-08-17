@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { ShieldCheck, Smartphone, Plus, Trash2, Pencil, Lock, Unlock, X, Loader2, MapPin, Camera, AlertTriangle, Info } from "lucide-react";
+import { ShieldCheck, Smartphone, Plus, Trash2, Pencil, Lock, Unlock, X, Loader2, MapPin, Camera, AlertTriangle, Info, Volume2, VolumeX, Signal } from "lucide-react";
 
 function PhotoThumb({ eventId, onOpen }) {
   const [src, setSrc] = useState(null);
@@ -12,6 +12,7 @@ function PhotoThumb({ eventId, onOpen }) {
 export default function TheftProtection() {
   const [devices, setDevices] = useState([]);
   const [events, setEvents] = useState([]);
+  const [simEvents, setSimEvents] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [show, setShow] = useState(false);
@@ -24,8 +25,8 @@ export default function TheftProtection() {
   const load = async () => {
     setLoading(true);
     try {
-      const [d, e, c] = await Promise.all([api.get("/devices"), api.get("/intruder-events"), api.get("/me/emergency-contacts")]);
-      setDevices(d.data); setEvents(e.data); setContacts(c.data);
+      const [d, e, c, s] = await Promise.all([api.get("/devices"), api.get("/intruder-events"), api.get("/me/emergency-contacts"), api.get("/sim-events")]);
+      setDevices(d.data); setEvents(e.data); setContacts(c.data); setSimEvents(s.data.items || []);
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
@@ -42,6 +43,7 @@ export default function TheftProtection() {
   };
   const remove = async (id) => { if (!window.confirm("Remove this device?")) return; await api.delete(`/devices/${id}`); load(); };
   const toggleLock = async (d) => { await api.post(`/devices/${d.id}/${d.locked ? "unlock" : "lock"}`); load(); };
+  const toggleSiren = async (d) => { await api.post(`/devices/${d.id}/siren`, { active: !d.siren_active }); load(); };
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   return (
@@ -76,10 +78,11 @@ export default function TheftProtection() {
                     {d.locked ? <span style={{ color: "#ff3b5c", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}><Lock size={12} /> Locked</span>
                       : <span style={{ color: "#34d399", fontSize: 12 }}>Active</span>}
                   </div>
-                  <div className="muted" style={{ fontSize: 12.5 }}>{d.platform || "device"} · locks after {d.lock_threshold} failed attempts</div>
+                  <div className="muted" style={{ fontSize: 12.5 }}>{d.platform || "device"} · locks after {d.lock_threshold} failed attempts{d.siren_active ? " · 🔊 siren ON" : ""}</div>
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
+                <button className={`btn btn-sm ${d.siren_active ? "btn-danger" : "btn-ghost"}`} onClick={() => toggleSiren(d)} data-testid={`device-siren-${d.id}`} title={d.siren_active ? "Stop remote siren" : "Sound siren remotely"}>{d.siren_active ? <><VolumeX size={14} /> Stop siren</> : <><Volume2 size={14} /> Siren</>}</button>
                 <button className={`btn btn-sm ${d.locked ? "btn-ghost" : "btn-danger"}`} onClick={() => toggleLock(d)} data-testid={`device-lock-${d.id}`}>{d.locked ? <><Unlock size={14} /> Unlock</> : <><Lock size={14} /> Lock</>}</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => openEdit(d)} data-testid={`device-edit-${d.id}`}><Pencil size={14} /></button>
                 <button className="btn btn-ghost btn-sm" onClick={() => remove(d.id)} data-testid={`device-delete-${d.id}`}><Trash2 size={14} /></button>
@@ -104,6 +107,25 @@ export default function TheftProtection() {
                   {ev.triggered_lock && <span style={{ color: "#ff3b5c", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 3 }}><Lock size={11} /> auto-locked</span>}
                 </div>
                 <div className="muted" style={{ fontSize: 12.5, marginTop: 3 }}>{new Date(ev.created_at).toLocaleString()}</div>
+                {ev.latitude != null && <a href={`https://maps.google.com/?q=${ev.latitude},${ev.longitude}`} target="_blank" rel="noreferrer" className="neon" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 4, marginTop: 4 }}><MapPin size={13} /> View location</a>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* SIM change alerts */}
+      <h2 style={{ margin: "26px 0 12px", fontSize: 18, display: "flex", alignItems: "center", gap: 8 }}><Signal size={17} className="neon" /> SIM change alerts</h2>
+      {simEvents.length === 0 ? (
+        <p className="muted" data-testid="sim-empty" style={{ textAlign: "center", padding: "16px 0" }}>No SIM changes detected. If someone swaps the SIM in a protected phone, your family is alerted instantly.</p>
+      ) : (
+        <div style={{ display: "grid", gap: 10 }}>
+          {simEvents.map((ev) => (
+            <div key={ev.id} data-testid={`sim-row-${ev.id}`} className="glass" style={{ padding: 14, borderRadius: 12, display: "flex", gap: 12, alignItems: "center" }}>
+              <span style={{ width: 42, height: 42, borderRadius: 11, display: "grid", placeItems: "center", background: "rgba(255,59,92,.15)", color: "#ff3b5c", flexShrink: 0 }}><Signal size={19} /></span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}><AlertTriangle size={15} style={{ color: "#ff3b5c" }} /> SIM changed · {ev.device_name}</div>
+                <div className="muted" style={{ fontSize: 12.5, marginTop: 3 }}>{new Date(ev.created_at).toLocaleString()}{ev.carrier ? ` · ${ev.carrier}` : ""}{ev.new_number ? ` · ${ev.new_number}` : ""}</div>
                 {ev.latitude != null && <a href={`https://maps.google.com/?q=${ev.latitude},${ev.longitude}`} target="_blank" rel="noreferrer" className="neon" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 4, marginTop: 4 }}><MapPin size={13} /> View location</a>}
               </div>
             </div>

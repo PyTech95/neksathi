@@ -46,3 +46,25 @@ DELETE /devices/{DEVICE_ID}
 - Photos: keep JPEG under ~2–3 MB base64. WhatsApp/SMS carry a TEXT alert + secure link
   (`/intruder/{view_token}`); the full photo shows in the app, dashboard and email.
 - Threshold is 2–5 (owner-configurable, default 3).
+
+## 5. SIM Change Alert (NEW)
+The app watches the active SIM/IMSI (Android READ_PHONE_STATE / subscription change
+listener). When it changes, POST it — the backend fans out WhatsApp+SMS+push to the
+owner's emergency contacts + device guardian.
+POST /devices/{DEVICE_ID}/sim-swap   (auth)
+  body: { new_number?, carrier?, imsi?, latitude?, longitude? }
+  → { reported: true, id }
+GET  /sim-events   (auth) → { count, items:[{device_name,new_number,carrier,latitude,...}] }
+Web: SIM changes show on /theft-protection under "SIM change alerts".
+
+## 6. Remote Siren (NEW)
+Owner turns a loud alarm ON/OFF from the web portal; the app polls the siren state and
+rings a full-volume alarm even on silent mode.
+POST /devices/{DEVICE_ID}/siren        (auth) body: { active: true|false } → { siren_active }
+GET  /devices/{DEVICE_ID}/siren-state  (auth) → { siren_active }   (poll this; also bumps last_seen)
+Web: "Siren"/"Stop siren" button on each device row in /theft-protection.
+
+## 7. Place Alerts for Kids (NEW)
+No new endpoint — reuse POST /me/location or POST /me/status with lat/lng. When the reporting
+user is a member of a Family Guardian circle and crosses a safe zone, the circle's GUARDIAN is
+notified (push + WhatsApp) on BOTH enter and exit ("X arrived at School" / "X left Home").

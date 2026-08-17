@@ -1215,6 +1215,30 @@ async def _evaluate_geofences(user: dict, lat: float, lng: float) -> list:
                             await notify_whatsapp(c.get("phone"), body, meta={"kind": "geofence", "user_id": user["id"]})
                         except Exception:
                             pass
+                # Place Alerts for Kids — notify the family guardian on enter AND exit.
+                try:
+                    fm = await db.family_members.find_one({"user_id": user["id"]})
+                    if fm:
+                        fam = await db.families.find_one({"id": fm["family_id"]})
+                        if fam and fam.get("guardian_id") and fam["guardian_id"] != user["id"]:
+                            who = user.get("name") or "Your family member"
+                            place = z.get("name", "a place")
+                            msg = f"{who} {'arrived at' if inside else 'left'} {place}."
+                            try:
+                                await send_push(recipients=[fam["guardian_id"]], data={
+                                    "title": "📍 Place alert", "message": msg, "action_url": "/family",
+                                }, idempotency_key=ev["id"] + "-g")
+                            except Exception:
+                                pass
+                            guardian = await db.users.find_one({"id": fam["guardian_id"]})
+                            if guardian and guardian.get("phone"):
+                                try:
+                                    await notify_whatsapp(guardian["phone"], f"📍 Nek Sathi place alert: {msg}",
+                                                          meta={"kind": "place_alert", "user_id": user["id"]})
+                                except Exception:
+                                    pass
+                except Exception as _e:
+                    log.warning("place-alert failed: %s", _e)
     return transitions
 
 
@@ -1610,6 +1634,7 @@ class DeviceOut(BaseModel):
     guardian_contact_id: Optional[str] = None
     super_admin_alerts: bool = True
     locked: bool = False
+    siren_active: bool = False
     created_at: datetime
     last_seen: Optional[datetime] = None
 
@@ -1670,6 +1695,7 @@ async def delete_device(device_id: str, user: dict = Depends(current_user)):
     if not r.deleted_count:
         raise HTTPException(status_code=404, detail="Device not found")
     await db.intruder_events.delete_many({"device_id": device_id, "user_id": user["id"]})
+    await db.sim_events.delete_many({"device_id": device_id, "user_id": user["id"]})
     return {"deleted": True}
 
 
@@ -1823,6 +1849,105 @@ async def admin_intruder_events(_: dict = Depends(require_admin), limit: int = 1
         e["has_photo"] = bool(e.get("photo_base64"))
         items.append(e)
     return {"count": len(items), "items": items}
+
+
+# ---------------------------------------------------------------------------
+# SIM Change Alert (#1) — the native mobile app watches the device SIM/IMSI and
+# calls POST /devices/{id}/sim-swap when it changes (a classic stolen-phone
+# signal). We store the event and fan out to family + guardian.
+# ---------------------------------------------------------------------------
+class SimSwapIn(BaseModel):
+    new_number: Optional[str] = Field(default=None, max_length=20)
+    carrier: Optional[str] = Field(default=None, max_length=60)
+    imsi: Optional[str] = Field(default=None, max_length=40)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+async def _sim_swap_fanout(user: dict, device: dict, ev: dict):
+    who = user.get("name") or "A Nek Sathi user"
+    loc = ""
+    if ev.get("latitude") is not None:
+        loc = f" Location: https://maps.google.com/?q={ev['latitude']},{ev['longitude']}."
+    carrier = f" New carrier: {ev.get('carrier')}." if ev.get("carrier") else ""
+    num = f" New number: {ev.get('new_number')}." if ev.get("new_number") else ""
+    body = (f"🚨 Nek Sathi SIM CHANGE ALERT: the SIM in {who}'s phone '{device.get('name','device')}' was changed. "
+            f"This can mean the phone was stolen.{carrier}{num}{loc}")
+    phones = []
+    async for c in db.emergency_contacts.find({"user_id": user["id"]}):
+        if c.get("phone"):
+            phones.append(c["phone"])
+    gid = device.get("guardian_contact_id")
+    if gid:
+        g = await db.emergency_contacts.find_one({"id": gid, "user_id": user["id"]})
+        if g and g.get("phone") and g["phone"] not in phones:
+            phones.append(g["phone"])
+    for p in phones:
+        try:
+            await notify_whatsapp(p, body, meta={"kind": "sim_swap", "user_id": user["id"]})
+        except Exception:
+            pass
+        try:
+            await send_sms(p, body, meta={"kind": "sim_swap", "user_id": user["id"]})
+        except Exception:
+            pass
+    try:
+        if _prefs(user).get("push"):
+            await send_push(recipients=[user["id"]], data={
+                "title": "🚨 SIM changed", "message": f"The SIM in {device.get('name','your device')} was changed.",
+                "action_url": "/theft-protection"}, idempotency_key=ev["id"])
+    except Exception:
+        pass
+
+
+@api.post("/devices/{device_id}/sim-swap")
+@rate_limit("10/minute")
+async def report_sim_swap(request: Request, device_id: str, payload: SimSwapIn, user: dict = Depends(current_user)):
+    device = await db.devices.find_one({"id": device_id, "user_id": user["id"]})
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    ev = {"id": new_id(), "user_id": user["id"], "device_id": device_id,
+          "device_name": device.get("name", "device"), "new_number": payload.new_number,
+          "carrier": payload.carrier, "imsi": payload.imsi,
+          "latitude": payload.latitude, "longitude": payload.longitude, "created_at": now_utc()}
+    await db.sim_events.insert_one(dict(ev))
+    await _sim_swap_fanout(user, device, ev)
+    return {"reported": True, "id": ev["id"]}
+
+
+@api.get("/sim-events")
+async def list_sim_events(user: dict = Depends(current_user), limit: int = 50):
+    items = []
+    async for e in db.sim_events.find({"user_id": user["id"]}).sort("created_at", -1).limit(min(limit, 200)):
+        items.append(clean(e))
+    return {"count": len(items), "items": items}
+
+
+# ---------------------------------------------------------------------------
+# Remote Siren (#2) — the owner turns a loud alarm ON from the web portal; the
+# native mobile app polls GET /devices/{id}/siren-state and rings the alarm at
+# full volume even if the phone is on silent. Owner turns it OFF from here too.
+# ---------------------------------------------------------------------------
+class SirenIn(BaseModel):
+    active: bool = True
+
+
+@api.post("/devices/{device_id}/siren")
+async def set_siren(device_id: str, payload: SirenIn, user: dict = Depends(current_user)):
+    r = await db.devices.update_one({"id": device_id, "user_id": user["id"]},
+                                    {"$set": {"siren_active": payload.active}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {"siren_active": payload.active}
+
+
+@api.get("/devices/{device_id}/siren-state")
+async def siren_state(device_id: str, user: dict = Depends(current_user)):
+    d = await db.devices.find_one({"id": device_id, "user_id": user["id"]})
+    if not d:
+        raise HTTPException(status_code=404, detail="Device not found")
+    await db.devices.update_one({"id": device_id}, {"$set": {"last_seen": now_utc()}})
+    return {"siren_active": bool(d.get("siren_active"))}
 
 
 # ---------------------------------------------------------------------------

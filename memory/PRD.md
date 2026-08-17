@@ -286,3 +286,12 @@ Guardian creates a circle (cap 5), invites members by code; sees each member's l
 - Frontend: Family.jsx (/family, nav "Family") — create/join, guardian dashboard with member map (Leaflet), battery/last-seen, per-member Activity panel (today screen-time totals + feed), invite-code copy, privacy toggles, remove member, share-my-status (geolocation + navigator.getBattery). 
 - Privacy hardening (post-review): cascade-delete activity_reports on member removal + circle dissolve; intruder_events cascade on device delete; @rate_limit on public /intruder/{token}.
 BOTH new features (Theft Protection + Family Guardian) complete + tested. Mobile app must supply: intruder photo/lock enforcement (theft) and app-usage/screen-time/battery reports + background location (family). Guides: THEFT_PROTECTION_MOBILE_API.md.
+
+## Update 2026-06 — Anti-theft mobile hooks: SIM Change + Remote Siren + Place Alerts (batch 26)
+Three new requests from the user (VirusTotal scanner activation deferred — no key provided yet).
+- #1 SIM Change Alert — POST /api/devices/{id}/sim-swap (auth; new_number/carrier/imsi/lat/lng) stores db.sim_events and fans out WhatsApp+SMS+push to emergency contacts + device guardian. GET /api/sim-events lists them. Web: TheftProtection.jsx "SIM change alerts" section. Cascade-deleted on device delete.
+- #2 Remote Siren — siren_active field on device; POST /api/devices/{id}/siren {active} + GET /api/devices/{id}/siren-state (mobile polls, also bumps last_seen). Added siren_active to DeviceOut. Web: "Siren"/"Stop siren" button on each device row (data-testid device-siren-{id}).
+- #3 Place Alerts for Kids — _evaluate_geofences now, on ANY safe-zone enter OR exit, notifies the reporting user's Family Guardian circle guardian (push + WhatsApp): "X arrived at <place>" / "X left <place>". Fires on both /me/location and /me/status pings.
+- Verified via curl (device create shows siren_active; siren toggle+state; sim-swap+sim-events; geofence enter/exit transitions still 200) + screenshot (Siren button + SIM section render). Test data cleaned.
+- STILL DEFERRED — needs user key: VirusTotal (#9 link + #10 file scanners). SMS OTP fallback needs DLT template. Google Drive needs OAuth creds in Admin→Integrations.
+- Docs: THEFT_PROTECTION_MOBILE_API.md sections 5-7 added.
