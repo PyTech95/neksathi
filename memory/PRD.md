@@ -344,3 +344,9 @@ Three new requests from the user (VirusTotal scanner activation deferred — no 
 - New global component FamilyAlarm.jsx already mounted in TopNav (portal-wide SOS/nudge alarm) — animations switched to global alarmRing keyframe.
 - Fixed duplicate data-testid logout-btn -> logout-btn-org / logout-btn-dealer on org/dealer branches (account-menu keeps logout-btn).
 - Verified via testing_agent (iteration_16.json): 36/37 assertions passed (1 = test-script URL glitch on logout, functional logout works). All 10 dropdown items route correctly; landing renders fully; no console errors.
+
+## Update 2026-06 — Landing enhancement + clearer offerings (batch 35)
+- Added animated hero background glow (landGlow keyframe, cyan+violet radials) wrapped in a z-index layer.
+- New "What do you want to protect?" quick-pick section (data-testid protect-0..7): Myself/My family/My kids/My phone/My vehicle/Elderly/My pet/My luggage — glass tiles linking to /register or persona pages, colour-coded by pillar.
+- New "Everything included" catalog (data-testid catalog-0..3 + catalog-{i}-item-{k}): 4 grouped columns listing 32 capabilities with check marks, accent top-border per pillar, plus "Get all of this free" CTA (catalog-cta -> /register).
+- Verified via screenshot (all new test IDs render, hero glow, protect tiles, catalog grid). No backend changes.

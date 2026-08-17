@@ -3,6 +3,7 @@ import {
   ShieldCheck, QrCode, Bell, MapPin, Users, EyeOff, Car, ParkingCircle, Siren, ShieldAlert,
   Phone, Clock, CheckCircle2, ScanLine, Link2, Volume2, Lock, Camera, Signal, BatteryLow,
   HeartHandshake, BarChart3, Route, ArrowRight, Baby, Dog, Luggage, Fingerprint, LifeBuoy,
+  User, HeartPulse, Smartphone, Check, Sparkles,
 } from "lucide-react";
 
 const DEMO_SCAN = "/scan/45805f3a-f10a-4534-bc7d-29699029b2cf";
@@ -82,6 +83,24 @@ const pillars = [
   },
 ];
 
+const protect = [
+  { icon: <User size={24} />, label: "Myself", desc: "SOS & live location", to: "/register", accent: "#22d3ee" },
+  { icon: <Users size={24} />, label: "My family", desc: "Guardian circle", to: "/register", accent: "#8b5cf6" },
+  { icon: <Baby size={24} />, label: "My kids", desc: "Place alerts", to: "/for/schools", accent: "#8b5cf6" },
+  { icon: <Smartphone size={24} />, label: "My phone", desc: "Anti-theft & lock", to: "/register", accent: "#ff3b5c" },
+  { icon: <Car size={24} />, label: "My vehicle", desc: "Smart QR & tracking", to: "/register", accent: "#2dd4bf" },
+  { icon: <HeartPulse size={24} />, label: "Elderly / patient", desc: "ICE profile", to: "/for/hospitals", accent: "#2dd4bf" },
+  { icon: <Dog size={24} />, label: "My pet", desc: "Collar QR", to: "/register", accent: "#f5a524" },
+  { icon: <Luggage size={24} />, label: "My luggage", desc: "Lost-and-found tag", to: "/register", accent: "#f5a524" },
+];
+
+const catalog = [
+  { group: "Personal Safety", accent: "#22d3ee", items: ["One-Tap SOS", "SOS auto-escalation", "Emergency siren", "Trusted contacts", "Live location link", "National helplines", "Safe link scanner", "Safe file scanner"] },
+  { group: "Family Guardian", accent: "#8b5cf6", items: ["Live family map", "Place / geo alerts", "Check-in requests", "Member nudge", "Low-battery alerts", "Weekly safety digest", "Quiet hours & rules", "Portal-wide SOS alarm"] },
+  { group: "Anti-Theft & Mobile", accent: "#ff3b5c", items: ["Remote device lock", "Intruder selfie", "SIM-change alert", "Remote siren", "Safe zones", "Device registry", "Stolen-phone FIR guide", "Google Drive backup"] },
+  { group: "Smart QR & Assets", accent: "#2dd4bf", items: ["Scan-to-alert QR", "Private masked calls", "Wrong-parking flow", "Accident / theft report", "Live vehicle tracking", "Lost mode & rewards", "Digital share-tap cards", "Nearby police stations"] },
+];
+
 const flow = [
   { icon: <Siren size={22} />, t: "Tap SOS or scan a QR", d: "You raise an alert — or a stranger scans your smart QR. No app, no login needed to help." },
   { icon: <Route size={22} />, t: "We alert & auto-escalate", d: "Your family and trusted contacts get a WhatsApp, push and a private call — and it escalates if unanswered." },
@@ -149,6 +168,12 @@ function Pillar({ p, i }) {
 export default function Landing() {
   return (
     <div data-testid="landing-page">
+      {/* Decorative background glow */}
+      <div aria-hidden style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
+        <div style={{ position: "absolute", top: -160, left: -120, width: 540, height: 540, borderRadius: "50%", background: "radial-gradient(circle, rgba(34,211,238,.16), transparent 70%)", filter: "blur(20px)", animation: "landGlow 9s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", top: 60, right: -160, width: 620, height: 620, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,.18), transparent 70%)", filter: "blur(20px)", animation: "landGlow 11s ease-in-out infinite reverse" }} />
+      </div>
+      <div style={{ position: "relative", zIndex: 1 }}>
       {/* HERO */}
       <section className="container-nk" style={{ padding: "70px 22px 40px" }}>
         <div className="grid grid-2" style={{ alignItems: "center", gap: 40 }}>
@@ -199,6 +224,23 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* WHAT DO YOU WANT TO PROTECT */}
+      <section className="container-nk" style={{ padding: "34px 22px" }}>
+        <h2 style={{ fontSize: 30, marginBottom: 4 }}>What do you want to <span className="neon">protect</span>?</h2>
+        <p className="muted" style={{ marginBottom: 22, fontSize: 15.5 }}>Pick what matters to you — we'll set up the right protection in minutes.</p>
+        <div className="grid grid-4" style={{ gap: 14 }}>
+          {protect.map((p, i) => (
+            <Link to={p.to} key={i} data-testid={`protect-${i}`} className="glass glass-hover fade-up" style={{ padding: 18, borderRadius: 16, textDecoration: "none", display: "flex", alignItems: "center", gap: 14, animationDelay: `${i * 0.04}s` }}>
+              <span style={{ width: 46, height: 46, borderRadius: 13, display: "grid", placeItems: "center", background: `${p.accent}22`, color: p.accent, flexShrink: 0 }}>{p.icon}</span>
+              <span>
+                <span style={{ display: "block", fontWeight: 700, fontSize: 15, color: "#fff" }}>{p.label}</span>
+                <span className="muted" style={{ fontSize: 12.5 }}>{p.desc}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       {/* FEATURE PILLARS */}
       <div style={{ position: "relative" }}>
         {pillars.map((p, i) => (
@@ -207,6 +249,32 @@ export default function Landing() {
           </div>
         ))}
       </div>
+
+      {/* EVERYTHING INCLUDED */}
+      <section className="container-nk" style={{ padding: "50px 22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+          <Sparkles size={22} className="neon" />
+          <h2 style={{ fontSize: 34, margin: 0 }}>Everything <span className="neon">included</span></h2>
+        </div>
+        <p className="muted" style={{ marginBottom: 26, fontSize: 16 }}>One account, 30+ safety tools — no add-ons, no hidden tiers.</p>
+        <div className="grid grid-4" style={{ gap: 18 }}>
+          {catalog.map((c, i) => (
+            <div key={i} data-testid={`catalog-${i}`} className="glass card-pad fade-up" style={{ padding: 20, animationDelay: `${i * 0.05}s`, borderTop: `2px solid ${c.accent}` }}>
+              <h3 style={{ fontSize: 16, marginBottom: 14, color: c.accent }}>{c.group}</h3>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 9 }}>
+                {c.items.map((it, k) => (
+                  <li key={k} data-testid={`catalog-${i}-item-${k}`} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13.5 }}>
+                    <Check size={15} style={{ color: c.accent, flexShrink: 0 }} /> <span>{it}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 26 }}>
+          <Link to="/register" className="btn btn-primary" data-testid="catalog-cta"><QrCode size={18} /> Get all of this free</Link>
+        </div>
+      </section>
 
       {/* HOW IT WORKS */}
       <section className="container-nk" style={{ padding: "40px 22px" }}>
@@ -298,6 +366,8 @@ export default function Landing() {
           Made with ❤️ in India · Nek Sathi · <Link to="/contact" className="neon" data-testid="landing-contact-link" style={{ textDecoration: "none" }}>Contact us</Link>
         </p>
       </section>
+      </div>
+      <style>{`@keyframes landGlow{0%,100%{opacity:.65;transform:translateY(0) scale(1)}50%{opacity:1;transform:translateY(18px) scale(1.06)}}`}</style>
     </div>
   );
 }
