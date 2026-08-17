@@ -1872,7 +1872,7 @@ async def _sim_swap_fanout(user: dict, device: dict, ev: dict):
     carrier = f" New carrier: {ev.get('carrier')}." if ev.get("carrier") else ""
     num = f" New number: {ev.get('new_number')}." if ev.get("new_number") else ""
     body = (f"🚨 Nek Sathi SIM CHANGE ALERT: the SIM in {who}'s phone '{device.get('name','device')}' was changed. "
-            f"This can mean the phone was stolen.{carrier}{num}{loc}")
+            f"This can mean the phone was stolen. The phone has been LOCKED and its siren is now sounding.{carrier}{num}{loc}")
     phones = []
     async for c in db.emergency_contacts.find({"user_id": user["id"]}):
         if c.get("phone"):
@@ -1911,8 +1911,10 @@ async def report_sim_swap(request: Request, device_id: str, payload: SimSwapIn, 
           "carrier": payload.carrier, "imsi": payload.imsi,
           "latitude": payload.latitude, "longitude": payload.longitude, "created_at": now_utc()}
     await db.sim_events.insert_one(dict(ev))
+    # Escalation: a SIM swap auto-locks the phone and sounds the siren immediately.
+    await db.devices.update_one({"id": device_id}, {"$set": {"locked": True, "siren_active": True}})
     await _sim_swap_fanout(user, device, ev)
-    return {"reported": True, "id": ev["id"]}
+    return {"reported": True, "id": ev["id"], "locked": True, "siren_active": True}
 
 
 @api.get("/sim-events")
@@ -2136,6 +2138,26 @@ async def member_activity(member_id: str, user: dict = Depends(current_user), li
         key = a.get("app_name") or a.get("type")
         totals[key] = totals.get(key, 0) + (a.get("seconds") or 0)
     return {"shared": True, "member_name": m.get("name"), "items": items, "today_totals": totals}
+
+
+@api.get("/family/place-events")
+async def family_place_events(user: dict = Depends(current_user), limit: int = 60):
+    """Timeline of who arrived at / left each safe place across the circle.
+    Guardian sees all location-sharing members; a member sees only their own."""
+    fam = await _my_family(user["id"])
+    if not fam:
+        return {"in_family": False, "items": []}
+    is_guardian = fam["guardian_id"] == user["id"]
+    names, allowed = {}, []
+    async for m in db.family_members.find({"family_id": fam["id"]}):
+        names[m["user_id"]] = m.get("name")
+        if m["user_id"] == user["id"] or (is_guardian and m.get("share_location", True)):
+            allowed.append(m["user_id"])
+    items = []
+    async for e in db.geofence_events.find({"user_id": {"$in": allowed}}).sort("created_at", -1).limit(min(limit, 200)):
+        items.append({"id": e["id"], "member_name": names.get(e.get("user_id")) or "Member",
+                      "zone_name": e.get("zone_name"), "type": e.get("type"), "created_at": e.get("created_at")})
+    return {"in_family": True, "is_guardian": is_guardian, "items": items}
 
 
 

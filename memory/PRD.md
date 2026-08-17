@@ -295,3 +295,9 @@ Three new requests from the user (VirusTotal scanner activation deferred — no 
 - Verified via curl (device create shows siren_active; siren toggle+state; sim-swap+sim-events; geofence enter/exit transitions still 200) + screenshot (Siren button + SIM section render). Test data cleaned.
 - STILL DEFERRED — needs user key: VirusTotal (#9 link + #10 file scanners). SMS OTP fallback needs DLT template. Google Drive needs OAuth creds in Admin→Integrations.
 - Docs: THEFT_PROTECTION_MOBILE_API.md sections 5-7 added.
+
+## Update 2026-06 — Anti-theft polish: siren preview + place history + SIM escalation (batch 27)
+- Siren Sound Test — reused the Web Audio useSiren hook on TheftProtection.jsx; "Preview the remote siren sound" button (data-testid siren-preview-btn) plays the exact wailing alarm the mobile app rings.
+- Place Alert History — GET /api/family/place-events (guardian sees all location-sharing members' geofence enter/exit; member sees own). Family.jsx "Place alerts" timeline (data-testid place-events-timeline) shows "X arrived at / left <zone>" with time.
+- SIM Alert Escalation — report_sim_swap now auto-sets device locked=true + siren_active=true and the fanout message says the phone is LOCKED and siren sounding. Returns {locked,siren_active}.
+- Verified via curl (sim-swap → device locked+siren_active true; place-events returns valid shape) + screenshot (siren preview button renders). Test data cleaned.

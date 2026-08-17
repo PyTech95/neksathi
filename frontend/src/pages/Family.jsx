@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { loadLeaflet } from "@/lib/leaflet";
-import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone } from "lucide-react";
+import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
 
@@ -39,6 +39,7 @@ function MemberActivity({ memberId }) {
 
 export default function Family() {
   const [data, setData] = useState(null);
+  const [placeEvents, setPlaceEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -48,7 +49,14 @@ export default function Family() {
   const [openMember, setOpenMember] = useState(null);
   const mapEl = useRef(null); const mapObj = useRef(null); const layer = useRef(null);
 
-  const load = async () => { setLoading(true); try { setData((await api.get("/family")).data); } finally { setLoading(false); } };
+  const load = async () => {
+    setLoading(true);
+    try {
+      const d = (await api.get("/family")).data;
+      setData(d);
+      if (d.in_family) { try { setPlaceEvents((await api.get("/family/place-events")).data.items || []); } catch (_) {} }
+    } finally { setLoading(false); }
+  };
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
@@ -158,6 +166,23 @@ export default function Family() {
               </div>
             ))}
           </div>
+
+          <h2 style={{ fontSize: 18, margin: "26px 0 12px", display: "flex", alignItems: "center", gap: 8 }}><MapPin size={17} className="neon" /> Place alerts</h2>
+          {placeEvents.length === 0 ? (
+            <p className="muted" data-testid="place-events-empty" style={{ textAlign: "center", padding: "14px 0", fontSize: 13.5 }}>No place activity yet. When a member enters or leaves a safe zone, it appears here.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }} data-testid="place-events-timeline">
+              {placeEvents.map((e) => (
+                <div key={e.id} data-testid={`place-event-${e.id}`} className="glass" style={{ padding: "11px 14px", borderRadius: 11, display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ width: 34, height: 34, borderRadius: 9, display: "grid", placeItems: "center", flexShrink: 0, background: e.type === "enter" ? "rgba(52,211,153,.14)" : "rgba(245,165,36,.14)", color: e.type === "enter" ? "#34d399" : "#f5a524" }}>{e.type === "enter" ? <LogIn size={16} /> : <LogOut size={16} />}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5 }}><b>{e.member_name}</b> {e.type === "enter" ? "arrived at" : "left"} <b>{e.zone_name}</b></div>
+                    <div className="muted" style={{ fontSize: 12 }}>{new Date(e.created_at).toLocaleString()}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
       <style>{`@media(max-width:640px){.family-start{grid-template-columns:1fr!important}}`}</style>

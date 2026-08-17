@@ -1,6 +1,36 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { ShieldCheck, Smartphone, Plus, Trash2, Pencil, Lock, Unlock, X, Loader2, MapPin, Camera, AlertTriangle, Info, Volume2, VolumeX, Signal } from "lucide-react";
+
+function useSiren() {
+  const ctxRef = useRef(null);
+  const nodesRef = useRef(null);
+  const [on, setOn] = useState(false);
+  const stop = () => {
+    if (nodesRef.current) { try { nodesRef.current.osc1.stop(); nodesRef.current.osc2.stop(); } catch (_) {} nodesRef.current = null; }
+    setOn(false);
+  };
+  const start = () => {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!ctxRef.current) ctxRef.current = new AC();
+    const ctx = ctxRef.current; ctx.resume();
+    const gain = ctx.createGain(); gain.gain.value = 0.0001;
+    gain.gain.exponentialRampToValueAtTime(0.6, ctx.currentTime + 0.05); gain.connect(ctx.destination);
+    const osc1 = ctx.createOscillator(); const osc2 = ctx.createOscillator();
+    osc1.type = "sawtooth"; osc2.type = "square";
+    const lfo = ctx.createOscillator(); const lfoGain = ctx.createGain();
+    lfo.frequency.value = 2; lfoGain.gain.value = 400;
+    lfo.connect(lfoGain); lfoGain.connect(osc1.frequency); lfoGain.connect(osc2.frequency);
+    osc1.frequency.value = 1000; osc2.frequency.value = 700;
+    osc1.connect(gain); osc2.connect(gain);
+    osc1.start(); osc2.start(); lfo.start();
+    nodesRef.current = { osc1, osc2, lfo, gain };
+    setOn(true);
+  };
+  useEffect(() => () => stop(), []);
+  return { on, toggle: () => (on ? stop() : start()) };
+}
 
 function PhotoThumb({ eventId, onOpen }) {
   const [src, setSrc] = useState(null);
@@ -21,6 +51,7 @@ export default function TheftProtection() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const siren = useSiren();
 
   const load = async () => {
     setLoading(true);
@@ -57,7 +88,12 @@ export default function TheftProtection() {
 
       <div className="glass" style={{ padding: 16, borderRadius: 14, marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-start", borderColor: "rgba(34,211,238,.3)" }} data-testid="theft-mobile-note">
         <Info size={20} className="neon" style={{ flexShrink: 0, marginTop: 2 }} />
-        <div style={{ fontSize: 13.5 }}>Capture & auto-lock run inside the <b>Nek Sathi mobile app</b> (needs Device Admin permission). Register your device below — this portal manages settings, shows every intruder capture, and lets you remotely lock/unlock.</div>
+        <div style={{ fontSize: 13.5, flex: 1 }}>Capture & auto-lock run inside the <b>Nek Sathi mobile app</b> (needs Device Admin permission). Register your device below — this portal manages settings, shows every intruder capture, and lets you remotely lock/unlock.
+          <div style={{ marginTop: 10 }}>
+            <button className={`btn btn-sm ${siren.on ? "btn-danger" : "btn-ghost"}`} onClick={siren.toggle} data-testid="siren-preview-btn">{siren.on ? <><VolumeX size={14} /> Stop preview</> : <><Volume2 size={14} /> Preview the remote siren sound</>}</button>
+            <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>Hear the exact alarm the phone plays when you sound the siren remotely.</span>
+          </div>
+        </div>
       </div>
 
       {/* Devices */}
