@@ -75,6 +75,7 @@ export default function TheftProtection() {
   const remove = async (id) => { if (!window.confirm("Remove this device?")) return; await api.delete(`/devices/${id}`); load(); };
   const toggleLock = async (d) => { await api.post(`/devices/${d.id}/${d.locked ? "unlock" : "lock"}`); load(); };
   const toggleSiren = async (d) => { await api.post(`/devices/${d.id}/siren`, { active: !d.siren_active }); load(); };
+  const recover = async (d) => { await api.post(`/devices/${d.id}/recover`); load(); };
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   return (
@@ -118,6 +119,7 @@ export default function TheftProtection() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
+                {(d.locked || d.siren_active) && <button className="btn btn-primary btn-sm" onClick={() => recover(d)} data-testid={`device-recover-${d.id}`} title="Phone found — clear lock & siren"><ShieldCheck size={14} /> Mark safe</button>}
                 <button className={`btn btn-sm ${d.siren_active ? "btn-danger" : "btn-ghost"}`} onClick={() => toggleSiren(d)} data-testid={`device-siren-${d.id}`} title={d.siren_active ? "Stop remote siren" : "Sound siren remotely"}>{d.siren_active ? <><VolumeX size={14} /> Stop siren</> : <><Volume2 size={14} /> Siren</>}</button>
                 <button className={`btn btn-sm ${d.locked ? "btn-ghost" : "btn-danger"}`} onClick={() => toggleLock(d)} data-testid={`device-lock-${d.id}`}>{d.locked ? <><Unlock size={14} /> Unlock</> : <><Lock size={14} /> Lock</>}</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => openEdit(d)} data-testid={`device-edit-${d.id}`}><Pencil size={14} /></button>

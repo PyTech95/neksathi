@@ -1182,6 +1182,18 @@ async def push_user_location(payload: UserLocationIn, user: dict = Depends(curre
     return {"ok": True, "transitions": transitions}
 
 
+def _ist_now() -> datetime:
+    return now_utc() + timedelta(hours=5, minutes=30)
+
+
+def _in_quiet_hours(fam: dict) -> bool:
+    qs, qe = fam.get("quiet_start"), fam.get("quiet_end")
+    if qs is None or qe is None or qs == qe:
+        return False
+    h = _ist_now().hour
+    return (qs <= h < qe) if qs < qe else (h >= qs or h < qe)
+
+
 async def _evaluate_geofences(user: dict, lat: float, lng: float) -> list:
     """Compare current position to the user's safe zones; log + notify on any
     enter/exit transition. Returns the transitions detected this ping."""
@@ -1215,28 +1227,32 @@ async def _evaluate_geofences(user: dict, lat: float, lng: float) -> list:
                             await notify_whatsapp(c.get("phone"), body, meta={"kind": "geofence", "user_id": user["id"]})
                         except Exception:
                             pass
-                # Place Alerts for Kids — notify the family guardian on enter AND exit.
+                # Place Alerts for Kids — notify the family guardian, honouring
+                # the guardian's alert rules (direction + quiet hours).
                 try:
                     fm = await db.family_members.find_one({"user_id": user["id"]})
                     if fm:
                         fam = await db.families.find_one({"id": fm["family_id"]})
-                        if fam and fam.get("guardian_id") and fam["guardian_id"] != user["id"]:
-                            who = user.get("name") or "Your family member"
-                            place = z.get("name", "a place")
-                            msg = f"{who} {'arrived at' if inside else 'left'} {place}."
-                            try:
-                                await send_push(recipients=[fam["guardian_id"]], data={
-                                    "title": "📍 Place alert", "message": msg, "action_url": "/family",
-                                }, idempotency_key=ev["id"] + "-g")
-                            except Exception:
-                                pass
-                            guardian = await db.users.find_one({"id": fam["guardian_id"]})
-                            if guardian and guardian.get("phone"):
+                        if fam and fam.get("guardian_id") and fam["guardian_id"] != user["id"] and fam.get("place_alerts_enabled", True):
+                            direction = fam.get("place_alert_direction", "both")
+                            want = direction == "both" or (direction == "enter" and inside) or (direction == "exit" and not inside)
+                            if want and not _in_quiet_hours(fam):
+                                who = user.get("name") or "Your family member"
+                                place = z.get("name", "a place")
+                                msg = f"{who} {'arrived at' if inside else 'left'} {place}."
                                 try:
-                                    await notify_whatsapp(guardian["phone"], f"📍 Nek Sathi place alert: {msg}",
-                                                          meta={"kind": "place_alert", "user_id": user["id"]})
+                                    await send_push(recipients=[fam["guardian_id"]], data={
+                                        "title": "📍 Place alert", "message": msg, "action_url": "/family",
+                                    }, idempotency_key=ev["id"] + "-g")
                                 except Exception:
                                     pass
+                                guardian = await db.users.find_one({"id": fam["guardian_id"]})
+                                if guardian and guardian.get("phone"):
+                                    try:
+                                        await notify_whatsapp(guardian["phone"], f"📍 Nek Sathi place alert: {msg}",
+                                                              meta={"kind": "place_alert", "user_id": user["id"]})
+                                    except Exception:
+                                        pass
                 except Exception as _e:
                     log.warning("place-alert failed: %s", _e)
     return transitions
@@ -1724,6 +1740,16 @@ async def unlock_device(device_id: str, user: dict = Depends(current_user)):
     return {"locked": False}
 
 
+@api.post("/devices/{device_id}/recover")
+async def recover_device(device_id: str, user: dict = Depends(current_user)):
+    """Phone found safe — clear the lock and siren in one tap (e.g. after a SIM-swap escalation)."""
+    r = await db.devices.update_one({"id": device_id, "user_id": user["id"]},
+                                    {"$set": {"locked": False, "siren_active": False}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {"locked": False, "siren_active": False}
+
+
 async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str):
     who = user.get("name") or "A Nek Sathi user"
     loc = ""
@@ -2158,6 +2184,119 @@ async def family_place_events(user: dict = Depends(current_user), limit: int = 6
         items.append({"id": e["id"], "member_name": names.get(e.get("user_id")) or "Member",
                       "zone_name": e.get("zone_name"), "type": e.get("type"), "created_at": e.get("created_at")})
     return {"in_family": True, "is_guardian": is_guardian, "items": items}
+
+
+# ---------------------------------------------------------------------------
+# Place Alert Rules (guardian-controlled) + Weekly Safety Digest.
+# ---------------------------------------------------------------------------
+class AlertRulesIn(BaseModel):
+    place_alerts_enabled: bool = True
+    place_alert_direction: Literal["both", "enter", "exit"] = "both"
+    quiet_start: Optional[int] = Field(default=None, ge=0, le=23)
+    quiet_end: Optional[int] = Field(default=None, ge=0, le=23)
+
+
+@api.get("/family/alert-rules")
+async def get_alert_rules(user: dict = Depends(current_user)):
+    fam = await _my_family(user["id"])
+    if not fam:
+        raise HTTPException(status_code=404, detail="Not in a family circle.")
+    return {"is_guardian": fam["guardian_id"] == user["id"],
+            "place_alerts_enabled": fam.get("place_alerts_enabled", True),
+            "place_alert_direction": fam.get("place_alert_direction", "both"),
+            "quiet_start": fam.get("quiet_start"), "quiet_end": fam.get("quiet_end")}
+
+
+@api.put("/family/alert-rules")
+async def put_alert_rules(payload: AlertRulesIn, user: dict = Depends(current_user)):
+    fam = await _my_family(user["id"])
+    if not fam or fam["guardian_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the guardian can change alert rules.")
+    await db.families.update_one({"id": fam["id"]}, {"$set": payload.model_dump()})
+    return {"updated": True, **payload.model_dump()}
+
+
+async def _build_family_digest(fam: dict) -> dict:
+    since = now_utc() - timedelta(days=7)
+    member_ids = [m["user_id"] async for m in db.family_members.find({"family_id": fam["id"]})]
+    q = {"user_id": {"$in": member_ids}, "created_at": {"$gte": since}}
+    visits = await db.geofence_events.count_documents({**q, "type": "enter"})
+    sos = await db.sos_events.count_documents(q)
+    low_batt = await db.activity_reports.count_documents({**q, "type": "battery", "battery": {"$lte": 20}})
+    top = {}
+    async for e in db.geofence_events.find({**q, "type": "enter"}):
+        k = e.get("zone_name", "a place")
+        top[k] = top.get(k, 0) + 1
+    top_places = [{"name": k, "count": v} for k, v in sorted(top.items(), key=lambda x: -x[1])[:3]]
+    return {"family_name": fam["name"], "period_days": 7, "members": len(member_ids),
+            "place_visits": visits, "sos_events": sos, "low_battery": low_batt, "top_places": top_places}
+
+
+def _digest_text(d: dict) -> str:
+    lines = [f"📅 Nek Sathi weekly safety recap — {d['family_name']} (last 7 days):",
+             f"• Place visits: {d['place_visits']}",
+             f"• SOS alerts: {d['sos_events']}",
+             f"• Low-battery moments: {d['low_battery']}"]
+    if d["top_places"]:
+        lines.append("Most visited: " + ", ".join(f"{p['name']} ({p['count']})" for p in d["top_places"]))
+    lines.append("Stay safe with Nek Sathi 💜")
+    return "\n".join(lines)
+
+
+async def _send_family_digest(fam: dict) -> dict:
+    d = await _build_family_digest(fam)
+    body = _digest_text(d)
+    sent = 0
+    async for m in db.family_members.find({"family_id": fam["id"]}):
+        u = await db.users.find_one({"id": m["user_id"]})
+        if u and u.get("phone"):
+            try:
+                await notify_whatsapp(u["phone"], body, meta={"kind": "digest", "family_id": fam["id"]})
+                sent += 1
+            except Exception:
+                pass
+    return {"sent": sent, "digest": d}
+
+
+@api.get("/family/digest")
+async def family_digest(user: dict = Depends(current_user)):
+    fam = await _my_family(user["id"])
+    if not fam:
+        return {"in_family": False}
+    d = await _build_family_digest(fam)
+    log_row = await db.digest_log.find_one({"family_id": fam["id"]}, sort=[("sent_at", -1)])
+    return {"in_family": True, "is_guardian": fam["guardian_id"] == user["id"],
+            "last_sent_at": (log_row or {}).get("sent_at"), **d}
+
+
+@api.post("/family/digest/send")
+async def family_digest_send(user: dict = Depends(current_user)):
+    fam = await _my_family(user["id"])
+    if not fam or fam["guardian_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the guardian can send the digest.")
+    res = await _send_family_digest(fam)
+    week = _ist_now().strftime("%G-W%V")
+    await db.digest_log.update_one({"family_id": fam["id"], "week": week},
+                                   {"$set": {"sent_at": now_utc(), "manual": True}}, upsert=True)
+    return res
+
+
+async def _digest_scheduler():
+    """Every 30 min, on Sunday after 9am IST, WhatsApp each circle its weekly
+    recap once (deduped per ISO week via db.digest_log)."""
+    while True:
+        try:
+            ist = _ist_now()
+            if ist.weekday() == 6 and ist.hour >= 9:
+                week = ist.strftime("%G-W%V")
+                async for fam in db.families.find({}):
+                    if not await db.digest_log.find_one({"family_id": fam["id"], "week": week}):
+                        await _send_family_digest(fam)
+                        await db.digest_log.update_one({"family_id": fam["id"], "week": week},
+                                                       {"$set": {"sent_at": now_utc(), "auto": True}}, upsert=True)
+        except Exception as e:
+            log.warning("digest scheduler: %s", e)
+        await asyncio.sleep(1800)
 
 
 
@@ -6177,6 +6316,7 @@ async def _startup():
             await db.users.update_one({"email": admin_email}, {"$set": {"is_admin": True}})
             log.info("Promoted existing user %s to admin", admin_email)
     await _seed_blackspots()
+    asyncio.create_task(_digest_scheduler())
     log.info("Nek Sathi indexes ensured")
 
 

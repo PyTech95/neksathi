@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { loadLeaflet } from "@/lib/leaflet";
-import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn } from "lucide-react";
+import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
 
@@ -40,6 +40,10 @@ function MemberActivity({ memberId }) {
 export default function Family() {
   const [data, setData] = useState(null);
   const [placeEvents, setPlaceEvents] = useState([]);
+  const [rules, setRules] = useState(null);
+  const [digest, setDigest] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [sentMsg, setSentMsg] = useState("");
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -54,10 +58,30 @@ export default function Family() {
     try {
       const d = (await api.get("/family")).data;
       setData(d);
-      if (d.in_family) { try { setPlaceEvents((await api.get("/family/place-events")).data.items || []); } catch (_) {} }
+      if (d.in_family) {
+        try { setPlaceEvents((await api.get("/family/place-events")).data.items || []); } catch (_) {}
+        try { setRules((await api.get("/family/alert-rules")).data); } catch (_) {}
+        try { setDigest((await api.get("/family/digest")).data); } catch (_) {}
+      }
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+
+  const saveRules = async (patch) => {
+    const next = { ...rules, ...patch };
+    setRules(next);
+    await api.put("/family/alert-rules", {
+      place_alerts_enabled: next.place_alerts_enabled,
+      place_alert_direction: next.place_alert_direction,
+      quiet_start: next.quiet_start, quiet_end: next.quiet_end,
+    });
+  };
+  const sendDigest = async () => {
+    setSending(true); setSentMsg("");
+    try { const r = (await api.post("/family/digest/send")).data; setSentMsg(`Sent to ${r.sent} member${r.sent === 1 ? "" : "s"} on WhatsApp.`); load(); }
+    catch (e) { setSentMsg(e?.response?.data?.detail || "Could not send."); }
+    finally { setSending(false); }
+  };
 
   useEffect(() => {
     if (!data?.in_family) return;
@@ -181,6 +205,57 @@ export default function Family() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {rules?.is_guardian && (
+            <div className="glass" style={{ padding: 16, borderRadius: 14, marginTop: 22 }} data-testid="alert-rules-card">
+              <h2 style={{ fontSize: 18, margin: "0 0 4px", display: "flex", alignItems: "center", gap: 8 }}><Bell size={17} className="neon" /> Place alert rules</h2>
+              <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>Choose which zone crossings alert you, and set quiet hours so nights stay silent.</p>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 12 }} onClick={() => saveRules({ place_alerts_enabled: !rules.place_alerts_enabled })} data-testid="rules-enabled-toggle">
+                <span style={{ width: 20, height: 20, borderRadius: 6, border: "1px solid var(--panel-brd)", background: rules.place_alerts_enabled ? "linear-gradient(100deg,#7c3aed,#22d3ee)" : "transparent", display: "grid", placeItems: "center" }}>{rules.place_alerts_enabled && <CheckCircle2 size={12} color="#fff" />}</span>
+                <span style={{ fontSize: 13.5 }}>Send me place alerts</span>
+              </label>
+              <div className="field" style={{ marginBottom: 12, opacity: rules.place_alerts_enabled ? 1 : .5 }}>
+                <label style={{ fontSize: 13 }}>Alert me when a member…</label>
+                <select className="input" value={rules.place_alert_direction} onChange={(e) => saveRules({ place_alert_direction: e.target.value })} disabled={!rules.place_alerts_enabled} data-testid="rules-direction-select">
+                  <option value="both">Arrives or leaves a place</option>
+                  <option value="enter">Only when they arrive</option>
+                  <option value="exit">Only when they leave</option>
+                </select>
+              </div>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap", opacity: rules.place_alerts_enabled ? 1 : .5 }}>
+                <div className="field" style={{ flex: 1, minWidth: 120 }}>
+                  <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><Moon size={13} /> Quiet from (IST)</label>
+                  <select className="input" value={rules.quiet_start ?? ""} onChange={(e) => saveRules({ quiet_start: e.target.value === "" ? null : Number(e.target.value) })} disabled={!rules.place_alerts_enabled} data-testid="rules-quiet-start">
+                    <option value="">Off</option>
+                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                  </select>
+                </div>
+                <div className="field" style={{ flex: 1, minWidth: 120 }}>
+                  <label style={{ fontSize: 13 }}>Quiet until (IST)</label>
+                  <select className="input" value={rules.quiet_end ?? ""} onChange={(e) => saveRules({ quiet_end: e.target.value === "" ? null : Number(e.target.value) })} disabled={!rules.place_alerts_enabled} data-testid="rules-quiet-end">
+                    <option value="">Off</option>
+                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {digest && (
+            <div className="glass" style={{ padding: 16, borderRadius: 14, marginTop: 18 }} data-testid="digest-card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <h2 style={{ fontSize: 18, margin: 0, display: "flex", alignItems: "center", gap: 8 }}><BarChart3 size={17} className="neon" /> Weekly safety digest</h2>
+                {digest.is_guardian && <button className="btn btn-primary btn-sm" onClick={sendDigest} disabled={sending} data-testid="digest-send-btn">{sending ? <Loader2 className="spin" size={14} /> : <><Send size={14} /> Send now on WhatsApp</>}</button>}
+              </div>
+              <p className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>Auto-sent every Sunday morning{digest.last_sent_at ? ` · last sent ${new Date(digest.last_sent_at).toLocaleString()}` : ""}. Last 7 days:</p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginTop: 6 }}>
+                <div style={{ textAlign: "center", padding: "12px 6px", borderRadius: 10, background: "rgba(34,211,238,.08)" }}><MapPin size={18} className="neon" /><div style={{ fontSize: 22, fontWeight: 800 }} data-testid="digest-visits">{digest.place_visits}</div><div className="muted" style={{ fontSize: 12 }}>Place visits</div></div>
+                <div style={{ textAlign: "center", padding: "12px 6px", borderRadius: 10, background: "rgba(255,59,92,.08)" }}><AlertTriangle size={18} style={{ color: "#ff3b5c" }} /><div style={{ fontSize: 22, fontWeight: 800 }} data-testid="digest-sos">{digest.sos_events}</div><div className="muted" style={{ fontSize: 12 }}>SOS alerts</div></div>
+                <div style={{ textAlign: "center", padding: "12px 6px", borderRadius: 10, background: "rgba(245,165,36,.08)" }}><BatteryMedium size={18} style={{ color: "#f5a524" }} /><div style={{ fontSize: 22, fontWeight: 800 }} data-testid="digest-battery">{digest.low_battery}</div><div className="muted" style={{ fontSize: 12 }}>Low battery</div></div>
+              </div>
+              {digest.top_places?.length > 0 && <p className="muted" style={{ fontSize: 12.5, marginTop: 10 }}>Most visited: {digest.top_places.map((p) => `${p.name} (${p.count})`).join(", ")}</p>}
+              {sentMsg && <p style={{ fontSize: 12.5, marginTop: 8, color: "#34d399" }} data-testid="digest-sent-msg">{sentMsg}</p>}
             </div>
           )}
         </>
