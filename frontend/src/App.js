@@ -37,6 +37,7 @@ import Safety from "@/pages/Safety";
 import LiveView from "@/pages/LiveView";
 import Community from "@/pages/Community";
 import StolenPhone from "@/pages/StolenPhone";
+import SafeZones from "@/pages/SafeZones";
 import AdminComms from "@/pages/AdminComms";
 import PersonaLanding from "@/pages/PersonaLanding";
 import OrgDashboard from "@/pages/OrgDashboard";
@@ -91,6 +92,7 @@ function Shell() {
           <Route path="/safety" element={<Protected><Safety /></Protected>} />
           <Route path="/community" element={<Protected><Community /></Protected>} />
           <Route path="/stolen-phone" element={<Protected><StolenPhone /></Protected>} />
+          <Route path="/safe-zones" element={<Protected><SafeZones /></Protected>} />
           <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
           <Route path="/admin/qr" element={<Protected adminOnly><AdminQR /></Protected>} />
           <Route path="/admin/dealers" element={<Protected adminOnly><AdminDealers /></Protected>} />

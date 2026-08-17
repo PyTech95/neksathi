@@ -988,6 +988,7 @@ class SOSTriggerIn(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     message: Optional[str] = Field(default=None, max_length=280)
+    photo_base64: Optional[str] = None
 
 
 class SOSEventOut(BaseModel):
@@ -997,6 +998,7 @@ class SOSEventOut(BaseModel):
     message: Optional[str] = None
     notified: int = 0
     channels: List[str] = []
+    has_photo: bool = False
     created_at: datetime
 
 
@@ -1085,17 +1087,29 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
         "latitude": payload.latitude, "longitude": payload.longitude,
         "message": payload.message, "notified": notified,
         "channels": sorted(channels), "created_at": now_utc(),
+        "photo_base64": payload.photo_base64, "has_photo": bool(payload.photo_base64),
     }
     await db.sos_events.insert_one(dict(doc))
-    return SOSEventOut(**clean(doc))
+    return SOSEventOut(**{k: v for k, v in clean(doc).items() if k != "photo_base64"})
 
 
 @api.get("/me/sos-events", response_model=List[SOSEventOut])
 async def list_sos_events(user: dict = Depends(current_user), limit: int = 30):
     items = []
     async for e in db.sos_events.find({"user_id": user["id"]}).sort("created_at", -1).limit(min(limit, 100)):
-        items.append(SOSEventOut(**clean(e)))
+        e = clean(e)
+        e["has_photo"] = bool(e.get("photo_base64"))
+        e.pop("photo_base64", None)
+        items.append(SOSEventOut(**e))
     return items
+
+
+@api.get("/me/sos-events/{event_id}/photo")
+async def get_sos_photo(event_id: str, user: dict = Depends(current_user)):
+    e = await db.sos_events.find_one({"id": event_id, "user_id": user["id"]})
+    if not e or not e.get("photo_base64"):
+        raise HTTPException(status_code=404, detail="No photo for this SOS.")
+    return {"photo_base64": e["photo_base64"]}
 
 
 # ---------------------------------------------------------------------------
@@ -1161,7 +1175,164 @@ async def push_user_location(payload: UserLocationIn, user: dict = Depends(curre
                   "accuracy": payload.accuracy, "speed_kmh": payload.speed_kmh, "recorded_at": now_utc()}},
         upsert=True,
     )
-    return {"ok": True}
+    transitions = await _evaluate_geofences(user, payload.latitude, payload.longitude)
+    return {"ok": True, "transitions": transitions}
+
+
+async def _evaluate_geofences(user: dict, lat: float, lng: float) -> list:
+    """Compare current position to the user's safe zones; log + notify on any
+    enter/exit transition. Returns the transitions detected this ping."""
+    transitions = []
+    async for z in db.safe_zones.find({"user_id": user["id"]}):
+        inside = _haversine_km(lat, lng, z["latitude"], z["longitude"]) * 1000 <= z["radius_m"]
+        was_inside = bool(z.get("last_inside"))
+        if inside != was_inside:
+            kind = "enter" if inside else "exit"
+            await db.safe_zones.update_one({"id": z["id"]}, {"$set": {"last_inside": inside}})
+            ev = {"id": new_id(), "user_id": user["id"], "zone_id": z["id"], "zone_name": z.get("name", "Safe zone"),
+                  "type": kind, "latitude": lat, "longitude": lng, "created_at": now_utc()}
+            await db.geofence_events.insert_one(dict(ev))
+            transitions.append({"zone_name": ev["zone_name"], "type": kind})
+            if z.get("notify", True):
+                verb = "entered" if inside else "left"
+                try:
+                    if _prefs(user).get("push"):
+                        await send_push(recipients=[user["id"]], data={
+                            "title": f"📍 {verb.capitalize()} {z.get('name','safe zone')}",
+                            "message": f"{user.get('name','You')} {verb} the safe zone '{z.get('name','')}'.",
+                            "action_url": "/safety",
+                        }, idempotency_key=ev["id"])
+                except Exception as _e:
+                    log.warning("geofence push failed: %s", _e)
+                # Alert emergency contacts on EXIT (leaving a safe zone).
+                if not inside:
+                    async for c in db.emergency_contacts.find({"user_id": user["id"]}):
+                        body = f"📍 Nek Sathi safe-zone alert: {user.get('name','Your contact')} has left the safe zone '{z.get('name','')}'."
+                        try:
+                            await notify_whatsapp(c.get("phone"), body, meta={"kind": "geofence", "user_id": user["id"]})
+                        except Exception:
+                            pass
+    return transitions
+
+
+# ---------------------------------------------------------------------------
+# Surround Audio Recording (#14) — record ambient audio during an emergency
+# and keep it as evidence tied to the user (optionally to an SOS event).
+# ---------------------------------------------------------------------------
+class AudioEvidenceIn(BaseModel):
+    audio_base64: str = Field(min_length=10)
+    duration_ms: Optional[int] = None
+    mime: Optional[str] = Field(default="audio/webm", max_length=40)
+    sos_event_id: Optional[str] = None
+
+
+class AudioEvidenceOut(BaseModel):
+    id: str
+    duration_ms: Optional[int] = None
+    mime: str = "audio/webm"
+    sos_event_id: Optional[str] = None
+    created_at: datetime
+
+
+@api.post("/me/audio-evidence", response_model=AudioEvidenceOut)
+@rate_limit("12/minute")
+async def add_audio_evidence(request: Request, payload: AudioEvidenceIn, user: dict = Depends(current_user)):
+    if len(payload.audio_base64) > 14_000_000:
+        raise HTTPException(status_code=400, detail="Recording too large (max ~10MB).")
+    doc = {"id": new_id(), "user_id": user["id"], "audio_base64": payload.audio_base64,
+           "duration_ms": payload.duration_ms, "mime": payload.mime or "audio/webm",
+           "sos_event_id": payload.sos_event_id, "created_at": now_utc()}
+    await db.audio_evidence.insert_one(dict(doc))
+    return AudioEvidenceOut(**{k: v for k, v in clean(doc).items() if k != "audio_base64"})
+
+
+@api.get("/me/audio-evidence", response_model=List[AudioEvidenceOut])
+async def list_audio_evidence(user: dict = Depends(current_user), limit: int = 30):
+    items = []
+    async for a in db.audio_evidence.find({"user_id": user["id"]}).sort("created_at", -1).limit(min(limit, 100)):
+        a = clean(a); a.pop("audio_base64", None)
+        items.append(AudioEvidenceOut(**a))
+    return items
+
+
+@api.get("/me/audio-evidence/{audio_id}/play")
+async def play_audio_evidence(audio_id: str, user: dict = Depends(current_user)):
+    a = await db.audio_evidence.find_one({"id": audio_id, "user_id": user["id"]})
+    if not a:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    return {"audio_base64": a["audio_base64"], "mime": a.get("mime", "audio/webm")}
+
+
+@api.delete("/me/audio-evidence/{audio_id}")
+async def delete_audio_evidence(audio_id: str, user: dict = Depends(current_user)):
+    r = await db.audio_evidence.delete_one({"id": audio_id, "user_id": user["id"]})
+    if not r.deleted_count:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# Geo-Fencing / Safe Zones (#24) — user-defined circular zones; transitions
+# are evaluated on each /me/location ping (see _evaluate_geofences).
+# ---------------------------------------------------------------------------
+class SafeZoneIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    latitude: float
+    longitude: float
+    radius_m: int = Field(default=300, ge=50, le=20000)
+    notify: bool = True
+
+
+class SafeZoneOut(BaseModel):
+    id: str
+    name: str
+    latitude: float
+    longitude: float
+    radius_m: int
+    notify: bool = True
+    last_inside: Optional[bool] = None
+    created_at: datetime
+
+
+class GeofenceEventOut(BaseModel):
+    id: str
+    zone_name: str
+    type: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    created_at: datetime
+
+
+@api.get("/me/safe-zones", response_model=List[SafeZoneOut])
+async def list_safe_zones(user: dict = Depends(current_user)):
+    items = []
+    async for z in db.safe_zones.find({"user_id": user["id"]}).sort("created_at", -1):
+        items.append(SafeZoneOut(**clean(z)))
+    return items
+
+
+@api.post("/me/safe-zones", response_model=SafeZoneOut)
+async def add_safe_zone(payload: SafeZoneIn, user: dict = Depends(current_user)):
+    doc = {"id": new_id(), "user_id": user["id"], "last_inside": None, "created_at": now_utc(), **payload.model_dump()}
+    await db.safe_zones.insert_one(dict(doc))
+    return SafeZoneOut(**clean(doc))
+
+
+@api.delete("/me/safe-zones/{zone_id}")
+async def delete_safe_zone(zone_id: str, user: dict = Depends(current_user)):
+    r = await db.safe_zones.delete_one({"id": zone_id, "user_id": user["id"]})
+    if not r.deleted_count:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    await db.geofence_events.delete_many({"zone_id": zone_id})
+    return {"deleted": True}
+
+
+@api.get("/me/geofence-events", response_model=List[GeofenceEventOut])
+async def list_geofence_events(user: dict = Depends(current_user), limit: int = 30):
+    items = []
+    async for e in db.geofence_events.find({"user_id": user["id"]}).sort("created_at", -1).limit(min(limit, 100)):
+        items.append(GeofenceEventOut(**clean(e)))
+    return items
 
 
 @api.get("/public/live/{token}")

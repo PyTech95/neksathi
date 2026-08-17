@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
-import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Link2, ShieldCheck, ShieldX, Search, Building2, Navigation, FileScan, Upload, Smartphone, ChevronRight } from "lucide-react";
+import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Link2, ShieldCheck, ShieldX, Search, Building2, Navigation, FileScan, Upload, Smartphone, ChevronRight, Camera, Mic, Play, Radar } from "lucide-react";
 import { loadLeaflet } from "@/lib/leaflet";
 import { Link } from "react-router-dom";
 
@@ -63,7 +63,23 @@ function Sos({ contactsCount, onSent }) {
   const [result, setResult] = useState(null);
   const [arming, setArming] = useState(false);
   const [count, setCount] = useState(3);
+  const [withPhoto, setWithPhoto] = useState(true);
   const timer = useRef(null);
+
+  const capturePhoto = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      const video = document.createElement("video");
+      video.srcObject = stream; video.muted = true; await video.play();
+      await new Promise((r) => setTimeout(r, 450));
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 640; canvas.height = video.videoHeight || 480;
+      canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+      const data = canvas.toDataURL("image/jpeg", 0.7);
+      stream.getTracks().forEach((t) => t.stop());
+      return data;
+    } catch (_) { return null; }
+  };
 
   const fire = async () => {
     setBusy(true); setResult(null);
@@ -73,9 +89,11 @@ function Sos({ contactsCount, onSent }) {
         navigator.geolocation.getCurrentPosition(res, rej, { timeout: 6000, enableHighAccuracy: true }));
       coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
     } catch (_) { /* location optional */ }
+    let photo = null;
+    if (withPhoto) { photo = await capturePhoto(); }
     try {
-      const r = await api.post("/me/sos", coords);
-      setResult(r.data);
+      const r = await api.post("/me/sos", { ...coords, photo_base64: photo });
+      setResult({ ...r.data, _photo: photo });
       onSent && onSent();
     } catch (e) {
       setResult({ error: e?.response?.data?.detail || "Could not send SOS" });
@@ -127,12 +145,19 @@ function Sos({ contactsCount, onSent }) {
       {arming ? (
         <button className="btn btn-ghost" data-testid="sos-cancel-btn" onClick={cancel} style={{ margin: "6px auto 0" }}>Cancel</button>
       ) : (
-        <p className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>Tap and hold-free — a 3-second countdown protects against accidental taps.</p>
+        <>
+          <label onClick={() => setWithPhoto((v) => !v)} data-testid="sos-photo-toggle" style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12.5, marginTop: 4 }}>
+            <span style={{ width: 18, height: 18, borderRadius: 5, border: "1px solid var(--panel-brd)", background: withPhoto ? "linear-gradient(100deg,#7c3aed,#22d3ee)" : "transparent", display: "grid", placeItems: "center" }}>{withPhoto && <CheckCircle2 size={12} color="#fff" />}</span>
+            <Camera size={14} /> Capture a silent photo as evidence
+          </label>
+          <p className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>A 3-second countdown protects against accidental taps.</p>
+        </>
       )}
 
       {result && !result.error && (
-        <div data-testid="sos-result" className="glass" style={{ marginTop: 16, padding: "12px 14px", borderRadius: 12, borderColor: "rgba(52,211,153,.4)", display: "inline-flex", alignItems: "center", gap: 8, color: "#34d399", fontWeight: 700 }}>
-          <CheckCircle2 size={18} /> SOS sent to {result.notified} contact{result.notified === 1 ? "" : "s"} · {result.channels?.join(", ")}
+        <div data-testid="sos-result" className="glass" style={{ marginTop: 16, padding: "12px 14px", borderRadius: 12, borderColor: "rgba(52,211,153,.4)", color: "#34d399", fontWeight: 700 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}><CheckCircle2 size={18} /> SOS sent to {result.notified} contact{result.notified === 1 ? "" : "s"} · {result.channels?.join(", ")}</div>
+          {result._photo && <img src={result._photo} alt="evidence" data-testid="sos-result-photo" style={{ marginTop: 10, width: 120, height: 90, objectFit: "cover", borderRadius: 8 }} />}
         </div>
       )}
       {result?.error && (
@@ -431,6 +456,88 @@ function FileChecker() {
   );
 }
 
+function AudioRecorder() {
+  const [recording, setRecording] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [items, setItems] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const recRef = useRef(null);
+  const chunks = useRef([]);
+  const startTs = useRef(0);
+  const tick = useRef(null);
+  const audioRef = useRef(null);
+
+  const load = async () => { try { setItems((await api.get("/me/audio-evidence")).data); } catch (_) {} };
+  useEffect(() => { load(); return () => { if (tick.current) clearInterval(tick.current); }; }, []);
+
+  const start = async () => {
+    setErr("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunks.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size) chunks.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks.current, { type: "audio/webm" });
+        const dur = Date.now() - startTs.current;
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          setBusy(true);
+          try { await api.post("/me/audio-evidence", { audio_base64: reader.result, duration_ms: dur, mime: "audio/webm" }); await load(); }
+          catch (e) { setErr(e?.response?.data?.detail || "Could not save recording."); }
+          finally { setBusy(false); }
+        };
+        reader.readAsDataURL(blob);
+      };
+      mr.start(); recRef.current = mr; startTs.current = Date.now(); setElapsed(0); setRecording(true);
+      tick.current = setInterval(() => setElapsed(Math.floor((Date.now() - startTs.current) / 1000)), 500);
+    } catch (_) { setErr("Microphone permission denied."); }
+  };
+  const stop = () => { if (recRef.current && recRef.current.state !== "inactive") recRef.current.stop(); if (tick.current) clearInterval(tick.current); setRecording(false); };
+  const playRec = async (id) => {
+    const r = await api.get(`/me/audio-evidence/${id}/play`);
+    if (audioRef.current) { audioRef.current.src = r.data.audio_base64; audioRef.current.play(); }
+  };
+  const remove = async (id) => { if (!window.confirm("Delete this recording?")) return; await api.delete(`/me/audio-evidence/${id}`); load(); };
+
+  return (
+    <div className="glass" style={{ padding: 22, borderRadius: 18, marginTop: 18 }} data-testid="audio-panel">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <Mic size={20} className="neon" />
+        <div>
+          <h2 style={{ margin: 0, fontSize: 18 }}>Surround Audio Recording</h2>
+          <p className="muted" style={{ margin: "2px 0 0", fontSize: 12.5 }}>Record what's happening around you and save it as evidence.</p>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        {!recording ? (
+          <button className="btn btn-primary" onClick={start} disabled={busy} data-testid="audio-start-btn">{busy ? <Loader2 className="spin" size={16} /> : <><Mic size={16} /> Start recording</>}</button>
+        ) : (
+          <button className="btn btn-danger" onClick={stop} data-testid="audio-stop-btn"><Square size={15} /> Stop ({elapsed}s)</button>
+        )}
+        {recording && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#ff3b5c", fontWeight: 700 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: "#ff3b5c", animation: "sosPulse 1s infinite" }} /> Recording…</span>}
+      </div>
+      {err && <div style={{ color: "#ff7591", fontSize: 13, marginTop: 10 }} data-testid="audio-error">{err}</div>}
+      <audio ref={audioRef} style={{ display: "none" }} />
+      {items.length > 0 && (
+        <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+          {items.map((a) => (
+            <div key={a.id} data-testid={`audio-row-${a.id}`} className="glass" style={{ padding: "10px 14px", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+              <span style={{ fontSize: 13.5 }}>Recording · {a.duration_ms ? `${Math.round(a.duration_ms / 1000)}s` : "—"} · {new Date(a.created_at).toLocaleString()}</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => playRec(a.id)} data-testid={`audio-play-${a.id}`}><Play size={14} /></button>
+                <button className="btn btn-ghost btn-sm" onClick={() => remove(a.id)} data-testid={`audio-delete-${a.id}`}><Trash2 size={14} /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Safety() {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -557,6 +664,19 @@ export default function Safety() {
 
       {/* Unsafe file checker */}
       <FileChecker />
+
+      {/* Surround audio recording */}
+      <AudioRecorder />
+
+      {/* Safe zones / geo-fencing link */}
+      <Link to="/safe-zones" data-testid="safe-zones-card" className="glass glass-hover" style={{ display: "flex", alignItems: "center", gap: 14, padding: 20, borderRadius: 18, marginTop: 18, textDecoration: "none", color: "var(--text)" }}>
+        <span style={{ width: 46, height: 46, borderRadius: 12, display: "grid", placeItems: "center", background: "rgba(34,211,238,.14)", color: "#22d3ee", flexShrink: 0 }}><Radar size={22} /></span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>Geo-Fencing & Safe Zones</div>
+          <div className="muted" style={{ fontSize: 13 }}>Draw safe areas on a map and get alerted on every entry or exit.</div>
+        </div>
+        <ChevronRight size={20} className="muted" />
+      </Link>
 
       {/* Stolen phone / FIR guide link */}
       <Link to="/stolen-phone" data-testid="stolen-phone-card" className="glass glass-hover" style={{ display: "flex", alignItems: "center", gap: 14, padding: 20, borderRadius: 18, marginTop: 18, textDecoration: "none", color: "var(--text)" }}>

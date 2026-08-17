@@ -244,3 +244,12 @@ MOBILE-ONLY: #11,#19,#20,#21,#22,#23,#25.
 Files: backend/server.py (file_check, file_status, admin_notifications), frontend Safety.jsx (FileChecker + stolen-phone card), StolenPhone.jsx, AdminComms.jsx, OtpLogin.jsx, Admin.jsx, App.js routes (/stolen-phone, /admin/comms).
 STILL PENDING (buildable): #24 Geo-Fencing/Safe Zones, #14 Surround Audio, #15 personal Emergency Photo. NEEDS CREDS: #16 Google Drive (OAuth), SMS OTP fallback (DLT SMS template). NEEDS KEY: activate #9 + #10 with VIRUSTOTAL_API_KEY.
 MOBILE-ONLY: #11,#19,#20,#21,#22,#23,#25.
+
+## Update 2026-06 — Safety Suite (Phase 4) — 3 more features (testing_agent iter14: BE 20/20, FE 100%)
+- #24 Geo-Fencing / Safe Zones — /safe-zones page (Leaflet map, tap/use-location to set center, radius slider, notify toggle). Endpoints: GET/POST/DELETE /api/me/safe-zones, GET /api/me/geofence-events. Transitions evaluated on every POST /api/me/location (_evaluate_geofences) -> logs enter/exit, pushes user, WhatsApps contacts on EXIT. Collections: safe_zones, geofence_events. DONE.
+- #15 Emergency Photo on SOS — POST /api/me/sos accepts photo_base64 (silent front-camera capture via canvas in Sos component, toggle sos-photo-toggle default ON). GET /api/me/sos-events returns has_photo (no base64); GET /api/me/sos-events/{id}/photo returns the image. DONE.
+- #14 Surround Audio Recording — MediaRecorder card (audio-panel) on Safety page. Endpoints: POST/GET /api/me/audio-evidence, GET /{id}/play, DELETE /{id}. Collection: audio_evidence. DONE.
+Files: backend/server.py (safe-zones, geofence, audio-evidence, sos photo, _evaluate_geofences), frontend Safety.jsx (Sos photo capture + AudioRecorder + safe-zones-card), SafeZones.jsx, App.js route /safe-zones. Backend tests: /app/backend/tests/test_safety_iter14.py.
+STILL PENDING — NEEDS CREDS: #16 Google Drive upload (OAuth), SMS OTP fallback (DLT SMS template). NEEDS KEY: activate #9 Safe Link + #10 File Checker with VIRUSTOTAL_API_KEY.
+MOBILE-ONLY: #11,#19,#20,#21,#22,#23,#25.
+NOTE (non-blocking, deferred per scope): server.py ~5.3k lines could be split into routers; safe_zones could use 2dsphere index at scale.
