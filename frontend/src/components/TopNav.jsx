@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { QrCode, LogOut, ChevronDown, School, HeartPulse, Briefcase, ShieldAlert, Users, Car, MoreHorizontal, Settings as SettingsIcon, Siren, Lock, MapPin, Bell, FileWarning, LifeBuoy, CreditCard, Menu, X, ScanLine } from "lucide-react";
+import { QrCode, LogOut, ChevronDown, School, HeartPulse, Briefcase, ShieldAlert, Users, Car, MoreHorizontal, Settings as SettingsIcon, Siren, Lock, MapPin, Bell, FileWarning, LifeBuoy, CreditCard, Menu, X, ScanLine, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
@@ -175,6 +175,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
                   <Link to="/safe-zones" data-testid="m-zones"><MapPin size={18} /> Safe Zones</Link>
                   <div className="mobile-drawer-sep">More</div>
                   <Link to="/alerts" data-testid="m-alerts"><Bell size={18} /> Alerts</Link>
+                  <Link to="/circles" data-testid="m-circles"><Clock size={18} /> Temporary circles</Link>
                   <Link to="/incidents" data-testid="m-incidents"><FileWarning size={18} /> Incidents</Link>
                   <Link to="/community" data-testid="m-community"><Users size={18} /> Community</Link>
                   <Link to="/subscription" data-testid="m-plans"><QrCode size={18} /> Plans</Link>

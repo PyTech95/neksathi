@@ -6462,7 +6462,17 @@ async def otp_request(request: Request, payload: OtpRequestIn):
 async def otp_verify(request: Request, payload: OtpVerifyIn):
     phone = _norm_phone(payload.phone)
     ok = False
-    if _otp_live():
+    # Verify against the channel that ISSUED the code. WhatsApp OTP is
+    # self-generated + stored locally, so it must be verified locally even when
+    # MSG91 SMS-OTP (otp_live) is also configured. Only SMS-OTP uses MSG91 verify.
+    if comms.whatsapp_otp_live():
+        row = await db.otp_codes.find_one({"phone": phone})
+        if row:
+            exp = row["expires_at"]
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            ok = row.get("code") == payload.code and exp >= now_utc()
+    elif _otp_live():
         try:  # pragma: no cover - live path
             ok = await comms.verify_otp(phone, payload.code)
         except Exception as e:
