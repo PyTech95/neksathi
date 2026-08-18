@@ -41,6 +41,7 @@ import SafeZones from "@/pages/SafeZones";
 import TheftProtection from "@/pages/TheftProtection";
 import IntruderView from "@/pages/IntruderView";
 import Family from "@/pages/Family";
+import TemporaryCircles from "@/pages/TemporaryCircles";
 import AdminComms from "@/pages/AdminComms";
 import AdminIntegrations from "@/pages/AdminIntegrations";
 import AdminIntruder from "@/pages/AdminIntruder";
@@ -100,6 +101,7 @@ function Shell() {
           <Route path="/safe-zones" element={<Protected><SafeZones /></Protected>} />
           <Route path="/theft-protection" element={<Protected><TheftProtection /></Protected>} />
           <Route path="/family" element={<Protected><Family /></Protected>} />
+          <Route path="/circles" element={<Protected><TemporaryCircles /></Protected>} />
           <Route path="/intruder/:token" element={<IntruderView />} />
           <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
           <Route path="/admin/qr" element={<Protected adminOnly><AdminQR /></Protected>} />

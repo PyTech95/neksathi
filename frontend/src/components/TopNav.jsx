@@ -84,6 +84,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
               {menu === "more" && (
                 <div className="glass" style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 220, padding: 8, zIndex: 90, borderRadius: 14 }}>
                   <Link to="/alerts" className="nav-link" data-testid="nav-m-alerts" style={dropItem} onClick={() => setMenu(null)}><Bell size={16} /> Alerts</Link>
+                  <Link to="/circles" className="nav-link" data-testid="nav-m-circles" style={dropItem} onClick={() => setMenu(null)}><Clock size={16} /> Temporary circles</Link>
                   <Link to="/incidents" className="nav-link" data-testid="nav-m-incidents" style={dropItem} onClick={() => setMenu(null)}><FileWarning size={16} /> Incidents</Link>
                   <Link to="/community" className="nav-link" data-testid="nav-m-community" style={dropItem} onClick={() => setMenu(null)}><Users size={16} /> Community</Link>
                   <Link to="/subscription" className="nav-link" data-testid="nav-m-plans" style={dropItem} onClick={() => setMenu(null)}><QrCode size={16} /> Plans</Link>
