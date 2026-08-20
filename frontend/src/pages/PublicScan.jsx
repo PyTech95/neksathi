@@ -106,12 +106,19 @@ export default function PublicScan() {
     try {
       if (!window.speechSynthesis) return;
       window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance("Owner is coming in 15 minutes. Please wait.");
-      u.rate = 0.98; u.pitch = 1; u.volume = 1; u.lang = "en-IN";
       const voices = window.speechSynthesis.getVoices();
-      const v = voices.find((x) => /en[-_]IN/i.test(x.lang)) || voices.find((x) => x.lang && x.lang.toLowerCase().startsWith("en"));
-      if (v) u.voice = v;
-      window.speechSynthesis.speak(u);
+      const pick = (langRe) => voices.find((x) => langRe.test(x.lang));
+      // Hindi first, then English — queued so both play in order.
+      const hi = new SpeechSynthesisUtterance("मालिक 15 मिनट में आ रहे हैं। कृपया प्रतीक्षा करें।");
+      hi.lang = "hi-IN"; hi.rate = 0.96; hi.volume = 1;
+      const hiVoice = pick(/hi[-_]IN/i) || pick(/^hi/i);
+      if (hiVoice) hi.voice = hiVoice;
+      const en = new SpeechSynthesisUtterance("The owner is coming in 15 minutes. Please wait.");
+      en.lang = "en-IN"; en.rate = 0.98; en.volume = 1;
+      const enVoice = pick(/en[-_]IN/i) || voices.find((x) => x.lang && x.lang.toLowerCase().startsWith("en"));
+      if (enVoice) en.voice = enVoice;
+      window.speechSynthesis.speak(hi);
+      window.speechSynthesis.speak(en);
     } catch (_) {}
   };
 
@@ -142,9 +149,8 @@ export default function PublicScan() {
         setTimeout(() => { try { osc.stop(); lfo.stop(); ctx.close(); } catch (_) {} }, 1700);
       }
     } catch (_) {}
-    // Voice note right after the siren, and repeated once for clarity.
+    // Voice note right after the siren (bilingual: Hindi then English).
     setTimeout(speakArrival, 1900);
-    setTimeout(speakArrival, 5200);
   };
 
   // When the owner accepts "I am coming", alert the reporter with a siren + voice note (once).

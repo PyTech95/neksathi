@@ -27,6 +27,7 @@ export default function Incidents() {
 
   const respond = async (id, response) => { await api.post(`/incidents/${id}/respond`, { response }); load(); };
   const resolve = async (id) => { await api.post(`/incidents/${id}/resolve`); load(); };
+  const extend = async (id) => { await api.post(`/incidents/${id}/extend`); load(); };
 
   return (
     <div className="page" data-testid="incidents-page">
@@ -97,6 +98,9 @@ export default function Incidents() {
                             <button className="btn btn-primary btn-sm" onClick={() => respond(it.id, "coming")} data-testid={`coming-${it.id}`}><Check size={15} /> I AM COMING</button>
                             <button className="btn btn-ghost btn-sm" onClick={() => respond(it.id, "cant")} data-testid={`cant-${it.id}`}><X size={15} /> Can't respond</button>
                           </>
+                        )}
+                        {!it.resolved && (it.type === "wrong_parking" || it.type === "vehicle_blocking") && (
+                          <button className="btn btn-ghost btn-sm" onClick={() => extend(it.id)} data-testid={`extend-${it.id}`}><Clock size={15} color="#f5a524" /> Need more time (+10 min)</button>
                         )}
                         {!it.resolved && <button className="btn btn-ghost btn-sm" onClick={() => resolve(it.id)} data-testid={`resolve-${it.id}`}><CheckCircle2 size={15} color="#22d3ee" /> Mark resolved</button>}
                       </div>

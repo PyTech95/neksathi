@@ -6079,8 +6079,9 @@ async def _notify_missed_call(c: dict):
     v = await db.vehicles.find_one({"id": c["vehicle_id"]})
     if not v:
         return
-    body = (f"📞 Missed call: someone scanned your vehicle {c['number_plate']} and tried to "
-            f"reach you on a live Nek Sathi call. Open the app to see recent activity.")
+    link = (os.environ.get("PUBLIC_APP_URL") or "").rstrip("/") + "/dashboard#recent-calls"
+    body = (f"📞 Missed call: someone scanned your vehicle {c['number_plate']} and tried to reach you "
+            f"on a live Nek Sathi call. See it here: {link}")
     try:
         for r in await _incident_recipients(v):
             await notify_whatsapp(r["phone"], body, meta={"kind": "missed_call", "call_id": c["id"], "role": r["role"]})
@@ -6528,6 +6529,30 @@ async def resolve_incident(incident_id: str, user: dict = Depends(current_user))
             meta={"incident_id": incident_id, "kind": "reporter_resolved"},
         )
     return {"ok": True, "status": "resolved"}
+
+
+@api.post("/incidents/{incident_id}/extend")
+async def extend_incident(incident_id: str, user: dict = Depends(current_user)):
+    """Owner adds 10 more minutes to the response window; reporter's live countdown updates on next poll."""
+    inc = await db.incidents.find_one({"id": incident_id})
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    visible = await _visible_vehicle_ids(user["id"])
+    if inc["vehicle_id"] not in visible:
+        raise HTTPException(status_code=403, detail="Not your vehicle")
+    if inc.get("resolved"):
+        raise HTTPException(status_code=409, detail="Incident already resolved")
+    base = _aware(inc["expires_at"])
+    now = now_utc()
+    new_expiry = (base if base > now else now) + timedelta(minutes=10)
+    await db.incidents.update_one({"id": incident_id}, {"$set": {"expires_at": new_expiry, "status": inc.get("owner_response") == "coming" and "coming" or "alert_sent"}})
+    if inc.get("scanner_phone"):
+        await notify_whatsapp(
+            inc["scanner_phone"],
+            f"The owner of {inc['number_plate']} needs a little more time — the window has been extended by 10 minutes. Please wait.",
+            meta={"incident_id": incident_id, "kind": "reporter_extended"},
+        )
+    return {"ok": True, "expires_at": new_expiry.isoformat(), "minutes_left": _minutes_left(new_expiry)}
 
 
 # ---- Admin incident dashboard + block QR ----

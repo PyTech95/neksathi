@@ -133,7 +133,7 @@ export default function Dashboard() {
         )}
 
         {!loading && calls.length > 0 && (
-          <div style={{ marginTop: 40 }} data-testid="recent-calls-section">
+          <div style={{ marginTop: 40 }} id="recent-calls" data-testid="recent-calls-section">
             <h2 style={{ fontSize: 24, marginBottom: 4, display: "flex", alignItems: "center", gap: 10 }}>
               <Phone size={20} className="neon" /> Recent <span className="neon">calls</span>
               {calls.filter((c) => c.status === "missed").length > 0 && (
