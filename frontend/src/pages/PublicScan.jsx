@@ -8,16 +8,21 @@ const geo = (setC) => {
   if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => setC({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {}, { timeout: 6000 });
 };
 
+// Masked-call routing is paused for now. The scan flow currently only alerts the
+// owner. The call feature (web/portal -> owner via Vobiz, and later the internal
+// web<->mobile-app call) is kept in code and can be re-enabled by flipping this flag.
+const CALL_ENABLED = false;
+
 const WINDOW_TYPES = ["wrong_parking", "vehicle_blocking"];
 const REASONS = [
   { key: "wrong_parking", label: "Wrong Parking", icon: <ParkingCircle size={26} />, grad: "linear-gradient(100deg,#f59e0b,#f5a524)", desc: "Alert the owner to move their vehicle. A 15-minute window starts once you alert them." },
   { key: "vehicle_blocking", label: "Vehicle Blocking", icon: <Ban size={26} />, grad: "linear-gradient(100deg,#f97316,#fb923c)", desc: "This vehicle is blocking the way. Ask the owner to move it — a 15-minute window starts." },
   { key: "headlight_on", label: "Headlight ON", icon: <Lightbulb size={26} />, grad: "linear-gradient(100deg,#ca8a04,#eab308)", desc: "The headlights are left ON. Let the owner know before the battery drains." },
   { key: "door_open", label: "Door / Window Open", icon: <DoorOpen size={26} />, grad: "linear-gradient(100deg,#0891b2,#22d3ee)", desc: "A door or window is left open. Notify the owner to secure the vehicle." },
-  { key: "emergency", label: "Emergency", icon: <Siren size={26} />, grad: "linear-gradient(100deg,#e11d48,#ff3b5c)", urgent: true, photoOptional: true, desc: "Urgent! Notify the owner & family immediately, then connect a private call." },
+  { key: "emergency", label: "Emergency", icon: <Siren size={26} />, grad: "linear-gradient(100deg,#e11d48,#ff3b5c)", urgent: true, photoOptional: true, desc: "Urgent! Notify the owner & family immediately." },
   { key: "vehicle_damage", label: "Vehicle Damage", icon: <AlertTriangle size={26} />, grad: "linear-gradient(100deg,#dc2626,#f97316)", desc: "The vehicle appears damaged. Report it to the owner with a photo." },
   { key: "other", label: "Other", icon: <MessageSquare size={26} />, grad: "linear-gradient(100deg,#7c3aed,#8b5cf6)", desc: "Something else about this vehicle — leave a note for the owner." },
-  { key: "theft", label: "Theft / Suspicious", icon: <ShieldAlert size={26} />, grad: "linear-gradient(100deg,#6d28d9,#8b5cf6)", desc: "Report suspicious activity or theft. The owner & family are alerted and you can place a private call." },
+  { key: "theft", label: "Theft / Suspicious", icon: <ShieldAlert size={26} />, grad: "linear-gradient(100deg,#6d28d9,#8b5cf6)", desc: "Report suspicious activity or theft. The owner & family are alerted immediately." },
 ];
 
 export default function PublicScan() {
@@ -220,7 +225,7 @@ export default function PublicScan() {
               </div>
             )}
 
-            {call ? (
+            {CALL_ENABLED && (call ? (
               <div className="glass card-pad center" style={{ padding: 24, marginTop: 14 }} data-testid="call-connecting">
                 {call.status === "calling" ? (
                   <>
@@ -256,8 +261,7 @@ export default function PublicScan() {
                   </button>
                 </div>
               )
-            )}
-            <p className="center muted" style={{ marginTop: 18, fontSize: 12 }}>Your call is routed through Nek Sathi — the owner's number is never shown.</p>
+            ))}
           </div>
         )}
 
