@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import CameraCapture from "@/components/CameraCapture";
+import InAppCall from "@/components/InAppCall";
 import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare } from "lucide-react";
 
 const geo = (setC) => {
@@ -41,6 +42,7 @@ export default function PublicScan() {
   const [carPhoto, setCarPhoto] = useState(null);
   const [selfiePhoto, setSelfiePhoto] = useState(null);
   const [showCam, setShowCam] = useState(false);
+  const [showCall, setShowCall] = useState(false);
   const poll = useRef(null);
 
   useEffect(() => {
@@ -158,6 +160,10 @@ export default function PublicScan() {
         {screen === "choose" && (
           <div data-testid="scan-choose">
             <h2 className="center" style={{ fontSize: 24, marginBottom: 16 }}>How can we help?</h2>
+            <button className="big-action" style={{ background: "linear-gradient(100deg,#0891b2,#22d3ee)", marginBottom: 14 }} onClick={() => setShowCall(true)} data-testid="scan-call-owner-btn">
+              <Phone size={24} /> Call owner now (live, private)
+            </button>
+            <p className="center muted" style={{ fontSize: 12, margin: "0 0 16px" }}>Talks to the owner inside the app — no phone numbers shared.</p>
             <div className="grid" style={{ gap: 12 }}>
               {REASONS.map((r) => (
                 <button key={r.key} className="big-action" style={{ background: r.grad }} onClick={() => setScreen(r.key)} data-testid={`choose-${r.key}`}>
@@ -225,6 +231,12 @@ export default function PublicScan() {
               </div>
             )}
 
+            {incident.status !== "resolved" && (
+              <button className="big-action" style={{ background: "linear-gradient(100deg,#0891b2,#22d3ee)", marginTop: 14 }} onClick={() => setShowCall(true)} data-testid="waiting-call-owner-btn">
+                <Phone size={24} /> Call owner now (live, private)
+              </button>
+            )}
+
             {CALL_ENABLED && (call ? (
               <div className="glass card-pad center" style={{ padding: 24, marginTop: 14 }} data-testid="call-connecting">
                 {call.status === "calling" ? (
@@ -273,6 +285,7 @@ export default function PublicScan() {
           onCancel={() => setShowCam(false)}
         />
       )}
+      {showCall && <InAppCall qrId={qrId} onClose={() => setShowCall(false)} />}
     </div>
   );
 }

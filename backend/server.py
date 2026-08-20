@@ -6053,6 +6053,178 @@ async def public_incident_status(incident_id: str):
     return _incident_public(inc)
 
 
+# ===========================================================================
+# In-app live voice call (self-hosted WebRTC, REST-based signaling)
+# An anonymous vehicle scanner can place a REAL live voice call to the owner
+# that connects INSIDE the app (browser<->browser / future mobile app) — no
+# telephony, no phone numbers exposed on either side. Signaling (SDP offer/
+# answer + ICE candidates) is exchanged over these REST endpoints via short
+# polling; media flows peer-to-peer over WebRTC (public STUN, no paid service).
+# Owner rings if online; otherwise the call is logged as "missed" + an alert.
+# ===========================================================================
+CALL_RING_TIMEOUT_SEC = 45
+
+
+class RTCDescriptionIn(BaseModel):
+    sdp: dict
+
+
+class RTCCandidateIn(BaseModel):
+    candidate: dict
+
+
+async def _notify_missed_call(c: dict):
+    v = await db.vehicles.find_one({"id": c["vehicle_id"]})
+    if not v:
+        return
+    body = (f"📞 Missed call: someone scanned your vehicle {c['number_plate']} and tried to "
+            f"reach you on a live Nek Sathi call. Open the app to see recent activity.")
+    try:
+        for r in await _incident_recipients(v):
+            await notify_whatsapp(r["phone"], body, meta={"kind": "missed_call", "call_id": c["id"], "role": r["role"]})
+    except Exception as _e:
+        log.warning("missed-call whatsapp failed: %s", _e)
+    try:
+        await send_push(recipients=[c["owner_id"]], data={
+            "title": "📞 Missed call", "message": f"Scanner tried to call about {c['number_plate']}",
+            "action_url": "/incidents"}, idempotency_key="miss-" + c["id"])
+    except Exception as _e:
+        log.warning("missed-call push failed: %s", _e)
+    try:
+        await db.alerts.insert_one({
+            "id": new_id(), "vehicle_id": c["vehicle_id"], "number_plate": c["number_plate"],
+            "type": "missed_call", "scanner_note": "Missed in-app live call",
+            "scanner_phone": None, "scanner_lat": None, "scanner_lng": None,
+            "created_at": now_utc(), "contact_channels": [], "incident_id": None,
+        })
+    except Exception:
+        pass
+
+
+async def _expire_stale_calls():
+    cutoff = now_utc() - timedelta(seconds=CALL_RING_TIMEOUT_SEC)
+    async for c in db.webrtc_calls.find({"status": "ringing"}):
+        if _aware(c["created_at"]) <= cutoff:
+            r = await db.webrtc_calls.update_one(
+                {"id": c["id"], "status": "ringing"},
+                {"$set": {"status": "missed", "ended_at": now_utc()}})
+            if r.modified_count:
+                await _notify_missed_call(c)
+
+
+# ---- Anonymous caller (scanner) side ----
+@api.post("/public/qr/{qr_id}/call/start")
+@rate_limit("15/minute")
+async def rtc_call_start(request: Request, qr_id: str):
+    v = await db.vehicles.find_one({"qr_id": qr_id})
+    if not v:
+        raise HTTPException(status_code=404, detail="QR not found or vehicle removed")
+    await _expire_stale_calls()
+    now = now_utc()
+    call = {
+        "id": new_id(), "qr_id": qr_id, "vehicle_id": v["id"], "number_plate": v["number_plate"],
+        "owner_id": v["owner_id"], "status": "ringing",
+        "caller_offer": None, "callee_answer": None,
+        "caller_candidates": [], "callee_candidates": [],
+        "created_at": now, "updated_at": now, "answered_at": None, "ended_at": None,
+    }
+    await db.webrtc_calls.insert_one(dict(call))
+    try:
+        await send_push(recipients=[v["owner_id"]], data={
+            "title": "📞 Incoming call", "message": f"Someone is calling about {v['number_plate']}",
+            "action_url": "/dashboard"}, idempotency_key="ring-" + call["id"])
+    except Exception:
+        pass
+    return {"call_id": call["id"]}
+
+
+@api.post("/public/call/{call_id}/offer")
+async def rtc_caller_offer(call_id: str, payload: RTCDescriptionIn):
+    r = await db.webrtc_calls.update_one(
+        {"id": call_id, "status": {"$in": ["ringing", "accepted"]}},
+        {"$set": {"caller_offer": payload.sdp, "updated_at": now_utc()}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Call not available")
+    return {"ok": True}
+
+
+@api.post("/public/call/{call_id}/candidate")
+async def rtc_caller_candidate(call_id: str, payload: RTCCandidateIn):
+    r = await db.webrtc_calls.update_one({"id": call_id}, {"$push": {"caller_candidates": payload.candidate}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Call not found")
+    return {"ok": True}
+
+
+@api.get("/public/call/{call_id}")
+async def rtc_caller_poll(call_id: str):
+    c = await db.webrtc_calls.find_one({"id": call_id})
+    if not c:
+        raise HTTPException(status_code=404, detail="Call not found")
+    if c["status"] == "ringing" and _aware(c["created_at"]) <= now_utc() - timedelta(seconds=CALL_RING_TIMEOUT_SEC):
+        await db.webrtc_calls.update_one({"id": call_id, "status": "ringing"}, {"$set": {"status": "missed", "ended_at": now_utc()}})
+        await _notify_missed_call(c)
+        c["status"] = "missed"
+    return {"status": c["status"], "answer": c.get("callee_answer"), "callee_candidates": c.get("callee_candidates", [])}
+
+
+@api.post("/public/call/{call_id}/end")
+async def rtc_caller_end(call_id: str):
+    await db.webrtc_calls.update_one(
+        {"id": call_id, "status": {"$nin": ["missed", "rejected"]}},
+        {"$set": {"status": "ended", "ended_at": now_utc()}})
+    return {"ok": True}
+
+
+# ---- Owner (callee, authenticated) side ----
+@api.get("/me/calls/incoming")
+async def rtc_incoming_calls(user: dict = Depends(current_user)):
+    await _expire_stale_calls()
+    out = []
+    async for c in db.webrtc_calls.find({"owner_id": user["id"], "status": "ringing"}).sort("created_at", -1):
+        out.append({"call_id": c["id"], "number_plate": c["number_plate"],
+                    "created_at": c["created_at"], "has_offer": bool(c.get("caller_offer"))})
+    return {"items": out}
+
+
+@api.get("/me/calls/{call_id}")
+async def rtc_owner_poll(call_id: str, user: dict = Depends(current_user)):
+    c = await db.webrtc_calls.find_one({"id": call_id, "owner_id": user["id"]})
+    if not c:
+        raise HTTPException(status_code=404, detail="Call not found")
+    return {"status": c["status"], "offer": c.get("caller_offer"), "caller_candidates": c.get("caller_candidates", [])}
+
+
+@api.post("/me/calls/{call_id}/accept")
+async def rtc_accept_call(call_id: str, payload: RTCDescriptionIn, user: dict = Depends(current_user)):
+    r = await db.webrtc_calls.update_one(
+        {"id": call_id, "owner_id": user["id"], "status": "ringing"},
+        {"$set": {"callee_answer": payload.sdp, "status": "accepted", "answered_at": now_utc(), "updated_at": now_utc()}})
+    if not r.matched_count:
+        raise HTTPException(status_code=409, detail="Call no longer available")
+    return {"ok": True}
+
+
+@api.post("/me/calls/{call_id}/reject")
+async def rtc_reject_call(call_id: str, user: dict = Depends(current_user)):
+    await db.webrtc_calls.update_one(
+        {"id": call_id, "owner_id": user["id"], "status": "ringing"},
+        {"$set": {"status": "rejected", "ended_at": now_utc()}})
+    return {"ok": True}
+
+
+@api.post("/me/calls/{call_id}/candidate")
+async def rtc_owner_candidate(call_id: str, payload: RTCCandidateIn, user: dict = Depends(current_user)):
+    await db.webrtc_calls.update_one({"id": call_id, "owner_id": user["id"]}, {"$push": {"callee_candidates": payload.candidate}})
+    return {"ok": True}
+
+
+@api.post("/me/calls/{call_id}/end")
+async def rtc_owner_end(call_id: str, user: dict = Depends(current_user)):
+    await db.webrtc_calls.update_one({"id": call_id, "owner_id": user["id"]}, {"$set": {"status": "ended", "ended_at": now_utc()}})
+    return {"ok": True}
+
+
 async def _bridge_masked_call(reporter_phone: Optional[str], targets, *, kind: str, ref_id: str) -> dict:
     """Provider-aware masked call. Prefers Vobiz (real private bridge via a
     masking DID), then MSG91, else mock. `targets` is a phone string or a list

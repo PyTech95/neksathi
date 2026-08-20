@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import LiveAlarm from "@/components/LiveAlarm";
 import FamilyAlarm from "@/components/FamilyAlarm";
+import IncomingCall from "@/components/IncomingCall";
 
 const dropItem = { display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 10, fontSize: 14 };
 
@@ -119,6 +120,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
 
             <LiveAlarm />
             <FamilyAlarm />
+            <IncomingCall />
           </>
         ) : (
           <>
