@@ -381,3 +381,7 @@ NATIVE-MOBILE ONLY (needs Expo app; web can only prep APIs): Crash detection (ac
   - `lib/rtc.js`: 5 ringtone presets (classic/chime/urgent/pulse/arcade) via `makeRingtone(toneId)` (louder gain 0.55), `vibrate()/stopVibrate()`, `previewRingtone()`. `IncomingCall.jsx` now plays the owner's chosen tone + repeating vibration while ringing (reads `user.notify_prefs.ringtone`, fallback localStorage `nk_ringtone`).
   - Backend: `NotifyPrefs.ringtone: str="classic"` — persists via existing `PUT /auth/me`. Verified via curl (set→persist→reset).
   - `Settings.jsx`: new "Incoming call ringtone" row (data-testids ringtone-row/ringtone-select/ringtone-preview) with dropdown + Play preview; saved with the profile form; mirrors to localStorage for instant effect. Screenshot-verified.
+
+## Update 2026-06 — Scan reason-detail redesign (batch 40, this fork)
+- Public scan choose screen: removed the top "Call owner now" button — reasons (wrong parking/emergency/accident/etc.) show directly again.
+- Reason-detail screen (`PublicScan.jsx`): removed the note + callback-phone fields (`NoteFields` deleted); photo is now MANDATORY for every reason (`photoBlock(true)`, alert button disabled until a photo is taken). Below the photo there are now TWO buttons: `alert-{key}-btn` "Alert owner (15-min)" (sends the incident/15-min window) and `call-{key}-btn` "Call owner (live)" (opens the in-app WebRTC call). Screenshot-verified on wrong_parking: no note/phone fields, mandatory photo, both buttons present, alert disabled with no photo.

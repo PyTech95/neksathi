@@ -128,13 +128,6 @@ export default function PublicScan() {
     </div>
   );
 
-  const NoteFields = () => (
-    <div className="glass card-pad" style={{ padding: 18, marginTop: 14 }}>
-      <div className="field"><label>Note (optional)</label><textarea className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)} data-testid="scan-note" placeholder="e.g. Blocking the exit gate" /></div>
-      <div className="field" style={{ marginBottom: 0 }}><label>Your callback number (optional)</label><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="scan-phone" placeholder="+91 …" /></div>
-    </div>
-  );
-
   const photoBlock = (required) => (
     <div className="glass card-pad" style={{ padding: 18, marginTop: 14 }} data-testid="scan-photo-block">
       <label style={{ display: "block", marginBottom: 10, fontSize: 14, fontWeight: 700 }}>Add a photo of the vehicle {required && <span style={{ color: "#ff3b5c" }}>*</span>}</label>
@@ -160,10 +153,6 @@ export default function PublicScan() {
         {screen === "choose" && (
           <div data-testid="scan-choose">
             <h2 className="center" style={{ fontSize: 24, marginBottom: 16 }}>How can we help?</h2>
-            <button className="big-action" style={{ background: "linear-gradient(100deg,#0891b2,#22d3ee)", marginBottom: 14 }} onClick={() => setShowCall(true)} data-testid="scan-call-owner-btn">
-              <Phone size={24} /> Call owner now (live, private)
-            </button>
-            <p className="center muted" style={{ fontSize: 12, margin: "0 0 16px" }}>Talks to the owner inside the app — no phone numbers shared.</p>
             <div className="grid" style={{ gap: 12 }}>
               {REASONS.map((r) => (
                 <button key={r.key} className="big-action" style={{ background: r.grad }} onClick={() => setScreen(r.key)} data-testid={`choose-${r.key}`}>
@@ -193,12 +182,17 @@ export default function PublicScan() {
                   <p className="muted" style={{ marginBottom: 4 }}>{r.desc}</p>
                 </>
               )}
-              <NoteFields />
-              {photoBlock(!r.photoOptional)}
-              <button className="big-action" style={{ background: r.grad, marginTop: 14, opacity: (!r.photoOptional && !carPhoto) ? 0.6 : 1 }} disabled={busy || (!r.photoOptional && !carPhoto)} onClick={() => createIncident(r.key)} data-testid={`alert-${r.key}-btn`}>
-                {busy ? <Loader2 size={24} className="spin" /> : (r.urgent ? <Siren size={26} /> : <BellRing size={26} />)}
-                {r.urgent ? " Send emergency alert" : windowed ? " Alarm / Alert Owner" : " Alert Owner"}
-              </button>
+              {photoBlock(true)}
+              <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                <button className="big-action" style={{ background: r.grad, opacity: !carPhoto ? 0.55 : 1 }} disabled={busy || !carPhoto} onClick={() => createIncident(r.key)} data-testid={`alert-${r.key}-btn`}>
+                  {busy ? <Loader2 size={24} className="spin" /> : (r.urgent ? <Siren size={26} /> : <BellRing size={26} />)}
+                  {r.urgent ? " Send emergency alert" : windowed ? " Alert owner (15-min)" : " Alert owner"}
+                </button>
+                <button className="big-action" style={{ background: "linear-gradient(100deg,#0891b2,#22d3ee)" }} onClick={() => setShowCall(true)} data-testid={`call-${r.key}-btn`}>
+                  <Phone size={24} /> Call owner (live)
+                </button>
+              </div>
+              {!carPhoto && <p className="center muted" style={{ fontSize: 12, marginTop: 8 }}>Take a photo to alert the owner — you can call any time.</p>}
             </div>
           );
         })()}
