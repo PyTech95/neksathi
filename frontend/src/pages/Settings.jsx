@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import api, { API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink } from "lucide-react";
+import { RINGTONES, previewRingtone } from "@/lib/rtc";
+import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink, Phone, Play } from "lucide-react";
 
-const DEFAULT_PREFS = { whatsapp: true, email: true, push: true, incident_alerts: true, speed_alerts: true, marketing: false };
+const DEFAULT_PREFS = { whatsapp: true, email: true, push: true, incident_alerts: true, speed_alerts: true, marketing: false, ringtone: "classic" };
 
 const PREF_ROWS = [
   { key: "whatsapp", icon: <MessageSquare size={18} />, title: "WhatsApp alerts", desc: "Incident & account updates on WhatsApp." },
@@ -175,6 +176,24 @@ export default function Settings() {
                 <Toggle on={!!prefs[row.key]} onClick={() => togglePref(row.key)} testid={`pref-toggle-${row.key}`} />
               </div>
             ))}
+          </div>
+
+          <div className="glass" style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", marginTop: 8 }} data-testid="ringtone-row">
+            <span style={{ color: "#22d3ee" }}><Phone size={18} /></span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>Incoming call ringtone</div>
+              <div className="muted" style={{ fontSize: 13 }}>Tone that plays when someone calls you from a scanned QR.</div>
+            </div>
+            <select
+              className="input"
+              data-testid="ringtone-select"
+              value={prefs.ringtone || "classic"}
+              onChange={(e) => { const v = e.target.value; setPrefs((p) => ({ ...p, ringtone: v })); localStorage.setItem("nk_ringtone", v); }}
+              style={{ width: 130, flexShrink: 0 }}
+            >
+              {RINGTONES.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => previewRingtone(prefs.ringtone || "classic")} data-testid="ringtone-preview" style={{ flexShrink: 0 }}><Play size={14} /> Play</button>
           </div>
 
           {notice && <p style={{ color: "#22d3ee", fontWeight: 600, marginTop: 14 }} data-testid="settings-notice"><CheckCircle2 size={15} style={{ verticalAlign: "-2px" }} /> {notice}</p>}

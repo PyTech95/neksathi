@@ -206,6 +206,7 @@ class NotifyPrefs(BaseModel):
     incident_alerts: bool = True
     speed_alerts: bool = True
     marketing: bool = False
+    ringtone: str = "classic"
 
 
 class UserOut(BaseModel):

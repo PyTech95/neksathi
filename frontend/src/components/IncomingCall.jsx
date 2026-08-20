@@ -1,19 +1,36 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
-import { RTC_CONFIG, makeRingtone } from "@/lib/rtc";
+import { useAuth } from "@/context/AuthContext";
+import { RTC_CONFIG, makeRingtone, vibrate, stopVibrate } from "@/lib/rtc";
 import { Phone, PhoneOff, Mic, MicOff, ShieldCheck, Car } from "lucide-react";
 
 // Global owner-side listener for incoming in-app live voice calls. Mounted once
 // for logged-in users; polls for ringing calls, shows an incoming-call modal
-// with a ringtone, and runs the WebRTC answer flow on Accept.
+// with the owner's chosen ringtone + vibration, and runs the WebRTC answer flow.
 export default function IncomingCall() {
+  const { user } = useAuth();
   const [incoming, setIncoming] = useState(null); // {call_id, number_plate}
   const [active, setActive] = useState(null);      // {call_id, number_plate}
   const [status, setStatus] = useState("idle");    // idle | connecting | connected | ended
   const [muted, setMuted] = useState(false);
   const [seconds, setSeconds] = useState(0);
-  const ring = useRef(makeRingtone());
+  const ringRef = useRef(null);
+  const vibRef = useRef(null);
   const busyId = useRef(null); // call currently being handled (ring/active) to avoid duplicates
+
+  const startRing = () => {
+    if (ringRef.current) return;
+    const tone = user?.notify_prefs?.ringtone || localStorage.getItem("nk_ringtone") || "classic";
+    ringRef.current = makeRingtone(tone);
+    ringRef.current.start();
+    vibrate([500, 300, 500]);
+    vibRef.current = setInterval(() => vibrate([500, 300, 500]), 1500);
+  };
+  const stopRing = () => {
+    if (ringRef.current) { ringRef.current.stop(); ringRef.current = null; }
+    if (vibRef.current) { clearInterval(vibRef.current); vibRef.current = null; }
+    stopVibrate();
+  };
 
   const pcRef = useRef(null);
   const streamRef = useRef(null);
@@ -35,7 +52,7 @@ export default function IncomingCall() {
         if (c) {
           busyId.current = c.call_id;
           setIncoming({ call_id: c.call_id, number_plate: c.number_plate });
-          ring.current.start();
+          startRing();
         }
       } catch (_) {}
     };
@@ -45,7 +62,7 @@ export default function IncomingCall() {
   }, []);
 
   const cleanup = () => {
-    ring.current.stop();
+    stopRing();
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     if (pcRef.current) { try { pcRef.current.close(); } catch (_) {} pcRef.current = null; }
     if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
@@ -55,7 +72,7 @@ export default function IncomingCall() {
   const reset = () => { cleanup(); busyId.current = null; setIncoming(null); setActive(null); setStatus("idle"); setSeconds(0); setMuted(false); endedRef.current = false; };
 
   const reject = async () => {
-    ring.current.stop();
+    stopRing();
     const id = busyId.current;
     if (id) { try { await api.post(`/me/calls/${id}/reject`); } catch (_) {} }
     reset();
@@ -73,7 +90,7 @@ export default function IncomingCall() {
   const accept = async () => {
     const id = busyId.current;
     if (!id) return;
-    ring.current.stop();
+    stopRing();
     setIncoming(null);
     setActive({ call_id: id, number_plate: incoming?.number_plate });
     setStatus("connecting");
