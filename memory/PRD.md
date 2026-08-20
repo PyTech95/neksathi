@@ -388,3 +388,6 @@ NATIVE-MOBILE ONLY (needs Expo app; web can only prep APIs): Crash detection (ac
 
 ## Update 2026-06 — Mandatory photo-first on scan reason select (batch 41, this fork)
 - Selecting any scan reason (wrong parking / accident / emergency / etc.) now auto-opens the camera immediately (`onClick={() => { setScreen(r.key); setShowCam(true); }}`), so the photo is captured BEFORE the Alert/Call buttons are usable. Combined with mandatory `photoBlock(true)` + alert-disabled-until-photo, this enforces photo-first for every reason. Screenshot-verified (camera overlay opens on reason select).
+
+## Update 2026-06 — Reporter arrival alarm + voice note (batch 42, this fork)
+- When the owner accepts "I am coming" (owner_response=="coming"), the reporting scanner's waiting screen now fires a SIREN (WebAudio, ~2.6s modulated tone) + a spoken VOICE NOTE via `window.speechSynthesis` ("The owner is coming in 15 minutes. Please wait."), once per incident (`arrivalAnnounced` ref + effect on `incident.owner_response`). Added a "Play alert again" button (`owner-coming-replay`) on the "Owner is coming!" card in case the browser blocked autoplay. All client-side, no integration. Verified end-to-end: created wrong_parking incident → owner responded "coming" via `/incidents/{id}/respond` → scanner screen shows "Owner is coming!" + replay button; speechSynthesis confirmed available.

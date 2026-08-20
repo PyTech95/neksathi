@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import CameraCapture from "@/components/CameraCapture";
 import InAppCall from "@/components/InAppCall";
-import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare } from "lucide-react";
+import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare, Volume2 } from "lucide-react";
 
 const geo = (setC) => {
   if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => setC({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {}, { timeout: 6000 });
@@ -44,6 +44,41 @@ export default function PublicScan() {
   const [showCam, setShowCam] = useState(false);
   const [showCall, setShowCall] = useState(false);
   const poll = useRef(null);
+  const arrivalAnnounced = useRef(false);
+
+  const playArrivalAlarm = () => {
+    // Siren via WebAudio
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) {
+        const ctx = new AC();
+        const gain = ctx.createGain(); gain.gain.value = 0.35; gain.connect(ctx.destination);
+        const osc = ctx.createOscillator(); osc.type = "sawtooth"; osc.connect(gain);
+        const lfo = ctx.createOscillator(); const lfoGain = ctx.createGain();
+        lfo.frequency.value = 1.6; lfoGain.gain.value = 320; lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+        osc.frequency.value = 720;
+        osc.start(); lfo.start();
+        setTimeout(() => { try { osc.stop(); lfo.stop(); ctx.close(); } catch (_) {} }, 2600);
+      }
+    } catch (_) {}
+    // Voice note via SpeechSynthesis (spoken after the siren starts)
+    try {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance("The owner is coming in 15 minutes. Please wait.");
+        u.rate = 1; u.pitch = 1; u.volume = 1;
+        setTimeout(() => window.speechSynthesis.speak(u), 1300);
+      }
+    } catch (_) {}
+  };
+
+  // When the owner accepts "I am coming", alert the reporter with a siren + voice note (once).
+  useEffect(() => {
+    if (incident?.owner_response === "coming" && !arrivalAnnounced.current) {
+      arrivalAnnounced.current = true;
+      playArrivalAlarm();
+    }
+  }, [incident?.owner_response]);
 
   useEffect(() => {
     api.get(`/public/qr/${qrId}`).then((r) => setVehicle(r.data)).catch(() => setNotFound(true)).finally(() => setLoading(false));
@@ -204,6 +239,7 @@ export default function PublicScan() {
                 <CheckCircle2 size={56} color="#22d3ee" />
                 <h2 style={{ fontSize: 24, margin: "12px 0 8px" }}>Owner is coming!</h2>
                 <p className="muted">The vehicle owner has been notified and is coming within 15 minutes. Please wait.</p>
+                <button className="btn btn-ghost btn-sm" onClick={playArrivalAlarm} data-testid="owner-coming-replay" style={{ marginTop: 12 }}><Volume2 size={15} /> Play alert again</button>
               </div>
             ) : incident.status === "resolved" ? (
               <div className="glass card-pad center" style={{ padding: 34 }} data-testid="incident-resolved">
