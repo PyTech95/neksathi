@@ -9,6 +9,62 @@ const geo = (setC) => {
   if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => setC({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {}, { timeout: 6000 });
 };
 
+const WINDOW_SECONDS = 15 * 60;
+
+function softBeep(freq = 880, dur = 0.35) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine"; o.frequency.value = freq; o.connect(g); g.connect(ctx.destination);
+    const t = ctx.currentTime;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.3, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.start(t); o.stop(t + dur + 0.05);
+    setTimeout(() => { try { ctx.close(); } catch (_) {} }, (dur + 0.2) * 1000);
+  } catch (_) {}
+}
+
+// Visible circular countdown for the 15-minute owner window, with soft beeps
+// near the end so the waiting reporter knows time is almost up.
+function CountdownRing({ expiresAt }) {
+  const [left, setLeft] = useState(Math.max(0, Math.round((new Date(expiresAt) - new Date()) / 1000)));
+  const beep60 = useRef(false);
+  const beep10 = useRef(false);
+  useEffect(() => {
+    const tick = () => setLeft(Math.max(0, Math.round((new Date(expiresAt) - new Date()) / 1000)));
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [expiresAt]);
+  useEffect(() => {
+    if (left <= 60 && left > 10 && !beep60.current) { beep60.current = true; softBeep(760, 0.3); }
+    if (left <= 10 && left > 0 && !beep10.current) { beep10.current = true; softBeep(1040, 0.5); }
+  }, [left]);
+  const R = 54, C = 2 * Math.PI * R;
+  const frac = Math.max(0, Math.min(1, left / WINDOW_SECONDS));
+  const mm = String(Math.floor(left / 60)).padStart(2, "0");
+  const ss = String(left % 60).padStart(2, "0");
+  const urgent = left <= 60;
+  const col = urgent ? "#ff3b5c" : "#f5a524";
+  return (
+    <div data-testid="countdown-ring" style={{ display: "grid", placeItems: "center", margin: "6px 0 4px" }}>
+      <svg width="130" height="130" viewBox="0 0 130 130" style={{ transform: "rotate(-90deg)" }}>
+        <circle cx="65" cy="65" r={R} fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="9" />
+        <circle cx="65" cy="65" r={R} fill="none" stroke={col} strokeWidth="9" strokeLinecap="round"
+          strokeDasharray={C} strokeDashoffset={C * (1 - frac)} style={{ transition: "stroke-dashoffset 1s linear, stroke .3s" }} />
+      </svg>
+      <div style={{ marginTop: -92, textAlign: "center", height: 80, display: "grid", placeItems: "center" }}>
+        <div style={{ fontSize: 26, fontWeight: 800, fontFamily: "Chakra Petch", color: col }} data-testid="countdown-time">{left > 0 ? `${mm}:${ss}` : "00:00"}</div>
+        <div className="muted" style={{ fontSize: 11 }}>{left > 0 ? "window left" : "window over"}</div>
+      </div>
+    </div>
+  );
+}
+
 // Masked-call routing is paused for now. The scan flow currently only alerts the
 // owner. The call feature (web/portal -> owner via Vobiz, and later the internal
 // web<->mobile-app call) is kept in code and can be re-enabled by flipping this flag.
@@ -259,6 +315,7 @@ export default function PublicScan() {
                 <CheckCircle2 size={56} color="#22d3ee" />
                 <h2 style={{ fontSize: 24, margin: "12px 0 8px" }}>Owner is coming!</h2>
                 <p className="muted">The vehicle owner has been notified and is coming within 15 minutes. Please wait.</p>
+                {WINDOW_TYPES.includes(incident.type) && incident.expires_at && <CountdownRing expiresAt={incident.expires_at} />}
                 <button className="btn btn-ghost btn-sm" onClick={playArrivalAlarm} data-testid="owner-coming-replay" style={{ marginTop: 12 }}><Volume2 size={15} /> Play alert again</button>
               </div>
             ) : incident.status === "resolved" ? (
@@ -275,8 +332,11 @@ export default function PublicScan() {
                     ? "We've notified the owner & family. Waiting for them to respond…"
                     : "The owner & family have been notified."}
                 </p>
+                {WINDOW_TYPES.includes(incident.type) && incident.expires_at && (
+                  <CountdownRing expiresAt={incident.expires_at} />
+                )}
                 {WINDOW_TYPES.includes(incident.type) && (
-                  <div className="chip" style={{ marginTop: 14 }}><Clock size={13} /> {incident.minutes_left} min window · {incident.status === "no_response" ? "No response yet" : "Alert sent"}</div>
+                  <div className="chip" style={{ marginTop: 6 }}><Clock size={13} /> {incident.status === "no_response" ? "No response yet" : "Alert sent"}</div>
                 )}
               </div>
             )}

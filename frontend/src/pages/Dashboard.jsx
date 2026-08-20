@@ -2,14 +2,32 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { Car, Plus, Trash2, ShieldAlert, ChevronRight, X } from "lucide-react";
+import { Car, Plus, Trash2, ShieldAlert, ChevronRight, X, Phone, PhoneMissed, PhoneOff, PhoneOutgoing } from "lucide-react";
 
 const VEHICLE_TYPES = ["car", "bike", "tractor", "commercial", "other"];
+
+function timeAgo(iso) {
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso)) / 1000));
+  if (s < 60) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
+const CALL_STATUS = {
+  missed: { label: "Missed", color: "#ff3b5c", icon: <PhoneMissed size={16} /> },
+  rejected: { label: "Declined", color: "#f5a524", icon: <PhoneOff size={16} /> },
+  ended: { label: "Answered", color: "#34d399", icon: <PhoneOutgoing size={16} /> },
+  accepted: { label: "Answered", color: "#34d399", icon: <Phone size={16} /> },
+};
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [vehicles, setVehicles] = useState([]);
   const [shared, setShared] = useState([]);
+  const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ number_plate: "", vehicle_type: "car", make_model: "", color: "", speed_limit_kmh: 80 });
@@ -19,9 +37,10 @@ export default function Dashboard() {
   const load = async () => {
     setLoading(true);
     try {
-      const [rv, rs] = await Promise.all([api.get("/vehicles"), api.get("/shared-vehicles")]);
+      const [rv, rs, rc] = await Promise.all([api.get("/vehicles"), api.get("/shared-vehicles"), api.get("/me/calls/recent")]);
       setVehicles(rv.data);
       setShared(rs.data);
+      setCalls(rc.data.items || []);
     } finally {
       setLoading(false);
     }
@@ -109,6 +128,35 @@ export default function Dashboard() {
                   <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>Owner: {v.owner_name || "—"} · role {v.role}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {!loading && calls.length > 0 && (
+          <div style={{ marginTop: 40 }} data-testid="recent-calls-section">
+            <h2 style={{ fontSize: 24, marginBottom: 4, display: "flex", alignItems: "center", gap: 10 }}>
+              <Phone size={20} className="neon" /> Recent <span className="neon">calls</span>
+              {calls.filter((c) => c.status === "missed").length > 0 && (
+                <span className="chip" data-testid="missed-count" style={{ background: "rgba(255,59,92,.16)", borderColor: "rgba(255,59,92,.4)", color: "#ffb3c0" }}>
+                  {calls.filter((c) => c.status === "missed").length} missed
+                </span>
+              )}
+            </h2>
+            <p className="muted" style={{ marginBottom: 16 }}>People who scanned your vehicle QR and tried to call you in the app.</p>
+            <div style={{ display: "grid", gap: 8 }}>
+              {calls.map((c) => {
+                const s = CALL_STATUS[c.status] || { label: c.status, color: "#9aa4b2", icon: <Phone size={16} /> };
+                return (
+                  <div key={c.id} data-testid={`call-row-${c.id}`} className="glass" style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 12, borderLeft: `3px solid ${s.color}` }}>
+                    <span style={{ color: s.color, flexShrink: 0 }}>{s.icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>{c.number_plate}</div>
+                      <div className="muted" style={{ fontSize: 12.5 }}>{timeAgo(c.created_at)}</div>
+                    </div>
+                    <span style={{ color: s.color, fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{s.label}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

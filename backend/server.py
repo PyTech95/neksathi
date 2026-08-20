@@ -5941,6 +5941,7 @@ def _incident_public(inc: dict) -> dict:
         "status": inc["status"],
         "owner_response": inc.get("owner_response"),
         "minutes_left": _minutes_left(inc["expires_at"]),
+        "expires_at": inc["expires_at"],
         "call_available": inc["type"] in URGENT_TYPES or inc["status"] in ("alert_sent", "no_response", "call_attempted"),
         "portal_number": NEK_PORTAL_NUMBER,
         "created_at": inc["created_at"],
@@ -6186,6 +6187,20 @@ async def rtc_incoming_calls(user: dict = Depends(current_user)):
         out.append({"call_id": c["id"], "number_plate": c["number_plate"],
                     "created_at": c["created_at"], "has_offer": bool(c.get("caller_offer"))})
     return {"items": out}
+
+
+@api.get("/me/calls/recent")
+async def rtc_recent_calls(user: dict = Depends(current_user), limit: int = 20):
+    """Recent in-app calls for the owner (incl. missed) so nothing is lost."""
+    await _expire_stale_calls()
+    out = []
+    async for c in db.webrtc_calls.find({"owner_id": user["id"], "status": {"$ne": "ringing"}}).sort("created_at", -1).limit(min(limit, 50)):
+        out.append({
+            "id": c["id"], "number_plate": c["number_plate"], "status": c["status"],
+            "created_at": c["created_at"], "answered_at": c.get("answered_at"), "ended_at": c.get("ended_at"),
+        })
+    missed = sum(1 for c in out if c["status"] == "missed")
+    return {"items": out, "missed": missed}
 
 
 @api.get("/me/calls/{call_id}")
