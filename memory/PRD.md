@@ -385,3 +385,6 @@ NATIVE-MOBILE ONLY (needs Expo app; web can only prep APIs): Crash detection (ac
 ## Update 2026-06 — Scan reason-detail redesign (batch 40, this fork)
 - Public scan choose screen: removed the top "Call owner now" button — reasons (wrong parking/emergency/accident/etc.) show directly again.
 - Reason-detail screen (`PublicScan.jsx`): removed the note + callback-phone fields (`NoteFields` deleted); photo is now MANDATORY for every reason (`photoBlock(true)`, alert button disabled until a photo is taken). Below the photo there are now TWO buttons: `alert-{key}-btn` "Alert owner (15-min)" (sends the incident/15-min window) and `call-{key}-btn` "Call owner (live)" (opens the in-app WebRTC call). Screenshot-verified on wrong_parking: no note/phone fields, mandatory photo, both buttons present, alert disabled with no photo.
+
+## Update 2026-06 — Mandatory photo-first on scan reason select (batch 41, this fork)
+- Selecting any scan reason (wrong parking / accident / emergency / etc.) now auto-opens the camera immediately (`onClick={() => { setScreen(r.key); setShowCam(true); }}`), so the photo is captured BEFORE the Alert/Call buttons are usable. Combined with mandatory `photoBlock(true)` + alert-disabled-until-photo, this enforces photo-first for every reason. Screenshot-verified (camera overlay opens on reason select).

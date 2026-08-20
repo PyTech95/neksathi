@@ -155,7 +155,7 @@ export default function PublicScan() {
             <h2 className="center" style={{ fontSize: 24, marginBottom: 16 }}>How can we help?</h2>
             <div className="grid" style={{ gap: 12 }}>
               {REASONS.map((r) => (
-                <button key={r.key} className="big-action" style={{ background: r.grad }} onClick={() => setScreen(r.key)} data-testid={`choose-${r.key}`}>
+                <button key={r.key} className="big-action" style={{ background: r.grad }} onClick={() => { setScreen(r.key); setShowCam(true); }} data-testid={`choose-${r.key}`}>
                   {r.icon} {r.label}
                 </button>
               ))}
