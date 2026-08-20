@@ -46,30 +46,49 @@ export default function PublicScan() {
   const poll = useRef(null);
   const arrivalAnnounced = useRef(false);
 
+  const speakArrival = () => {
+    try {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance("Owner is coming in 15 minutes. Please wait.");
+      u.rate = 0.98; u.pitch = 1; u.volume = 1; u.lang = "en-IN";
+      const voices = window.speechSynthesis.getVoices();
+      const v = voices.find((x) => /en[-_]IN/i.test(x.lang)) || voices.find((x) => x.lang && x.lang.toLowerCase().startsWith("en"));
+      if (v) u.voice = v;
+      window.speechSynthesis.speak(u);
+    } catch (_) {}
+  };
+
+  // Unlock the speech engine on a user gesture so the arrival voice note can
+  // auto-play later (browsers block speech without a prior interaction).
+  const primeSpeech = () => {
+    try {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.getVoices();
+      const w = new SpeechSynthesisUtterance(" ");
+      w.volume = 0;
+      window.speechSynthesis.speak(w);
+    } catch (_) {}
+  };
+
   const playArrivalAlarm = () => {
-    // Siren via WebAudio
+    // Siren via WebAudio (shorter, so the voice note is heard clearly right after)
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (AC) {
         const ctx = new AC();
-        const gain = ctx.createGain(); gain.gain.value = 0.35; gain.connect(ctx.destination);
+        const gain = ctx.createGain(); gain.gain.value = 0.32; gain.connect(ctx.destination);
         const osc = ctx.createOscillator(); osc.type = "sawtooth"; osc.connect(gain);
         const lfo = ctx.createOscillator(); const lfoGain = ctx.createGain();
-        lfo.frequency.value = 1.6; lfoGain.gain.value = 320; lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+        lfo.frequency.value = 1.7; lfoGain.gain.value = 320; lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
         osc.frequency.value = 720;
         osc.start(); lfo.start();
-        setTimeout(() => { try { osc.stop(); lfo.stop(); ctx.close(); } catch (_) {} }, 2600);
+        setTimeout(() => { try { osc.stop(); lfo.stop(); ctx.close(); } catch (_) {} }, 1700);
       }
     } catch (_) {}
-    // Voice note via SpeechSynthesis (spoken after the siren starts)
-    try {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance("The owner is coming in 15 minutes. Please wait.");
-        u.rate = 1; u.pitch = 1; u.volume = 1;
-        setTimeout(() => window.speechSynthesis.speak(u), 1300);
-      }
-    } catch (_) {}
+    // Voice note right after the siren, and repeated once for clarity.
+    setTimeout(speakArrival, 1900);
+    setTimeout(speakArrival, 5200);
   };
 
   // When the owner accepts "I am coming", alert the reporter with a siren + voice note (once).
@@ -104,6 +123,7 @@ export default function PublicScan() {
 
   const createIncident = async (type) => {
     setBusy(true);
+    primeSpeech();
     try {
       const r = await api.post(`/public/qr/${qrId}/incident`, {
         type, scanner_note: note || null, scanner_phone: phone || null,
