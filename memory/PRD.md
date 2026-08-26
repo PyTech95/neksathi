@@ -415,3 +415,9 @@ NATIVE-MOBILE ONLY (needs Expo app; web can only prep APIs): Crash detection (ac
   - /api/auth/otp/request now returns channel="whatsapp", live=true; MSG91 accepts the send; local verify issues JWT. Verified end-to-end via curl.
   - NOTE: on a test/sandbox WABA number, real delivery only reaches allow-listed phones; a verified business number is needed for all users.
 - DEPLOY REMINDER: backend/.env values (MSG91 keys, JWT_SECRET, DEMO_*/ADMIN_* creds) must be re-entered as environment variables in the Emergent Deploy settings — .env is local to preview.
+
+## Session update — Real-send verification + OTP polish (2026-06)
+- Verified real MSG91 WhatsApp OTP send: API returns HTTP 200, status success, hasError false, request_id (e.g. 87133cb2...). MSG91 accepts/queues the message; handset delivery depends on allow-list/verified sender (MSG91-side).
+- testing_agent iteration_4: LIVE WhatsApp OTP mode 100% (backend returns channel=whatsapp/live/dev_code null; UI advances to code entry with WhatsApp note, resend cooldown, friendly errors; email/password regression OK). No defects.
+- Polish: OTP code screen now echoes the destination phone number; backend deletes the stored code if WhatsApp delivery raises (no stale code); test_credentials.md updated to document live OTP mode (no on-screen dev_code).
+- Could not test physical handset delivery (no access to a WhatsApp-receiving phone or the MSG91 allow-list). Remaining step is on the account owner.

@@ -6652,6 +6652,7 @@ async def otp_request(request: Request, payload: OtpRequestIn):
             await comms.send_whatsapp_otp(phone, code)
             return {"ok": True, "channel": "whatsapp", "dev_code": None, "live": True}
         except Exception as e:
+            await db.otp_codes.delete_one({"phone": phone})
             raise HTTPException(status_code=400, detail=f"Could not send WhatsApp OTP: {e}")
     if _otp_live():
         try:  # pragma: no cover - live path

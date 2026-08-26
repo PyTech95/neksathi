@@ -87,7 +87,7 @@ export default function OtpLogin() {
               ) : (
                 <div className="glass" style={{ padding: "10px 12px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8, borderColor: "rgba(52,211,153,.35)" }} data-testid="otp-channel-note">
                   <MessageCircle size={16} style={{ color: "#25d366" }} />
-                  <span style={{ fontSize: 13 }}>{channel === "whatsapp" ? "We sent a 6-digit code to your WhatsApp." : "We sent a 6-digit code to your phone."}</span>
+                  <span style={{ fontSize: 13 }}>{channel === "whatsapp" ? "We sent a 6-digit code to your WhatsApp on " : "We sent a 6-digit code to "}<b style={{ color: "#fff" }}>{phone.trim()}</b>.</span>
                 </div>
               )}
               <div className="field"><label>Name (new users)</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} data-testid="otp-name" placeholder="Your name" /></div>

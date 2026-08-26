@@ -14,6 +14,14 @@ if not base_url:
     raise RuntimeError("REACT_APP_BACKEND_URL missing")
 BASE_URL = base_url.rstrip("/")
 
+# These tests assume the dev/mock OTP channel (dev_code returned to the client).
+# When live WhatsApp OTP is configured the code is only delivered over WhatsApp,
+# so the mock-mode assertions cannot run. See test_otp_live_whatsapp.py.
+_be = dotenv_values("/app/backend/.env")
+_WA_LIVE = bool(_be.get("MSG91_AUTHKEY") and _be.get("MSG91_WHATSAPP_NUMBER")
+                and _be.get("MSG91_WHATSAPP_OTP_TEMPLATE"))
+pytestmark = pytest.mark.skipif(_WA_LIVE, reason="live WhatsApp OTP mode: dev_code not available")
+
 
 @pytest.fixture(scope="module")
 def client():
