@@ -1,0 +1,168 @@
+{
+  "theme": "Dark Neon",
+  "colors": {
+    "background": "#0a0a0a",
+    "primary": "#22d3ee",
+    "secondary": "#7c3aed",
+    "accent_neon": "cyan-400 and violet-500 glows",
+    "surface": "glassmorphism (bg-black/40 backdrop-blur-xl border border-white/10)",
+    "text_primary": "#ffffff",
+    "text_secondary": "#a1a1aa"
+  },
+  "typography": {
+    "headings": "Chakra Petch (Display/Tech vibe), font-bold, tracking-tight",
+    "body": "Inter or system sans-serif, text-base, leading-relaxed",
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl+",
+      "h2": "text-3xl sm:text-4xl",
+      "h3": "text-xl sm:text-2xl",
+      "h4": "text-lg"
+    }
+  },
+  "layouts": {
+    "hero": "Full height or min-h-[80vh] centered content, large text, glowing background accents. Two CTA buttons.",
+    "bento_grid": "Asymmetric grid for 'How it Works' or Personas (grid-cols-1 md:grid-cols-12 gap-6).",
+    "feature_pillars": "Alternating left/right image-text blocks OR grid-2 layout per pillar, using glass cards for sub-features.",
+    "trust_band": "Horizontal flex, gap-8, items-center, justify-center, opacity-80.",
+    "spacing": "Generous. Use py-24 or py-32 between major sections."
+  },
+  "motion": {
+    "entrance": "fade-up (existing class) with staggered delays for grid items.",
+    "hover": "glass-hover (existing class) for cards. Elevate (-translate-y-1) and increase border opacity/glow.",
+    "accents": "Slow pulsing opacity on background radial gradients to simulate neon breathing."
+  },
+  "component_instructions": {
+    "buttons": "Use 'btn btn-primary' for primary actions. Use 'btn btn-ghost' or outline with neon accent for secondary.",
+    "cards": "Wrap in 'glass' class. Sub-features inside pillars should be smaller glass cards with a lucide-react icon.",
+    "icons": "lucide-react ONLY. Emojis are forbidden.",
+    "badges": "Use 'chip' pill component for tags like 'New', 'Live', 'Beta'."
+  },
+  "navigation_decluttering_guidance": {
+    "instruction": "The logged-in top navigation must be consolidated into grouped dropdown menus to reduce cognitive overload.",
+    "groups": [
+      {
+        "name": "Safety & Alerts",
+        "icon": "ShieldAlert",
+        "items": ["SOS", "Incidents", "Alerts"]
+      },
+      {
+        "name": "Family",
+        "icon": "Users",
+        "items": ["Family Map", "Check-ins"]
+      },
+      {
+        "name": "Smart QR & Assets",
+        "icon": "QrCode",
+        "items": ["Vehicles", "Tags", "Cards", "Anti-Theft"]
+      },
+      {
+        "name": "Community & Resources",
+        "icon": "Globe",
+        "items": ["Community", "Plans", "Support"]
+      }
+    ],
+    "settings": "Move 'Settings' to a user avatar dropdown menu at the far right."
+  },
+  "landing_page_structure": [
+    {
+      "section": "Hero",
+      "content": "Headline 'Total Security. One Tap Away.' Subhead explaining personal safety + smart QR. CTAs: 'Create your QR' & 'Try a live scan demo'.",
+      "visuals": "Abstract neon glow, floating QR scanner animation (existing)."
+    },
+    {
+      "section": "Trust Band",
+      "content": "Stats: '10K+ Families Protected', '15-Min Response Time', '99.9% Uptime'."
+    },
+    {
+      "section": "Pillar 1: Personal Safety",
+      "content": "One-Tap SOS, Emergency Siren, Live Location Sharing, Safe Link Scanner. Link to /safety.",
+      "accent": "Cyan focus."
+    },
+    {
+      "section": "Pillar 2: Family Guardian",
+      "content": "Live family map, Place Alerts (Geo-fence), Check-in requests, Low-battery alerts. Link to /family.",
+      "accent": "Violet focus."
+    },
+    {
+      "section": "Pillar 3: Anti-Theft & Mobile Security",
+      "content": "Remote lock, intruder selfie, SIM-change alert, remote siren. Link to /theft-protection.",
+      "accent": "Red/Orange danger focus (if allowed, otherwise deep Violet)."
+    },
+    {
+      "section": "Pillar 4: Smart QR",
+      "content": "Vehicles, Kids, Pets, Luggage. Lost mode, masked calling, digital share-tap cards. Link to public scan demo /scan/:id.",
+      "accent": "Cyan/Teal focus."
+    },
+    {
+      "section": "How It Works (Flow)",
+      "content": "Step 1: Scan QR or Tap SOS. Step 2: System Auto-Escalates. Step 3: Help Arrives."
+    },
+    {
+      "section": "Personas / Use Cases",
+      "content": "Grid showing: School Kids, Elderly, Pets, Luggage, Vehicles."
+    },
+    {
+      "section": "Testimonials & FAQ",
+      "content": "Social proof and common questions."
+    },
+    {
+      "section": "Closing CTA",
+      "content": "Final push to /register."
+    }
+  ],
+  "image_urls": {
+    "family_safety": {
+      "url": "https://images.pexels.com/photos/28700034/pexels-photo-28700034.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Family crossing street at dusk - represents Family Guardian"
+    },
+    "mobile_security": {
+      "url": "https://images.pexels.com/photos/33335189/pexels-photo-33335189.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Smartphone unlocking secure door - represents Anti-Theft & Mobile Security"
+    },
+    "qr_scan": {
+      "url": "https://images.unsplash.com/photo-1595079676339-1534801ad6cf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwxfHxzY2FuJTIwcXIlMjBjb2RlJTIwc21hcnRwaG9uZXxlbnwwfHx8fDE3ODY5NzA4Mjh8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Smartphone displaying QR code - represents Smart QR"
+    },
+    "persona_elderly": {
+      "url": "https://images.pexels.com/photos/4894604/pexels-photo-4894604.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Elderly woman smiling - represents elderly persona"
+    },
+    "persona_child": {
+      "url": "https://images.pexels.com/photos/207697/pexels-photo-207697.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Young boy walking with backpack - represents school kid persona"
+    },
+    "persona_pet": {
+      "url": "https://images.pexels.com/photos/14520081/pexels-photo-14520081.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Dogs playing - represents pet tracking persona"
+    },
+    "persona_luggage": {
+      "url": "https://images.pexels.com/photos/30782813/pexels-photo-30782813.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Blue suitcase at airport - represents luggage tracking persona"
+    },
+    "vehicle_tracking": {
+      "url": "https://images.unsplash.com/photo-1623346483743-b968a27ed34c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODR8MHwxfHNlYXJjaHwxfHxuaWdodCUyMGRyaXZpbmclMjBjYXJ8ZW58MHx8fHwxNzg2OTcwODI4fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Car driving at night - represents vehicle tracking"
+    }
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. Make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition. Eg: transition: all. Always add transitions for specific interactive elements.",
+    "You MUST NOT center align the app container. This disrupts natural reading flow.",
+    "Every interaction needs micro-animations - hover states, transitions, entrance animations.",
+    "Use 2-3x more spacing than feels comfortable. Generous padding creates a premium feel.",
+    "Subtle grain textures, custom cursors, selection states elevate the design.",
+    "NEVER use placeholder text for images. Use the provided image URLs.",
+    "Prioritize using pre-existing components when applicable.",
+    "All interactive and key informational elements MUST include a data-testid attribute in kebab-case format.",
+    "CRITICAL: DO NOT use complete transparent background in header, overlays, or any surface that has content under it."
+  ],
+  "accessibility": {
+    "contrast": "Ensure text over gradients or images has sufficient contrast (use text-shadow if needed).",
+    "interactive": "All buttons and links must have explicit focus states.",
+    "motion": "Respect prefers-reduced-motion media query for all custom animations."
+  }
+}
