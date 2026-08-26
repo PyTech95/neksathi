@@ -7051,6 +7051,22 @@ async def _startup():
         if not existing.get("is_admin"):
             await db.users.update_one({"email": admin_email}, {"$set": {"is_admin": True}})
             log.info("Promoted existing user %s to admin", admin_email)
+
+    # Seed a non-admin demo user (idempotent) for easy login without OTP
+    demo_email = os.environ.get("DEMO_EMAIL", "demo@neksathi.app")
+    demo_password = os.environ.get("DEMO_PASSWORD", "demo1234")
+    if not await db.users.find_one({"email": demo_email}):
+        await db.users.insert_one({
+            "id": new_id(),
+            "email": demo_email,
+            "name": "Demo User",
+            "phone": "+910000000001",
+            "password_hash": hash_password(demo_password),
+            "is_admin": False,
+            "suspended": False,
+            "created_at": now_utc(),
+        })
+        log.info("Seeded demo user %s", demo_email)
     await _seed_blackspots()
     asyncio.create_task(_digest_scheduler())
     asyncio.create_task(_sos_escalation_scanner())

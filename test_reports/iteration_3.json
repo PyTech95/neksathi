@@ -1,0 +1,35 @@
+{
+  "summary": "Frontend-only verification of the new seeded non-admin demo login plus admin login regression on the public preview URL. Demo (demo@neksathi.app/demo1234) logs in via /login and lands on /dashboard ('Hi Demo, your garage'), nav-admin is absent, and direct navigation to /admin correctly redirects back to /dashboard. Admin (admin@safeqr.com/admin1234) logs in, lands on /dashboard and nav-admin IS visible. Logout via nav-account-btn -> logout-btn works (redirects, nav-login reappears). Invalid password shows login-error 'Incorrect email or password'. No console errors. Backend testing skipped per request; auth code reviewed against the playbook checklist.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS middleware", "issue": "allow_origins=['*'] combined with allow_credentials=True is invalid per CORS spec (browsers reject credentialed wildcard). Playbook requires explicit origins."},
+      {"endpoint": "/api/auth/login", "issue": "No brute-force lockout after N failed attempts; only a 10/minute rate limit. Playbook expects lockout after 5 failures."},
+      {"endpoint": "/api/auth/login", "issue": "Token returned in JSON body (client stores it) instead of httpOnly cookie — deviates from playbook cookie guidance. App-wide design decision, not a functional break."},
+      {"endpoint": "startup seed", "issue": "Admin and demo seeds only insert when missing; if ADMIN_PASSWORD/DEMO_PASSWORD env changes, the existing user's password_hash is NOT updated (playbook expects seed_admin to update password). Admin seed does lift is_admin, demo seed has no such reconciliation."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_3.json"],
+  "action_items": [
+    "Replace CORS allow_origins=['*'] with explicit origins since allow_credentials=True.",
+    "Consider updating password_hash in the admin/demo seed when the env password differs (idempotent reconcile).",
+    "Optional: add failed-login lockout (5 attempts) as per auth playbook."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~7080 lines — should be split into routers/modules (>700 line guideline).",
+    "bcrypt hashing verified correct (gensalt rounds=12 -> $2b$ prefix)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (skipped per request)", "frontend": "100%"},
+  "seed_data_creation": "None; used auto-seeded demo and admin accounts.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "demo@neksathi.app / demo1234 (non-admin, verified), admin@safeqr.com / admin1234 (admin, verified)",
+  "context_for_next_testing_agent": "Login testids: login-email, login-password, login-submit, login-error. Nav: nav-admin (admin only), nav-account-btn -> logout-btn for logout. Demo user has no vehicles/data. /admin route guard redirects non-admins to /dashboard.",
+  "rca_of_the_issue": "N/A — the demo-login feature works end to end in the UI."
+}

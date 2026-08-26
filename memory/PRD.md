@@ -408,3 +408,10 @@ NATIVE-MOBILE ONLY (needs Expo app; web can only prep APIs): Crash detection (ac
 - Mobile drawer/overlay portaled to document.body (fixes containing-block collapse).
 - WhatsApp/SMS OTP login verified end-to-end in mock mode (request -> dev_code -> verify -> JWT). Live delivery needs MSG91 keys (MSG91_AUTHKEY, MSG91_WHATSAPP_NUMBER, MSG91_WHATSAPP_OTP_TEMPLATE, etc.).
 - Testing: iteration_1 + iteration_2 both pass (frontend 100%; backend OTP suite 8/9, only failure was non-existent demo_web user — credentials file corrected).
+
+## Session update — Demo user + Live WhatsApp OTP (2026-06)
+- Seeded an idempotent NON-ADMIN demo account: demo@neksathi.app / demo1234 (env DEMO_EMAIL/DEMO_PASSWORD). Verified via UI (iteration_3, 100%): non-admin dashboard, no Admin link; admin regression OK.
+- Enabled LIVE WhatsApp OTP by setting MSG91 vars in backend/.env: MSG91_AUTHKEY, MSG91_WHATSAPP_NUMBER=15553779998, MSG91_WHATSAPP_OTP_TEMPLATE=neksathi1, MSG91_WHATSAPP_NAMESPACE=nek_sathi_alert, MSG91_WHATSAPP_LANG=en.
+  - /api/auth/otp/request now returns channel="whatsapp", live=true; MSG91 accepts the send; local verify issues JWT. Verified end-to-end via curl.
+  - NOTE: on a test/sandbox WABA number, real delivery only reaches allow-listed phones; a verified business number is needed for all users.
+- DEPLOY REMINDER: backend/.env values (MSG91 keys, JWT_SECRET, DEMO_*/ADMIN_* creds) must be re-entered as environment variables in the Emergent Deploy settings — .env is local to preview.
