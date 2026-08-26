@@ -400,3 +400,11 @@ NATIVE-MOBILE ONLY (needs Expo app; web can only prep APIs): Crash detection (ac
 - Call-from-inbox alert: `_notify_missed_call` WhatsApp body now includes a deep link `{PUBLIC_APP_URL}/dashboard#recent-calls`; Dashboard recent-calls section given `id="recent-calls"` so the link scrolls straight to it.
 - Extend Window: new `POST /incidents/{id}/extend` (owner-auth) adds 10 min to `expires_at`, notifies the reporter, returns new expiry/minutes_left. Incidents.jsx: "Need more time (+10 min)" button (`extend-{id}`) on wrong_parking/vehicle_blocking incidents. The reporter's live CountdownRing updates on its next poll (public incident returns the new expires_at). Verified via curl (15→25 min, reflected in public status) + screenshot (button renders).
 - Bilingual arrival voice: `speakArrival` in PublicScan now queues Hindi ("मालिक 15 मिनट में आ रहे हैं। कृपया प्रतीक्षा करें।", hi-IN) then English (en-IN), single call (removed the duplicate repeat to avoid cutoff). Real TTS audio still can't be auto-verified headless (no voices installed) — works on real devices.
+
+## Session update — Header + Solutions menu + OTP (2026-06)
+- Enhanced top nav design: scroll-aware condensed state, animated brand-badge glow, sliding gradient nav-link underlines, gradient hairline border.
+- Public "Solutions" menu is now a mega-menu listing ALL solutions: 4 product pillars (Personal Safety, Family Guardian, Anti-Theft & Mobile Security, Smart QR) + 3 org pages (Schools, Hospitals, Offices) + bulk-order CTA. Click-toggle with outside-click close.
+- Logged-in nav dropdowns (Vehicle & QR, More) restyled as opaque icon+description cards; whole nav enforced to a single row (nowrap).
+- Mobile drawer/overlay portaled to document.body (fixes containing-block collapse).
+- WhatsApp/SMS OTP login verified end-to-end in mock mode (request -> dev_code -> verify -> JWT). Live delivery needs MSG91 keys (MSG91_AUTHKEY, MSG91_WHATSAPP_NUMBER, MSG91_WHATSAPP_OTP_TEMPLATE, etc.).
+- Testing: iteration_1 + iteration_2 both pass (frontend 100%; backend OTP suite 8/9, only failure was non-existent demo_web user — credentials file corrected).

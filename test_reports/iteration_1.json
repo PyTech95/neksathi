@@ -1,0 +1,38 @@
+{
+  "summary": "Tested NekSathi nav/header changes + mobile OTP login. Backend: new pytest suite /app/backend/tests/test_otp_login.py (9 tests) covering /api/auth/otp/request (mock mode dev_code, validation), /api/auth/otp/verify (JWT issue, user auto-create, wrong code, single-use code, repeat login reuses user), and email login regression. 8/9 passed; only failure is that documented user demo_web@safeqr.com does not exist in DB (401). Frontend: public Solutions mega-menu verified (all 7 items + CTA present, anchor scroll to #anti-theft works, /for/schools navigation works, outside click closes), OTP UI flow end-to-end (dev code shown -> verify -> /dashboard), logged-in nav confirmed on a SINGLE row at 1920 (y spread 3.5px), nav-assets-menu (5 items) and nav-more-menu (6 items) open and navigate correctly (/tags, /incidents). No compile-error overlay, no console errors, brand link returns home. Found 1 real mobile bug: the mobile drawer/overlay collapse to nav height because .topnav has backdrop-filter+animation, which makes it the containing block for position:fixed children.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/login", "issue": "Credentials documented in /app/memory/test_credentials.md (demo_web@safeqr.com / demo1234) return 401 - that user is not present in MongoDB (only admin@safeqr.com is seeded). Either seed the demo user or update the credentials file."},
+      {"endpoint": "/api/auth/otp/request", "issue": "Rate limit is 5/minute per IP; automated/consecutive OTP tests hit 429 quickly. Not a defect, noted for future test agents (test helper retries with backoff)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TopNav mobile drawer", "issue": "At 390x844 the drawer opens but renders only the 70px header strip: computed .mobile-drawer height=70px, x=60 instead of full-height right panel, and its links (m-login etc.) paint outside the panel over the page with no background - menu is visually unusable. Root cause: .topnav (index.css:134) uses backdrop-filter + animation with transform keyframes, which makes the nav a containing block for position:fixed descendants, so .mobile-drawer/.mobile-overlay (height:100%/inset:0) resolve against the nav box. Fix: render the drawer+overlay via a React portal to document.body (outside <nav>), or remove backdrop-filter/animation from .topnav.", "selector": "[data-testid=\"mobile-drawer\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Logged-in dropdowns (nav-assets-menu / nav-more-menu)", "issues": ["Panel background is too translucent: the page's 'Add vehicle' primary button text bleeds through and overlaps the 'Tags / Bags, pets & luggage' row, hurting readability. Increase panel opacity/solid background."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_otp_login.py", "/app/test_reports/pytest/otp_results.xml"],
+  "action_items": [
+    "Seed demo_web@safeqr.com/demo1234 (or correct /app/memory/test_credentials.md) - email login for the documented demo user currently 401s",
+    "Fix mobile drawer containing-block bug (portal drawer/overlay to body or drop backdrop-filter/animation on .topnav)",
+    "Make logged-in nav dropdown panels opaque enough to avoid page content bleeding through"
+  ],
+  "critical_code_review_comments": [
+    "TopNav.jsx renders position:fixed mobile drawer/overlay inside the <nav> that has backdrop-filter - always portal fixed overlays to document.body",
+    "/app/backend/server.py is very large (>6600 lines); OTP/dealer/QR domains should be split into routers",
+    "OTP mock mode returning dev_code is correctly gated behind comms.otp_live()/whatsapp_otp_live(); ensure production env sets keys so dev_code is never emitted"
+  ],
+  "updated_files": ["/app/backend/tests/test_otp_login.py"],
+  "success_rate": {"backend": "89% (8/9)", "frontend": "90% (all nav/OTP flows pass; mobile drawer layout fails)"},
+  "seed_data_creation": "OTP mock logins created phone users (+9198xxxxxxx, names TEST_OtpUser/TEST_Repeat/TEST_UiOtp) via the public OTP flow",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@safeqr.com/admin1234 works; demo_web@safeqr.com/demo1234 does NOT exist (401). OTP mock login works with any phone.",
+  "context_for_next_testing_agent": "Backend OTP suite at /app/backend/tests/test_otp_login.py (use _request_code helper - endpoint is rate limited 5/min). Desktop nav (single row, solutions mega-menu, assets/more dropdowns) fully verified working at 1920. Remaining known issue: mobile drawer layout collapse at 390px.",
+  "rca_of_the_issue": "Mobile drawer: CSS backdrop-filter and a transform animation on .topnav create a new containing block, so the fixed-position .mobile-drawer (height:100%) and .mobile-overlay (inset:0) size themselves to the 70px nav instead of the viewport. demo_web login: the user document is simply absent from MongoDB (only ADMIN_EMAIL is auto-seeded on startup)."
+}

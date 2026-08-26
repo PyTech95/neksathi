@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { QrCode, LogOut, ChevronDown, School, HeartPulse, Briefcase, ShieldAlert, Users, Car, MoreHorizontal, Settings as SettingsIcon, Siren, Lock, MapPin, Bell, FileWarning, LifeBuoy, CreditCard, Menu, X, ScanLine, Clock } from "lucide-react";
+import { QrCode, LogOut, ChevronDown, School, HeartPulse, Briefcase, ShieldAlert, Users, Car, MoreHorizontal, Settings as SettingsIcon, Siren, Lock, MapPin, Bell, FileWarning, LifeBuoy, CreditCard, Menu, X, ScanLine, Clock, Building2, ArrowRight } from "lucide-react";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import LiveAlarm from "@/components/LiveAlarm";
@@ -9,16 +10,50 @@ import IncomingCall from "@/components/IncomingCall";
 
 const dropItem = { display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 10, fontSize: 14 };
 
+const PRODUCT_SOLUTIONS = [
+  { to: "/#personal-safety", icon: <LifeBuoy size={18} />, title: "Personal Safety", desc: "One-tap SOS, siren & live location", accent: "#22d3ee", tid: "sol-personal" },
+  { to: "/#family-guardian", icon: <Users size={18} />, title: "Family Guardian", desc: "Live map, place & check-in alerts", accent: "#8b5cf6", tid: "sol-family" },
+  { to: "/#anti-theft", icon: <Lock size={18} />, title: "Anti-Theft & Mobile Security", desc: "Lock, siren, intruder selfie, SIM alert", accent: "#ff3b5c", tid: "sol-antitheft" },
+  { to: "/#smart-qr", icon: <QrCode size={18} />, title: "Smart QR", desc: "Scan-to-alert tags for cars, kids & bags", accent: "#2dd4bf", tid: "sol-smartqr" },
+];
+const ORG_SOLUTIONS = [
+  { to: "/for/schools", icon: <School size={18} />, title: "For Schools", desc: "Smart student ID tags", tid: "sol-schools" },
+  { to: "/for/hospitals", icon: <HeartPulse size={18} />, title: "For Hospitals & Care", desc: "ICE wristbands & tags", tid: "sol-hospitals" },
+  { to: "/for/offices", icon: <Briefcase size={18} />, title: "For Offices", desc: "Recoverable staff assets", tid: "sol-offices" },
+];
+const ASSET_LINKS = [
+  { to: "/dashboard", icon: <Car size={18} />, title: "Vehicles", desc: "QR stickers & tracking", accent: "#2dd4bf", tid: "nav-a-vehicles" },
+  { to: "/tags", icon: <QrCode size={18} />, title: "Tags", desc: "Bags, pets & luggage", accent: "#22d3ee", tid: "nav-a-tags" },
+  { to: "/cards", icon: <CreditCard size={18} />, title: "Cards", desc: "Digital ICE cards", accent: "#8b5cf6", tid: "nav-a-cards" },
+  { to: "/theft-protection", icon: <Lock size={18} />, title: "Anti-Theft", desc: "Lock, siren & intruder", accent: "#ff3b5c", tid: "nav-a-theft" },
+  { to: "/safe-zones", icon: <MapPin size={18} />, title: "Safe Zones", desc: "Geo-fence alerts", accent: "#22d3ee", tid: "nav-a-zones" },
+];
+const MORE_LINKS = [
+  { to: "/alerts", icon: <Bell size={18} />, title: "Alerts", desc: "Your alert feed", accent: "#f5a524", tid: "nav-m-alerts" },
+  { to: "/circles", icon: <Clock size={18} />, title: "Temporary circles", desc: "Time-boxed sharing", accent: "#8b5cf6", tid: "nav-m-circles" },
+  { to: "/incidents", icon: <FileWarning size={18} />, title: "Incidents", desc: "History & status", accent: "#ff3b5c", tid: "nav-m-incidents" },
+  { to: "/community", icon: <Users size={18} />, title: "Community", desc: "Local safety feed", accent: "#22d3ee", tid: "nav-m-community" },
+  { to: "/subscription", icon: <QrCode size={18} />, title: "Plans", desc: "Upgrade your plan", accent: "#2dd4bf", tid: "nav-m-plans" },
+  { to: "/support", icon: <LifeBuoy size={18} />, title: "Support", desc: "Get help fast", accent: "#8b5cf6", tid: "nav-m-support" },
+];
+
 export default function TopNav() {  const { user, logout } = useAuth();
   const loc = useLocation();
   const nav = useNavigate();
   const isActive = (p) => loc.pathname === p;
   const [inboxTotal, setInboxTotal] = useState(0);
-  const [solOpen, setSolOpen] = useState(false);
   const [menu, setMenu] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => { setMobileOpen(false); }, [loc.pathname]);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     const h = (e) => { if (!e.target.closest(".nav-drop")) setMenu(null); };
@@ -35,7 +70,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
   }, [user, loc.pathname]);
 
   return (
-    <nav className="topnav" data-testid="top-nav">
+    <nav className={`topnav${scrolled ? " scrolled" : ""}`} data-testid="top-nav">
       <Link to="/" className="brand" data-testid="brand-link">
         <span className="brand-badge"><QrCode size={20} /></span>
         Nek<span className="neon">&nbsp;Sathi</span>
@@ -63,33 +98,36 @@ export default function TopNav() {  const { user, logout } = useAuth();
 
             {/* Vehicle & QR group */}
             <div className="nav-drop" style={{ position: "relative" }} data-testid="nav-assets">
-              <button className="nav-link" onClick={() => setMenu((m) => m === "assets" ? null : "assets")} data-testid="nav-assets-btn" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer" }}>
-                <Car size={15} /> Vehicle & QR <ChevronDown size={14} />
+              <button className={`nav-link ${menu === "assets" ? "active" : ""}`} onClick={() => setMenu((m) => m === "assets" ? null : "assets")} data-testid="nav-assets-btn" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer" }}>
+                <Car size={15} /> Vehicle & QR <ChevronDown size={14} style={{ transition: "transform .25s ease", transform: menu === "assets" ? "rotate(180deg)" : "none" }} />
               </button>
               {menu === "assets" && (
-                <div className="glass" style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 220, padding: 8, zIndex: 90, borderRadius: 14 }}>
-                  <Link to="/dashboard" className="nav-link" data-testid="nav-a-vehicles" style={dropItem} onClick={() => setMenu(null)}><Car size={16} /> Vehicles</Link>
-                  <Link to="/tags" className="nav-link" data-testid="nav-a-tags" style={dropItem} onClick={() => setMenu(null)}><QrCode size={16} /> Tags</Link>
-                  <Link to="/cards" className="nav-link" data-testid="nav-a-cards" style={dropItem} onClick={() => setMenu(null)}><CreditCard size={16} /> Cards</Link>
-                  <Link to="/theft-protection" className="nav-link" data-testid="nav-a-theft" style={dropItem} onClick={() => setMenu(null)}><Lock size={16} /> Anti-Theft</Link>
-                  <Link to="/safe-zones" className="nav-link" data-testid="nav-a-zones" style={dropItem} onClick={() => setMenu(null)}><MapPin size={16} /> Safe Zones</Link>
+                <div className="glass solutions-mega" data-testid="nav-assets-menu" style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 280, padding: 12, zIndex: 90, borderRadius: 16 }}>
+                  <div className="sol-group-title"><Car size={13} /> Vehicle & QR</div>
+                  {ASSET_LINKS.map((s) => (
+                    <Link key={s.tid} to={s.to} className="sol-item" data-testid={s.tid} onClick={() => setMenu(null)}>
+                      <span className="sol-ico" style={{ color: s.accent, background: `${s.accent}22`, borderColor: `${s.accent}55` }}>{s.icon}</span>
+                      <span className="sol-text"><b>{s.title}</b><small>{s.desc}</small></span>
+                    </Link>
+                  ))}
                 </div>
               )}
             </div>
 
             {/* More group */}
             <div className="nav-drop" style={{ position: "relative" }} data-testid="nav-more">
-              <button className="nav-link" onClick={() => setMenu((m) => m === "more" ? null : "more")} data-testid="nav-more-btn" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer" }}>
-                <MoreHorizontal size={15} /> More <ChevronDown size={14} />
+              <button className={`nav-link ${menu === "more" ? "active" : ""}`} onClick={() => setMenu((m) => m === "more" ? null : "more")} data-testid="nav-more-btn" style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer" }}>
+                <MoreHorizontal size={15} /> More <ChevronDown size={14} style={{ transition: "transform .25s ease", transform: menu === "more" ? "rotate(180deg)" : "none" }} />
               </button>
               {menu === "more" && (
-                <div className="glass" style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 220, padding: 8, zIndex: 90, borderRadius: 14 }}>
-                  <Link to="/alerts" className="nav-link" data-testid="nav-m-alerts" style={dropItem} onClick={() => setMenu(null)}><Bell size={16} /> Alerts</Link>
-                  <Link to="/circles" className="nav-link" data-testid="nav-m-circles" style={dropItem} onClick={() => setMenu(null)}><Clock size={16} /> Temporary circles</Link>
-                  <Link to="/incidents" className="nav-link" data-testid="nav-m-incidents" style={dropItem} onClick={() => setMenu(null)}><FileWarning size={16} /> Incidents</Link>
-                  <Link to="/community" className="nav-link" data-testid="nav-m-community" style={dropItem} onClick={() => setMenu(null)}><Users size={16} /> Community</Link>
-                  <Link to="/subscription" className="nav-link" data-testid="nav-m-plans" style={dropItem} onClick={() => setMenu(null)}><QrCode size={16} /> Plans</Link>
-                  <Link to="/support" className="nav-link" data-testid="nav-m-support" style={dropItem} onClick={() => setMenu(null)}><LifeBuoy size={16} /> Support</Link>
+                <div className="glass solutions-mega" data-testid="nav-more-menu" style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 280, padding: 12, zIndex: 90, borderRadius: 16 }}>
+                  <div className="sol-group-title"><MoreHorizontal size={13} /> More tools</div>
+                  {MORE_LINKS.map((s) => (
+                    <Link key={s.tid} to={s.to} className="sol-item" data-testid={s.tid} onClick={() => setMenu(null)}>
+                      <span className="sol-ico" style={{ color: s.accent, background: `${s.accent}22`, borderColor: `${s.accent}55` }}>{s.icon}</span>
+                      <span className="sol-text"><b>{s.title}</b><small>{s.desc}</small></span>
+                    </Link>
+                  ))}
                 </div>
               )}
             </div>
@@ -124,15 +162,33 @@ export default function TopNav() {  const { user, logout } = useAuth();
           </>
         ) : (
           <>
-            <div style={{ position: "relative" }} onMouseEnter={() => setSolOpen(true)} onMouseLeave={() => setSolOpen(false)} data-testid="nav-solutions">
-              <button className="nav-link" style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer" }} onClick={() => setSolOpen((s) => !s)} data-testid="nav-solutions-btn">
-                Solutions <ChevronDown size={14} />
+            <div className="nav-drop" style={{ position: "relative" }} data-testid="nav-solutions">
+              <button className={`nav-link ${menu === "solutions" ? "active" : ""}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer" }} onClick={() => setMenu((m) => m === "solutions" ? null : "solutions")} data-testid="nav-solutions-btn">
+                Solutions <ChevronDown size={14} style={{ transition: "transform .25s ease", transform: menu === "solutions" ? "rotate(180deg)" : "none" }} />
               </button>
-              {solOpen && (
-                <div className="glass" style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, minWidth: 240, padding: 8, zIndex: 80, borderRadius: 14 }}>
-                  <Link to="/for/schools" className="nav-link" data-testid="nav-sol-schools" style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 10 }} onClick={() => setSolOpen(false)}><School size={16} /> For Schools</Link>
-                  <Link to="/for/hospitals" className="nav-link" data-testid="nav-sol-hospitals" style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 10 }} onClick={() => setSolOpen(false)}><HeartPulse size={16} /> For Hospitals</Link>
-                  <Link to="/for/offices" className="nav-link" data-testid="nav-sol-offices" style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 10 }} onClick={() => setSolOpen(false)}><Briefcase size={16} /> For Offices</Link>
+              {menu === "solutions" && (
+                <div className="glass solutions-mega" data-testid="solutions-menu" style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 560, padding: 16, zIndex: 80, borderRadius: 18, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+                  <div>
+                    <div className="sol-group-title">By what you protect</div>
+                    {PRODUCT_SOLUTIONS.map((s) => (
+                      <a key={s.tid} href={s.to} className="sol-item" data-testid={`nav-${s.tid}`} onClick={() => setMenu(null)}>
+                        <span className="sol-ico" style={{ color: s.accent, background: `${s.accent}22`, borderColor: `${s.accent}55` }}>{s.icon}</span>
+                        <span className="sol-text"><b>{s.title}</b><small>{s.desc}</small></span>
+                      </a>
+                    ))}
+                  </div>
+                  <div style={{ borderLeft: "1px solid var(--panel-brd)", paddingLeft: 18 }}>
+                    <div className="sol-group-title"><Building2 size={13} /> For organisations</div>
+                    {ORG_SOLUTIONS.map((s) => (
+                      <Link key={s.tid} to={s.to} className="sol-item" data-testid={`nav-${s.tid}`} onClick={() => setMenu(null)}>
+                        <span className="sol-ico" style={{ color: "#c9b6ff", background: "rgba(124,58,237,.16)", borderColor: "rgba(124,58,237,.4)" }}>{s.icon}</span>
+                        <span className="sol-text"><b>{s.title}</b><small>{s.desc}</small></span>
+                      </Link>
+                    ))}
+                    <Link to="/contact" className="sol-cta" data-testid="nav-sol-contact" onClick={() => setMenu(null)}>
+                      Talk to us about bulk orders <ArrowRight size={14} />
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
@@ -146,7 +202,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
       <button className="nav-hamburger" data-testid="mobile-menu-btn" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
         <Menu size={22} />
       </button>
-      {mobileOpen && (
+      {mobileOpen && createPortal(
         <>
           <div className="mobile-overlay" data-testid="mobile-overlay" onClick={() => setMobileOpen(false)} />
           <div className="mobile-drawer" data-testid="mobile-drawer">
@@ -188,8 +244,14 @@ export default function TopNav() {  const { user, logout } = useAuth();
                 </>
               ) : (
                 <>
+                  <div className="mobile-drawer-sep">Solutions</div>
+                  <a href="/#personal-safety" data-testid="m-sol-personal" onClick={() => setMobileOpen(false)}><LifeBuoy size={18} /> Personal Safety</a>
+                  <a href="/#family-guardian" data-testid="m-sol-family" onClick={() => setMobileOpen(false)}><Users size={18} /> Family Guardian</a>
+                  <a href="/#anti-theft" data-testid="m-sol-antitheft" onClick={() => setMobileOpen(false)}><Lock size={18} /> Anti-Theft & Mobile Security</a>
+                  <a href="/#smart-qr" data-testid="m-sol-smartqr" onClick={() => setMobileOpen(false)}><QrCode size={18} /> Smart QR</a>
+                  <div className="mobile-drawer-sep">For organisations</div>
                   <Link to="/for/schools" data-testid="m-schools"><School size={18} /> For Schools</Link>
-                  <Link to="/for/hospitals" data-testid="m-hospitals"><HeartPulse size={18} /> For Hospitals</Link>
+                  <Link to="/for/hospitals" data-testid="m-hospitals"><HeartPulse size={18} /> For Hospitals & Care</Link>
                   <Link to="/for/offices" data-testid="m-offices"><Briefcase size={18} /> For Offices</Link>
                   <Link to="/scan/45805f3a-f10a-4534-bc7d-29699029b2cf" data-testid="m-demo"><ScanLine size={18} /> Emergency? Try live demo</Link>
                   <Link to="/login" data-testid="m-login">Login</Link>
@@ -198,7 +260,8 @@ export default function TopNav() {  const { user, logout } = useAuth();
               )}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </nav>
   );
