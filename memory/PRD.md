@@ -421,3 +421,11 @@ NATIVE-MOBILE ONLY (needs Expo app; web can only prep APIs): Crash detection (ac
 - testing_agent iteration_4: LIVE WhatsApp OTP mode 100% (backend returns channel=whatsapp/live/dev_code null; UI advances to code entry with WhatsApp note, resend cooldown, friendly errors; email/password regression OK). No defects.
 - Polish: OTP code screen now echoes the destination phone number; backend deletes the stored code if WhatsApp delivery raises (no stale code); test_credentials.md updated to document live OTP mode (no on-screen dev_code).
 - Could not test physical handset delivery (no access to a WhatsApp-receiving phone or the MSG91 allow-list). Remaining step is on the account owner.
+
+## Session update — Mobile app via Capacitor (2026-06)
+- Wrapped the existing React web app with **Capacitor 6** (Node 20 compatible) → native **Android** + **iOS** projects, one codebase, same backend. appId `com.neksathi.app`, appName "Nek Sathi", webDir `build`.
+- Added `frontend/android/` and `frontend/ios/` native projects, `capacitor.config.json`, `frontend/MOBILE_BUILD.md`, and CI workflow `.github/workflows/android-build.yml` (builds APK on x86_64 Ubuntu).
+- Built a working **debug APK** in-container despite the arm64 host: installed JDK17 + Android SDK 34, and routed the x86_64 `aapt2`/`zipalign` through `qemu-x86_64-static` (multiarch amd64 libs). The `aapt2FromMavenOverride` hack was REMOVED from the committed `gradle.properties` for portability (Android Studio / CI use the normal maven aapt2).
+- APK: `frontend/android/app/build/outputs/apk/debug/app-debug.apk` (~4MB, minSdk22/target34), also published for download at `/downloads/neksathi.apk` (public/downloads/).
+- iOS: project scaffolded; binary must be built on macOS (Xcode + CocoaPods + Apple Developer account).
+- v1 is wrap-as-is; native plugins (GPS/camera/push/anti-theft) can be layered later. On-device runtime not tested in-container (no emulator); underlying web app already verified 100%.

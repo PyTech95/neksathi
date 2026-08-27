@@ -1,0 +1,8 @@
+{
+  "appId": "com.neksathi.app",
+  "appName": "Nek Sathi",
+  "webDir": "build",
+  "server": {
+    "androidScheme": "https"
+  }
+}
