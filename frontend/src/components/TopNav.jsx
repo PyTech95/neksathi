@@ -95,6 +95,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
             <Link to="/dashboard" className={`nav-link ${isActive("/dashboard") ? "active" : ""}`} data-testid="nav-dashboard">Home</Link>
             <Link to="/safety" className={`nav-link ${isActive("/safety") ? "active" : ""}`} data-testid="nav-safety" style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#ff7591", fontWeight: 700 }}><Siren size={15} /> SOS</Link>
             <Link to="/family" className={`nav-link ${isActive("/family") ? "active" : ""}`} data-testid="nav-family" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Users size={15} /> Family</Link>
+            <Link to="/scanner" className={`nav-link ${isActive("/scanner") ? "active" : ""}`} data-testid="nav-scanner" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><ScanLine size={15} /> Scan</Link>
 
             {/* Vehicle & QR group */}
             <div className="nav-drop" style={{ position: "relative" }} data-testid="nav-assets">
@@ -222,6 +223,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
                   <Link to="/dashboard" data-testid="m-home">Home</Link>
                   <Link to="/safety" data-testid="m-safety" style={{ color: "#ff7591" }}><Siren size={18} /> SOS</Link>
                   <Link to="/family" data-testid="m-family"><Users size={18} /> Family</Link>
+                  <Link to="/scanner" data-testid="m-scanner"><ScanLine size={18} /> Scan QR</Link>
                   <div className="mobile-drawer-sep">Vehicle & QR</div>
                   <Link to="/tags" data-testid="m-tags"><QrCode size={18} /> Tags</Link>
                   <Link to="/cards" data-testid="m-cards"><CreditCard size={18} /> Cards</Link>

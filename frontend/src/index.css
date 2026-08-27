@@ -177,6 +177,11 @@ h1, h2, h3, .head { font-family: 'Chakra Petch', sans-serif; letter-spacing: -0.
 .brand:hover .brand-badge { transform: rotate(-8deg) scale(1.06); box-shadow: 0 10px 26px -6px rgba(34,211,238,.85); }
 
 .nav-links { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; white-space: nowrap; }
+
+/* In-app QR scanner: constrain the injected camera preview */
+#qr-reader { max-height: 360px; }
+#qr-reader video { max-height: 360px !important; object-fit: cover; border-radius: 12px; }
+#qr-reader img { display: none; }
 .nav-link {
   position: relative;
   color: var(--muted); text-decoration: none; padding: 8px 14px; border-radius: 10px;

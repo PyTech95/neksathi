@@ -34,6 +34,7 @@ import AdminContacts from "@/pages/AdminContacts";
 import AdminCalls from "@/pages/AdminCalls";
 import Settings from "@/pages/Settings";
 import Safety from "@/pages/Safety";
+import Scanner from "@/pages/Scanner";
 import LiveView from "@/pages/LiveView";
 import Community from "@/pages/Community";
 import StolenPhone from "@/pages/StolenPhone";
@@ -96,6 +97,7 @@ function Shell() {
           <Route path="/support" element={<Protected><Support /></Protected>} />
           <Route path="/settings" element={<Protected><Settings /></Protected>} />
           <Route path="/safety" element={<Protected><Safety /></Protected>} />
+          <Route path="/scanner" element={<Protected><Scanner /></Protected>} />
           <Route path="/community" element={<Protected><Community /></Protected>} />
           <Route path="/stolen-phone" element={<Protected><StolenPhone /></Protected>} />
           <Route path="/safe-zones" element={<Protected><SafeZones /></Protected>} />

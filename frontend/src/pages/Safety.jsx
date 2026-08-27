@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Link2, ShieldCheck, ShieldX, Search, Building2, Navigation, FileScan, Upload, Smartphone, ChevronRight, Camera, Mic, Play, Radar } from "lucide-react";
 import { loadLeaflet } from "@/lib/leaflet";
-import { getPosition, captureSelfie } from "@/lib/native";
+import { getPosition, captureSelfie, startSosTracking, stopSosTracking } from "@/lib/native";
 import { Link } from "react-router-dom";
 
 const HELPLINES = [
@@ -85,6 +85,8 @@ function Sos({ contactsCount, onSent }) {
       const r = await api.post("/me/sos", { ...coords, photo_base64: photo });
       setResult({ ...r.data, _photo: photo });
       onSent && onSent();
+      // Keep sharing live location with responders while the SOS is active.
+      startSosTracking((p) => api.post("/me/location", p));
     } catch (e) {
       setResult({ error: e?.response?.data?.detail || "Could not send SOS" });
     } finally { setBusy(false); }
@@ -108,7 +110,8 @@ function Sos({ contactsCount, onSent }) {
   };
   const cancel = () => { clearInterval(timer.current); firedRef.current = false; setArming(false); setCount(3); };
   const [acked, setAcked] = useState(false);
-  const ackSafe = async () => { try { await api.post(`/me/sos-events/${result.id}/ack`); setAcked(true); } catch (_) {} };
+  const ackSafe = async () => { try { await api.post(`/me/sos-events/${result.id}/ack`); setAcked(true); stopSosTracking(); } catch (_) {} };
+  useEffect(() => () => { stopSosTracking(); }, []);
 
   return (
     <div className="glass" style={{ padding: 28, borderRadius: 20, textAlign: "center", position: "relative", overflow: "hidden" }} data-testid="sos-panel">

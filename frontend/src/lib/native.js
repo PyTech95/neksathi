@@ -52,3 +52,41 @@ export async function captureSelfie() {
     return data;
   } catch (_) { return null; }
 }
+
+// --- Active-SOS location tracking -------------------------------------------
+// Keeps posting the user's location while an SOS is active. Uses the native
+// Geolocation watch on device (survives foreground; for full background/killed
+// operation add a background-geolocation plugin) and navigator.geolocation on web.
+let _sos = { id: null, timer: null, last: null, native: false };
+
+export async function startSosTracking(postFn, { intervalMs = 8000 } = {}) {
+  await stopSosTracking();
+  const onPos = (p) => {
+    if (!p?.coords) return;
+    _sos.last = { latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy };
+  };
+  try {
+    if (isNative) {
+      _sos.native = true;
+      _sos.id = await Geolocation.watchPosition({ enableHighAccuracy: true, timeout: 15000 }, (pos) => { if (pos) onPos(pos); });
+    } else {
+      _sos.native = false;
+      _sos.id = navigator.geolocation.watchPosition(onPos, () => {}, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
+    }
+  } catch (_) { /* permission denied — tracking simply won't post */ }
+  const send = async () => { if (_sos.last) { try { await postFn(_sos.last); } catch (_) {} } };
+  _sos.timer = setInterval(send, intervalMs);
+}
+
+export async function stopSosTracking() {
+  if (_sos.timer) { clearInterval(_sos.timer); _sos.timer = null; }
+  if (_sos.id != null) {
+    try {
+      if (_sos.native) await Geolocation.clearWatch({ id: _sos.id });
+      else navigator.geolocation.clearWatch(_sos.id);
+    } catch (_) {}
+    _sos.id = null;
+  }
+  _sos.last = null;
+}
+

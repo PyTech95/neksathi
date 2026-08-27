@@ -53,5 +53,9 @@
         <string>Nek Sathi uses the camera to capture a safety photo during an SOS.</string>
         <key>NSPhotoLibraryAddUsageDescription</key>
         <string>Nek Sathi may save safety photos to your library.</string>
+        <key>UIBackgroundModes</key>
+        <array>
+                <string>location</string>
+        </array>
 </dict>
 </plist>

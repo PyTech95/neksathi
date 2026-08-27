@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only testing (as requested) of the new QR Scanner page, Scan nav entries, SOS single-fire regression and active-SOS location tracking on the public preview URL. Chrome ran with a fake camera + granted geolocation, so both camera and position resolved. Results: /scanner renders and reaches 'scanning' state on desktop (1920) and mobile (390x844), reachable from nav-scanner and the mobile drawer m-scanner, and scanner-close returns to the previous page. SOS fires EXACTLY ONE POST /api/me/sos per press (verified twice), sos-result renders with the silent selfie, the 3s countdown + Cancel works (0 posts on cancel), and 'I'm safe' ack sets sos-acked without error. Active-SOS tracking does POST /api/me/location on an interval while the SOS is active. No page errors, no compile-error overlay, nav is single-row with Home/SOS/Family/Scan.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard / Scanner (any logged-in page)", "issues": ["The family SOS alert toast stack is rendered centered at the top over page content and does not auto-dismiss: on /dashboard it covers the 'Hi Demo, your garage' heading and the 2nd vehicle card; on /scanner it covers the 'Scan a Nek Sathi QR' header and part of the camera preview. Consider top-right placement / auto-collapse so it doesn't obscure content and block clicks on covered cards."]},
+      {"screen": "/scanner", "issues": ["#qr-reader video preview is unconstrained in height — with a portrait stream it renders a very tall (>500px) box pushing Close far below the fold on mobile. Suggest a max-height / aspect-ratio cap on the qr-reader container."]},
+      {"screen": "/safety", "issues": ["SOS takes ~10s from press to sos-result (3s countdown + geolocation + selfie capture) with only a spinner and no progress text; on a slow device the user cannot tell whether the alert went out. Consider a 'Getting location / capturing photo…' status line."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional UX: reposition/auto-dismiss the SOS alert toast stack so it does not cover page headers and cards (dashboard + scanner).",
+    "Optional UX: cap the #qr-reader preview height so the Close button stays reachable on mobile.",
+    "Optional UX: show intermediate status during the ~10s SOS send (location/selfie phases)."
+  ],
+  "critical_code_review_comments": [
+    "Safety.jsx LiveShare pushLoop and native.js startSosTracking are near-duplicate watchPosition+setInterval(8s) POST /me/location loops; when live sharing is active during an SOS the app posts location twice per interval. Consider unifying into one shared tracker.",
+    "native.js keeps module-level singleton _sos state — fine today, but stopSosTracking() is also called on unmount, so navigating away from /safety silently ends active-SOS tracking. If tracking is meant to survive navigation it should live in a provider/context, not in the Safety page component."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (skipped per request)", "frontend": "100% of requested scenarios passed"},
+  "seed_data_creation": "None persisted. Existing demo contact 'Priya' was used. 2 real SOS events were created on the demo account by the tests (both explicitly acked as safe). Live-location share was stopped once during testing (a share is still active from the app's own state at end of run).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "demo@neksathi.app / demo1234 (used); admin not needed for this scope",
+  "context_for_next_testing_agent": "Chrome in this runner DOES provide a fake camera and geolocation can be granted via context.grant_permissions([\"geolocation\",\"camera\"]) + set_geolocation, so /scanner reaches scanner-scanning (not scanner-error) and SOS location tracking posts. Timing note: SOS end-to-end takes ~10s (countdown+geo+selfie) — wait_for_selector('sos-result', timeout>=20000) instead of a fixed 9s wait. When counting /api/me/location POSTs, first stop Live Location Sharing (live-share-stop-btn) or take a baseline, because the live-share loop posts on the same endpoint every ~8s and pollutes the count.",
+  "rca_of_the_issue": "No functional defects found. An earlier run appeared to show 0 SOS posts / 'Add at least one emergency contact first' — root cause was test timing (assertion at 9s before the async geolocation+selfie chain resolved, and a screenshot taken before contacts finished loading), not an app bug. Re-runs with proper waits showed exactly 1 POST /api/me/sos per press."
+}

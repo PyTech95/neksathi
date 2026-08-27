@@ -67,6 +67,14 @@ The app now uses real device hardware when running natively (with graceful web f
 - **GPS (SOS + live location):** `@capacitor/geolocation`. Works out of the box — Android
   permissions and iOS usage strings are already in the manifest/Info.plist.
 - **Camera (SOS safety selfie):** `@capacitor/camera`. Also pre-configured.
+- **In-app QR scanner:** `/scanner` route (nav "Scan") uses `html5-qrcode` — works in the
+  Capacitor webview and on the web. Scanning a Nek Sathi tag/card/vehicle QR opens it in-app.
+- **Active-SOS location tracking:** while an SOS is active the app keeps posting the user's
+  location to `POST /api/me/location` (see `src/lib/native.js` startSosTracking). Works while
+  the app is foregrounded/open. **True background (screen off / app killed)** on Android/iOS
+  needs a dedicated background-geolocation plugin + foreground service; the manifest already
+  declares `ACCESS_BACKGROUND_LOCATION`/`FOREGROUND_SERVICE_LOCATION` and iOS `UIBackgroundModes:location`,
+  but add e.g. `@capacitor-community/background-geolocation` for guaranteed killed-app tracking.
 - **Push notifications:** `@capacitor/push-notifications` is wired to register the device
   token to the backend (`POST /api/register-push`) after login. **Requires setup before it
   works:**
