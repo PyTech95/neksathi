@@ -1,0 +1,25 @@
+{
+  "summary": "Frontend-only regression of the 2 mobile blockers from iteration_8 (banner stack covering the /safety panic button; banner portal covering the mobile drawer). Tested with demo@neksathi.app (7 active/escalated family SOS events) at 390x844 and 1920x1080, plus admin@safeqr.com. ALL 5 requested scenarios PASS. Backend skipped per request.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Desktop /dashboard (1920) with active family SOS", "issues": ["The fixed banner stack (3 cards + '+N more' pill, 262px tall, top:74) visually overlaps the page heading sub-text and the top of the vehicle cards. Container is pointerEvents:none but each banner card and the global-sos-more pill are pointerEvents:auto, so the pill sits over the 2nd vehicle card title/Manage&QR area and can intercept clicks there. Cosmetic/minor - consider offsetting page top padding when banners are present."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FamilyAlarm isMobile uses window.innerWidth<=640 with a resize listener only - fine for a Capacitor build (no orientation-change-only edge case observed), but consider matchMedia('(max-width:640px)') + 'change' for orientationchange robustness.",
+    "TopNav unmounts the LiveAlarm/FamilyAlarm/IncomingCall portal while mobileOpen is true; this remounts FamilyAlarm on drawer close and re-fires /family/active-sos + /family/nudge-state and resets the `seen` ref, so the alarm sound can retrigger after every drawer close. Verified banners return correctly, but consider hiding via CSS (visibility/display) instead of unmounting to preserve alarm state."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (skipped per request)", "frontend": "100% (5/5 scenarios)"},
+  "seed_data_creation": "2 new SOS events created on demo@neksathi.app by pressing the panic button (1 mobile, 1 desktop). Demo family SOS events were NOT acknowledged, so banners remain available for future testing.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "demo@neksathi.app / demo1234 (login-email, login-password, login-submit); admin@safeqr.com / admin1234",
+  "context_for_next_testing_agent": "Verified results: (1) MOBILE 390x844 /safety -> global-family-alarm count = 0 (suppressed); document.elementFromPoint at sos-trigger-btn center (168x168 @ top 332) returns the sos-trigger-btn itself; NORMAL (non-forced) click works; exactly 1 POST /api/me/sos after the 3s countdown; success panel 'SOS sent to 1 contact - push, sms, whatsapp' rendered. (2) MOBILE /dashboard -> banner portal parent=BODY, 358x160 (19% of viewport height), exactly 1 SOS card + global-sos-more pill '+5 more SOS alerts - view all'. (3) MOBILE drawer with banners active -> on open, global-family-alarm and live-alarm are absent from DOM; mobile-overlay z-index 4500, mobile-drawer 4501; elementFromPoint on m-safety returns m-safety; m-safety/m-family/m-home/m-alerts all navigate correctly with normal clicks; banners reappear on dashboard after drawer closes. (4) DESKTOP 1920 /dashboard -> 3 banner cards + '+4 more' pill, parent BODY; nav-assets-btn and nav-more-btn dropdowns open; /safety banners suppressed, panic button hit-testable, 1 POST per press; admin login shows nav-admin. (5) No console errors during any run (IncomingCall/LiveAlarm mount cleanly). Remaining unverified: Vobiz masked-call and MSG91 OTP paths (mocked/live - not exercised).",
+  "rca_of_the_issue": "Both iteration_8 blockers are resolved at the source: FamilyAlarm now treats '/safety' like '/family' (onFamily => showSos false) so the fixed z-4000 portal cannot overlay the panic button, and it caps visible cards to 1 on <=640px so the stack no longer dominates the mobile viewport; TopNav no longer renders the alarm portal while mobileOpen, and index.css raises the drawer/overlay to 4501/4500 above the 4000 portal, so drawer links are top-most in hit-testing."
+}

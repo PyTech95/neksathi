@@ -42,7 +42,8 @@ export default function FamilyAlarm() {
   const seen = useRef(null);
   const nudgeRef = useRef(false);
   const nav = useNavigate();
-  const onFamily = useLocation().pathname === "/family";
+  const _path = useLocation().pathname;
+  const onFamily = _path === "/family" || _path === "/safety";
 
   useEffect(() => {
     let cancelled = false;
@@ -77,13 +78,22 @@ export default function FamilyAlarm() {
   const toggleMute = () => { const v = !muted; setMuted(v); localStorage.setItem("sosMuted", v ? "1" : "0"); if (v) alarm.stop(); };
   const dismissNudge = async () => { alarm.stop(); nudgeRef.current = false; setNudge({ active: false }); try { await api.post("/family/nudge/clear"); } catch (_) {} };
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth <= 640);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 640);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const showSos = sos.length > 0 && !onFamily;
   if (!showSos && !nudge.active) return null;
+  const visibleSos = showSos ? sos.slice(0, isMobile ? 1 : 3) : [];
+  const extraSos = showSos ? sos.length - visibleSos.length : 0;
 
   return (
-    <div data-testid="global-family-alarm" style={{ position: "fixed", top: 74, left: "50%", transform: "translateX(-50%)", zIndex: 4000, width: "min(560px, 92vw)", display: "grid", gap: 10 }}>
-      {showSos && sos.map((s) => (
-        <div key={s.id} data-testid={`global-sos-${s.id}`} className="glass" style={{ padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(255,59,92,.7)", background: "rgba(35,10,16,.96)", boxShadow: "0 12px 40px rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+    <div data-testid="global-family-alarm" style={{ position: "fixed", top: 74, left: "50%", transform: "translateX(-50%)", zIndex: 4000, width: "min(560px, 92vw)", display: "grid", gap: 10, pointerEvents: "none" }}>
+      {visibleSos.map((s) => (
+        <div key={s.id} data-testid={`global-sos-${s.id}`} className="glass" style={{ pointerEvents: "auto", padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(255,59,92,.7)", background: "rgba(35,10,16,.96)", boxShadow: "0 12px 40px rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <ShieldAlert size={22} style={{ color: "#ff3b5c", animation: "alarmRing .9s infinite" }} />
             <div><div style={{ fontWeight: 800, color: "#ff3b5c", fontSize: 14 }}>🆘 {s.member_name} raised an SOS</div><div style={{ fontSize: 12, opacity: .8 }}>{new Date(s.created_at).toLocaleTimeString()}{s.escalated ? " · escalated" : ""}</div></div>
@@ -95,8 +105,13 @@ export default function FamilyAlarm() {
           </div>
         </div>
       ))}
+      {extraSos > 0 && (
+        <button data-testid="global-sos-more" onClick={() => nav("/family")} className="glass" style={{ pointerEvents: "auto", cursor: "pointer", padding: "8px 16px", borderRadius: 999, border: "1px solid rgba(255,59,92,.5)", background: "rgba(35,10,16,.9)", color: "#ff8aa0", fontWeight: 700, fontSize: 13, justifySelf: "center" }}>
+          +{extraSos} more SOS alert{extraSos > 1 ? "s" : ""} · view all
+        </button>
+      )}
       {nudge.active && (
-        <div data-testid="global-nudge" className="glass" style={{ padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(34,211,238,.7)", background: "rgba(8,24,30,.96)", boxShadow: "0 12px 40px rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div data-testid="global-nudge" className="glass" style={{ pointerEvents: "auto", padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(34,211,238,.7)", background: "rgba(8,24,30,.96)", boxShadow: "0 12px 40px rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <BellRing size={22} className="neon" style={{ animation: "alarmRing .9s infinite" }} />
             <div style={{ fontWeight: 700, fontSize: 14 }}>{nudge.guardian_name || "Your guardian"} is trying to reach you!</div>

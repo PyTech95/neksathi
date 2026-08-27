@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Link2, ShieldCheck, ShieldX, Search, Building2, Navigation, FileScan, Upload, Smartphone, ChevronRight, Camera, Mic, Play, Radar } from "lucide-react";
 import { loadLeaflet } from "@/lib/leaflet";
+import { getPosition, captureSelfie } from "@/lib/native";
 import { Link } from "react-router-dom";
 
 const HELPLINES = [
@@ -65,29 +66,18 @@ function Sos({ contactsCount, onSent }) {
   const [count, setCount] = useState(3);
   const [withPhoto, setWithPhoto] = useState(true);
   const timer = useRef(null);
+  const firedRef = useRef(false);
 
   const capturePhoto = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-      const video = document.createElement("video");
-      video.srcObject = stream; video.muted = true; await video.play();
-      await new Promise((r) => setTimeout(r, 450));
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640; canvas.height = video.videoHeight || 480;
-      canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-      const data = canvas.toDataURL("image/jpeg", 0.7);
-      stream.getTracks().forEach((t) => t.stop());
-      return data;
-    } catch (_) { return null; }
+    return await captureSelfie();
   };
 
   const fire = async () => {
     setBusy(true); setResult(null);
     let coords = {};
     try {
-      const pos = await new Promise((res, rej) =>
-        navigator.geolocation.getCurrentPosition(res, rej, { timeout: 6000, enableHighAccuracy: true }));
-      coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      const pos = await getPosition({ timeout: 6000, enableHighAccuracy: true });
+      coords = { latitude: pos.latitude, longitude: pos.longitude };
     } catch (_) { /* location optional */ }
     let photo = null;
     if (withPhoto) { photo = await capturePhoto(); }
@@ -101,16 +91,22 @@ function Sos({ contactsCount, onSent }) {
   };
 
   const beginArm = () => {
+    if (arming) return;
     if (contactsCount === 0) { setResult({ error: "Add at least one emergency contact first." }); return; }
+    firedRef.current = false;
     setArming(true); setCount(3);
+    let c = 3;
     timer.current = setInterval(() => {
-      setCount((c) => {
-        if (c <= 1) { clearInterval(timer.current); setArming(false); fire(); return 0; }
-        return c - 1;
-      });
+      c -= 1;
+      setCount(c);
+      if (c <= 0) {
+        clearInterval(timer.current);
+        setArming(false);
+        if (!firedRef.current) { firedRef.current = true; fire(); }
+      }
     }, 1000);
   };
-  const cancel = () => { clearInterval(timer.current); setArming(false); setCount(3); };
+  const cancel = () => { clearInterval(timer.current); firedRef.current = false; setArming(false); setCount(3); };
   const [acked, setAcked] = useState(false);
   const ackSafe = async () => { try { await api.post(`/me/sos-events/${result.id}/ack`); setAcked(true); } catch (_) {} };
 

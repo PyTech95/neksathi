@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import api from "@/lib/api";
+import { initPush } from "@/lib/push";
 
 const AuthCtx = createContext(null);
 
@@ -19,6 +20,8 @@ export function AuthProvider({ children }) {
       .catch(() => localStorage.removeItem("nk_token"))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { if (user?.id) initPush(user.id); }, [user?.id]);
 
   const login = async (email, password) => {
     const r = await api.post("/auth/login", { email, password });

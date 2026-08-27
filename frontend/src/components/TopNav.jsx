@@ -155,10 +155,6 @@ export default function TopNav() {  const { user, logout } = useAuth();
                 </div>
               )}
             </div>
-
-            <LiveAlarm />
-            <FamilyAlarm />
-            <IncomingCall />
           </>
         ) : (
           <>
@@ -261,6 +257,15 @@ export default function TopNav() {  const { user, logout } = useAuth();
             </div>
           </div>
         </>,
+        document.body
+      )}
+
+      {user && createPortal(
+        <div style={{ display: mobileOpen ? "none" : "contents" }}>
+          <LiveAlarm />
+          <FamilyAlarm />
+          <IncomingCall />
+        </div>,
         document.body
       )}
     </nav>

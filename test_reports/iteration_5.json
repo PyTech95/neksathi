@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only regression check of the native-bridge refactor (src/lib/native.js) on WEB. Verified landing page + /login render with no compile-error overlay, email/password login (demo@neksathi.app) works and redirects to /dashboard, /safety renders fully with SOS panel, the One-Tap SOS button arms with a 3s countdown and successfully POSTs to /api/me/sos, shows the green success confirmation ('SOS sent to 1 contact · push, sms, whatsapp'), renders the captured selfie evidence thumbnail (getUserMedia fake device in headless), the 'I'm safe - cancel escalation' ack works, and new events appear in the SOS history (GET /api/me/sos-events). ZERO uncaught JS errors / console errors on the Safety page - the @capacitor/* imports in lib/native.js do not break the web build. One real bug found: a single SOS press fires TWO POST /api/me/sos requests and creates two duplicate SOS events (network-intercept confirmed 2 requests, history delta +2 on a single click; a direct API POST creates exactly 1 event, so the duplication is client-side).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "One-Tap SOS (Safety page)",
+        "issue": "Single SOS button press sends 2x POST /api/me/sos and creates 2 duplicate SOS events (verified via request interception: 2 requests per click; sos-history count increased by 2). Duplicates also produce duplicate realtime SOS toasts. Root cause: fire() is called as a side effect INSIDE the setCount state-updater callback in Safety.jsx beginArm() (lines ~95-100); React 18 StrictMode double-invokes updater functions, so fire() runs twice. Not caused by the native.js refactor but user-visible (duplicate alerts to contacts).",
+        "affected_selectors": ["[data-testid=\"sos-trigger-btn\"]", "[data-testid^=\"sos-event-\"]"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Safety page",
+        "issues": ["Stacked realtime 'Demo User raised an SOS' toasts render over the page header/SOS card area (top-center overlay) and can visually cover the Emergency Siren card; consider auto-dismiss or a corner position."]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix duplicate SOS: move the side effects out of the setCount updater in Safety.jsx beginArm(). Use a useEffect on count===0 or a fired-guard ref (e.g. if (firedRef.current) return; firedRef.current = true) before calling fire()/clearInterval, and reset the guard on cancel/new arm."
+  ],
+  "critical_code_review_comments": [
+    "Safety.jsx beginArm(): calling clearInterval + fire() inside the setCount(c => ...) updater is an impure state updater; React 18 StrictMode (and any future re-invocation) double-executes it, causing a duplicated SOS POST. Add an idempotency guard client-side; optionally add server-side de-dup (ignore identical SOS from same user within a few seconds).",
+    "src/lib/native.js is clean for web: Capacitor.isNativePlatform() is evaluated at module load and both getPosition/captureSelfie fall back correctly; captureSelfie swallows all errors and returns null so SOS is never blocked. No changes needed."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "not tested (frontend-only request)", "frontend": "90% (all regression checks pass; 1 duplicate-request bug)" },
+  "seed_data_creation": "No new data seeded; used the pre-existing 'Priya' emergency contact on the demo account. Test runs created 3 extra SOS events in demo@neksathi.app history (2 from UI double-fire, 1 from a direct API sanity POST) - harmless history rows.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "demo@neksathi.app / demo1234 (worked)",
+  "context_for_next_testing_agent": "Web SOS flow post-refactor is functional: no JS/Capacitor import errors on web, POST /api/me/sos + GET /api/me/sos-events integration confirmed, selfie evidence and ack button work. Remaining known issue: duplicate SOS POST per click due to side effect inside the setCount updater (React StrictMode). Verify with page.on('request') counting POSTs to /me/sos after the fix.",
+  "rca_of_the_issue": "Safety.jsx beginArm() runs setInterval whose callback does setCount(c => { if (c<=1) { clearInterval(...); fire(); return 0; } ... }). React 18 StrictMode intentionally double-invokes state updater functions in development, so the embedded fire() call executes twice, producing two POST /api/me/sos requests and two SOS events per single button press."
+}

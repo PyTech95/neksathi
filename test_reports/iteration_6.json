@@ -1,0 +1,30 @@
+{
+  "summary": "Frontend-only re-verification of the duplicate-SOS fix on /safety (login demo@neksathi.app). Counted POST /api/me/sos requests per single press via Playwright request interception. RESULT: FIX CONFIRMED - exactly 1 POST per single press and exactly +1 SOS history event; only 1 new realtime toast. Cancel-during-countdown sends 0 POSTs and a subsequent press again sends exactly 1 POST (+1 event). Success confirmation and 'I'm safe' ack both work. One NEW blocking UI defect found: stacked global SOS alert banners intercept pointer events over the One-Tap SOS button.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "FamilyAlarm (global SOS banners)", "issue": "Fixed banner stack (position:fixed, top:74, left:50%, zIndex 4000) never auto-dismisses and accumulates one banner per unacked SOS. It covers the centre of the Safety page and INTERCEPTS POINTER EVENTS on the One-Tap SOS button - Playwright normal click on [data-testid=sos-trigger-btn] timed out after 30s with 'global-sos-<id> subtree intercepts pointer events'. On a safety app this can block the panic button for a real user.", "selector": "[data-testid=\"global-family-alarm\"] / [data-testid^=\"global-sos-\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Safety Center", "issues": ["Up to 5+ SOS banners stack over the hero/SOS panel, hiding the siren panel and countdown text; consider auto-dismiss, collapse into a single 'N alerts' pill, pointer-events:none on the wrapper, or moving to a side/bottom toast region"]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix pointer-event interception: make the FamilyAlarm wrapper pointer-events:none (children pointer-events:auto), and/or collapse/auto-dismiss stacked SOS banners so they never cover the One-Tap SOS button.",
+    "Optional hardening: beginArm() does not guard against a second press while arming - a rapid re-press starts a second setInterval (the old timer handle is overwritten, so one interval leaks and could fire a second time in edge cases). Add `if (arming) return;` at the top of beginArm()."
+  ],
+  "critical_code_review_comments": [
+    "Safety.jsx beginArm(): side effect now correctly outside the state updater with firedRef one-shot guard - verified fixed (1 POST per press).",
+    "beginArm() lacks an 'already arming' re-entry guard; timer.current is overwritten leaving an orphan interval."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (skipped per request)", "frontend": "100% on SOS single-fire/cancel/ack flows; 1 blocking overlay defect found"},
+  "seed_data_creation": "3 real SOS events created on demo@neksathi.app during testing (history went 7 -> 10); one was acked.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "demo@neksathi.app / demo1234",
+  "context_for_next_testing_agent": "Duplicate-SOS bug is FIXED and verified by request counting (1 POST, +1 event). Remaining open item: global SOS alert banners (FamilyAlarm.jsx line 84) overlay and block clicks on [data-testid=sos-trigger-btn]; when testing, either ack/silence existing SOS events first or expect click interception. Old duplicate pairs (e.g. 09:32:33 x2) in demo history are leftovers from the iteration_5 bug, not new.",
+  "rca_of_the_issue": "Original double-fire came from fire() being invoked inside a setCount updater double-invoked by React 18 StrictMode. Current code decrements a local counter, uses setCount(c) as a pure setter, and gates fire() behind firedRef - so exactly one POST /api/me/sos occurs per press; cancel() clears the interval and resets firedRef, so the cancel path issues no request and re-arming works."
+}

@@ -1,0 +1,42 @@
+{
+  "summary": "Full go/no-go regression (backend + frontend) before the Capacitor mobile build. Backend: new pytest suite /app/backend/tests/test_regression_iter7.py = 42/42 PASS (auth, profile CRUD+persistence, all core page endpoints, SOS create+ack persistence, admin RBAC, OTP live mode, bcrypt hash format, CORS). Frontend: ALL requested items PASS - the HIGH panic-button overlay fix is CONFIRMED (wrapper pointer-events:none, normal non-forced click on sos-trigger-btn works with 3 red SOS banners + '+2 more SOS alerts' pill visible; pill navigates to /family), SOS single-fire verified by request interception (1 press = exactly 1 POST /api/me/sos, cancel = 0, ack works), auth/admin-link/session-persistence, public Solutions mega-menu (7 items, opaque rgb(13,12,22)), logged-in nav single row at 1920 with both dropdowns opaque and every one of the 11 items navigating, and 13 core pages smoke-loaded with zero failed API calls. ONE NEW CRITICAL DEFECT FOUND THAT BLOCKS THE MOBILE BUILD: FamilyAlarm, LiveAlarm and IncomingCall are mounted inside div.nav-desktop, which is display:none !important below 992px - so on every phone/tablet (i.e. the Android/iOS app) the global SOS banner, live alarm and the incoming masked-call accept/reject overlay are completely invisible/unreachable.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/login", "issue": "No brute-force lockout: 7 consecutive wrong passwords all return 401 and the correct password still logs in immediately. Playbook expects lockout after 5 failures."},
+      {"endpoint": "/api/auth/login", "issue": "Auth uses a Bearer JWT returned in the JSON body (stored client-side) rather than an httpOnly cookie. Acceptable for the Capacitor app, but it deviates from the auth playbook's httpOnly-cookie item - flagging for awareness only."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TopNav.jsx (lines 159-161) + index.css line 346", "issue": "CRITICAL / MOBILE BLOCKER: <LiveAlarm/>, <FamilyAlarm/> and <IncomingCall/> are rendered inside <div className=\"nav-links nav-desktop\">. @media (max-width:992px) sets .nav-desktop{display:none !important}, so at 390px and 768px the elements exist in the DOM but measure 0x0 and are invisible (verified: global-family-alarm rect w=0 h=0, closest('.nav-desktop') computed display=none). Consequence on the mobile app: family SOS banners never appear (alarm audio still plays with NO visible source and no View/Silence/Mute buttons), LiveAlarm never appears, and the full-screen IncomingCall overlay (accept/reject masked call) can never be reached. Fix: move these three components out of .nav-desktop (render them as siblings just before </nav> or via createPortal to document.body).", "selector": "[data-testid=\"global-family-alarm\"], [data-testid=\"incoming-call-overlay\"]", "priority": "CRITICAL"},
+      {"component": "Family.jsx", "issue": "React DOM-nesting console error on /family: 'In HTML, <span> cannot be a child of <option>. This will cause a hydration error.' Reproduced on every /family load. Page still renders and works, but it is the only console error left in the app - likely one of the <option> children in the alert-rules selects (lines 285-328) rendering an element/multiple children.", "selector": "[data-testid=\"rules-sos-escalation\"] / [data-testid=\"rules-battery-threshold\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Safety Center (desktop, banners visible)", "issues": ["The 3 fixed SOS banners + pill still sit visually on top of the 'EMERGENCY SOS' / 'EMERGENCY SIREN' panel headings (text is obscured, though no longer click-blocking). Consider offsetting the page content or docking the stack to a corner.", "Banners never auto-expire; on the demo account 5 escalated SOS events from previous test runs still show as 'active' - only an explicit ack clears them."]},
+      {"screen": "Routing", "issues": ["/profile is not a route - it silently redirects to the public landing page via the '*' catch-all. Profile editing lives at /settings (verified working). If any doc/CTA links to /profile the user lands on marketing content instead of a 404 or their profile."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_regression_iter7.py", "/app/test_reports/pytest/iter7_results.xml"],
+  "action_items": [
+    "CRITICAL before building the mobile app: move <LiveAlarm/>, <FamilyAlarm/> and <IncomingCall/> out of the .nav-desktop container in TopNav.jsx (they are display:none on all viewports <=992px, so SOS banners and the incoming-call overlay are invisible/unusable in the Capacitor app). Re-test at 390px after the fix.",
+    "Fix the /family React DOM-nesting error (<span> inside <option>) in the alert-rules <select> blocks.",
+    "Optional: add a real /profile route or point profile links at /settings instead of falling through to the landing page.",
+    "Optional security hardening: add login rate limiting / lockout after 5 failed attempts (currently unlimited 401s)."
+  ],
+  "critical_code_review_comments": [
+    "FamilyAlarm.jsx: the overlay fix is correct (wrapper pointerEvents:none, each banner pointerEvents:auto, sos.slice(0,3) + '+N more' pill) - verified live with a non-forced Playwright click. However mounting it inside a media-query-hidden nav container defeats it entirely on mobile.",
+    "Safety.jsx beginArm(): 'if (arming) return' re-entry guard + local counter + firedRef one-shot verified - exactly 1 POST /api/me/sos per press, 0 on cancel, timer cleared correctly.",
+    "src/lib/native.js and push.js are correctly inert on web (Capacitor.isNativePlatform()===false); getPosition falls back to navigator.geolocation and captureSelfie to getUserMedia, both failing silently without breaking the SOS flow (SOS still succeeded with no location/photo permission).",
+    "server.py is ~6000 lines in a single module - well past the 700-line guideline; consider splitting into routers (auth, safety, family, tags/cards, admin) before the next feature round."
+  ],
+  "updated_files": ["/app/backend/tests/test_regression_iter7.py", "/app/test_reports/iteration_7.json"],
+  "success_rate": {"backend": "100% (42/42)", "frontend": "100% of requested desktop-web scenarios passed; 1 critical mobile-viewport regression found outside the requested list"},
+  "seed_data_creation": "2 new SOS events created on demo@neksathi.app (1 via API test, 1 via UI test); both acked. Demo user name temporarily changed to TEST_QA Name / TEST_Demo Rename and restored to 'Demo User'. One OTP request sent to +919876500011 (live MSG91, not allow-listed - no delivery).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "demo@neksathi.app / demo1234 (non-admin), admin@safeqr.com / admin1234 (admin) - both work",
+  "context_for_next_testing_agent": "Panic-button overlay fix + SOS single-fire are CONFIRMED on desktop web (iteration 7). Re-run pytest /app/backend/tests/test_regression_iter7.py for a fast full-API regression. The open blocker is mobile-only: at width<=992px .nav-desktop is display:none and FamilyAlarm/LiveAlarm/IncomingCall live inside it, so verify at 390x844 that [data-testid=global-family-alarm] has a non-zero bounding box and that banners/incoming-call overlay are visible and clickable after the fix. Demo account still has ~4 stale 'active/escalated' SOS events which is what makes the banners render - do not ack them all if you need banners present.",
+  "rca_of_the_issue": "Panic-button interception: fixed - FamilyAlarm wrapper now pointer-events:none with pointer-events:auto only on each banner/pill, and the stack is capped at 3, so the One-Tap SOS button receives normal clicks (verified without force=True). New mobile defect RCA: TopNav.jsx renders the three global overlay components as the last children of <div className=\"nav-links nav-desktop\">; index.css line 345-348 hides .nav-desktop with display:none !important under 992px. React still mounts the components (polling and alarm audio keep running) but their DOM subtree is not painted and has zero geometry, so on phones/tablets the user hears the alarm without any visible banner and can never reach the View/Silence/Mute controls or the incoming masked-call accept/reject overlay."
+}

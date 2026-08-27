@@ -60,6 +60,26 @@ select a device/simulator, and **Run** / **Product → Archive** to distribute.
 
 ---
 
+## Native device capabilities (v1.1)
+
+The app now uses real device hardware when running natively (with graceful web fallback):
+
+- **GPS (SOS + live location):** `@capacitor/geolocation`. Works out of the box — Android
+  permissions and iOS usage strings are already in the manifest/Info.plist.
+- **Camera (SOS safety selfie):** `@capacitor/camera`. Also pre-configured.
+- **Push notifications:** `@capacitor/push-notifications` is wired to register the device
+  token to the backend (`POST /api/register-push`) after login. **Requires setup before it
+  works:**
+  1. **Android:** create a Firebase project → add an Android app with package `com.neksathi.app`
+     → download **`google-services.json`** → place it at `frontend/android/app/google-services.json`.
+     (The build auto-detects it; without it the app still builds, push just stays off.)
+  2. **iOS:** enable Push Notifications capability in Xcode + upload an APNs key/cert to your push provider.
+  3. **Delivery:** the backend relays tokens to Emergent Push via `EMERGENT_PUSH_KEY`
+     (auto-provisioned on Emergent deploy). Configure your FCM/APNs server credentials in the push
+     provider so messages actually send.
+
+After adding `google-services.json`, rebuild: `yarn build && npx cap sync android` then build the APK.
+
 ## Notes
 - The app calls the backend via `REACT_APP_BACKEND_URL` baked into the web build.
   To point the app at your **deployed** backend, set that env var before `yarn build`
