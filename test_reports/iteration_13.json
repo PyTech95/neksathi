@@ -1,0 +1,41 @@
+{
+  "summary": "Backend-only verification of the vehicle QR scan-alert WhatsApp/SMS fan-out fix in public_qr_alert, plus regressions on tag alerts and core auth/public APIs. 13/13 pytest tests passed. CONFIRMED FIXED: anonymous POST /api/public/qr/{qr_id}/alert returns 200 {id,type,ok:true} and now triggers a WhatsApp send attempt for the owner AND opted-in vehicle contacts (mock mode in preview), audited in db.notifications with meta.kind=scan_alert. Verified for emergency, wrong_parking and theft types.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS middleware (server.py ~L6942)", "issue": "allow_origins=[\"*\"] combined with allow_credentials=True is invalid per CORS spec (browsers reject credentialed wildcard). Low impact today since auth is Bearer-token, not cookies, but should use explicit origins from env."},
+      {"endpoint": "POST /api/auth/login", "issue": "No brute-force lockout (no failed_attempts/lock_until logic); only IP rate-limiting (10/min). Playbook expects lockout after 5 failed attempts."},
+      {"endpoint": "startup seed (server.py ~L7053)", "issue": "seed_admin/seed_demo only insert when missing — an ADMIN_PASSWORD/DEMO_PASSWORD change in .env is never applied to an existing user (playbook expects password update on change)."},
+      {"endpoint": "POST /api/public/qr/{qr_id}/alert", "issue": "Fan-out is awaited inline in the request path (loop of notify_whatsapp per contact). Fine in mock (<0.5s) but with live MSG91 + many contacts this adds latency; consider asyncio.create_task/background task."},
+      {"endpoint": "send_push (all alert flows)", "issue": "Emergent Push returns 401 'invalid X-Push-Key' in preview (expected/mocked) — handled gracefully as a WARNING, no 5xx."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_vehicle_alert_fanout_iter13.py",
+    "/app/backend/tests/test_vehicle_alert_contacts_iter13.py",
+    "/app/test_reports/pytest/iter13_results.xml",
+    "/app/test_reports/pytest/iter13_contacts.xml"
+  ],
+  "action_items": [
+    "Optional hardening: replace CORS wildcard+credentials with explicit origins from env",
+    "Optional: add failed-login lockout and make admin/demo seed update password when env password changes",
+    "Optional: move the WhatsApp/SMS fan-out loop off the request path (background task) before enabling live MSG91 for many contacts"
+  ],
+  "critical_code_review_comments": [
+    "Fix verified correct: notify_whatsapp -> send_sms fallback triggers only when status == 'failed'; comms.send_whatsapp returns 'failed' on non-2xx/exception in live mode, so the SMS fallback will work on the VPS. In preview it returns 'mock', so no SMS fallback is logged for vehicle alerts — expected.",
+    "Fan-out loop is wrapped in try/except and runs after db.alerts.insert_one, so a missing/invalid phone cannot break the alert insert or return a 5xx (validated: 200 in <1s, 404 for unknown qr_id, 422 for invalid type).",
+    "Owner phone is prepended to channels and duplicate suppression is absent — if the owner is also stored as a vehicle contact they will receive two identical messages. Consider de-duplicating the phone list."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_vehicle_alert_fanout_iter13.py",
+    "/app/backend/tests/test_vehicle_alert_contacts_iter13.py"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "Created and deleted one TEST_contact (+919999000111) on the demo vehicle. Created 4 alerts on the existing demo vehicle (TSF714F3) via the public scan endpoint; no seeded data modified.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "demo@neksathi.app/demo1234 and admin@safeqr.com/admin1234 both work; hashes are bcrypt $2b$12$",
+  "context_for_next_testing_agent": "Vehicle alert fan-out verified via log offsets on /var/log/supervisor/backend.err.log (grep '[MSG91 WHATSAPP MOCK]') and db.notifications (meta.kind=scan_alert). Login is IP rate-limited 10/min — reuse module-scoped token fixtures. Auth is Bearer-token only (no httpOnly cookie on login), so playbook cookie/lockout checks do not apply as written.",
+  "rca_of_the_issue": "Previously public_qr_alert only stored contact_channels and fired a push, so no WhatsApp/SMS ever left the server for vehicle scans. The new loop over channels calling notify_whatsapp (with send_sms fallback) now executes — proven by fresh '[MSG91 WHATSAPP MOCK] to=+910000000001 :: EMERGENCY: Your vehicle TSF714F3 was reported via a Nek Sathi QR scan...' log lines and matching db.notifications docs. On the VPS the user must set MSG91_WHATSAPP_TEMPLATE (+AUTHKEY/NUMBER) and MSG91_SMS_FLOW_ID for live delivery; masked-call ringing needs VOBIZ_* config (out of scope)."
+}

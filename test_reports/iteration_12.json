@@ -1,0 +1,36 @@
+{
+  "summary": "Backend-only API liveness certification via the EXTERNAL REACT_APP_BACKEND_URL (https://neksathi-deploy.preview.emergentagent.com). Created /app/backend/tests/test_api_liveness_iter12.py — 20/20 tests PASSED. No 404 and no 5xx observed on any endpoint. Public endpoints: GET /api/ 200, GET /api/faqs 200 (non-empty list), GET /api/plans 200 (non-empty list). Auth: demo@neksathi.app/demo1234 -> 200 with access_token + user.email; admin@safeqr.com/admin1234 -> 200 with access_token; malformed body {foo:bar} -> 422 (NOT 404); wrong password -> 401; GET /api/auth/me -> 200 with correct email. All 10 authenticated core reads returned 200: /api/me/sos-events, /api/me/emergency-contacts, /api/family, /api/vehicles, /api/tags, /api/cards, /api/alerts, /api/incidents, /api/subscriptions/me. Writes: POST /api/me/sos {lat,lng} -> 200 and sos-events count incremented by 1 (verified via GET); POST /api/me/location -> 200. Stability: GET /api/faqs hit 5x over ~30s -> [200,200,200,200,200], zero 404/5xx. CONCLUSION: the API surface is healthy right now; the user-reported 404s were transient (backend cold-start / uvicorn --reload restart window), not a routing or code defect. Playbook auth checks also run: bcrypt hashes are $2b$12$ for both seeded accounts, admin has is_admin=true.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORSMiddleware (server.py ~L6923)", "issue": "allow_origins=[\"*\"] combined with allow_credentials=True. Browsers reject credentialed requests against a wildcard origin, and it deviates from the playbook requirement of explicit origins. Use an explicit origin list (env-driven) if cookie/credential auth is ever added."},
+      {"endpoint": "POST /api/auth/login", "issue": "No per-account brute-force lockout after 5 failed attempts (playbook item 4). Only IP-based slowapi limit '10/minute' exists — verified live: attempts 1-10 -> 401, 11-12 -> 429. Distributed/rotating-IP attacks on a single account are not throttled."},
+      {"endpoint": "POST /api/auth/login (cookies)", "issue": "No httpOnly cookie is set on login (playbook item 2); auth is bearer-token-in-JSON only. Acceptable for the mobile client, but web sessions keep the JWT in JS-accessible storage (XSS exposure)."},
+      {"endpoint": "startup seed_admin/seed_demo (server.py ~L7035-7070)", "issue": "Seed is idempotent for existence but does NOT re-hash/update the password when ADMIN_PASSWORD/DEMO_PASSWORD changes (playbook item 5). Rotating the env password silently has no effect on an already-seeded account."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_api_liveness_iter12.py",
+    "/app/test_reports/pytest/liveness_iter12.xml"
+  ],
+  "action_items": [
+    "No functional fix required — API is live; the reported 404s were a cold-start/reload artifact.",
+    "Optional hardening: replace CORS allow_origins=['*'] + allow_credentials=True with an explicit env-driven origin list.",
+    "Optional: add per-account failed-login counter + temporary lockout (5 fails) alongside the existing IP rate limit.",
+    "Optional: make seed_admin/seed_demo update password_hash when the env password differs, so credential rotation works."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 7080 lines — well over the 700-line guideline. Split into routers (auth, safety/sos, vehicles/tags, admin, billing) to keep it maintainable.",
+    "delete_my_account imports passlib.hash.bcrypt while the rest of the file uses the bcrypt package directly (hash_password/verify_password) — two hashing paths for the same hashes; consolidate on verify_password.",
+    "Cold-start/reload window: backend runs uvicorn --reload watching /app/backend, so any write inside that tree (including test files) restarts the worker and briefly makes /api unreachable through ingress. Expect transient non-200s during edits; not a code bug."
+  ],
+  "updated_files": ["/app/backend/tests/test_api_liveness_iter12.py", "/app/test_reports/iteration_12.json"],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "One SOS event and one location ping created for demo@neksathi.app by the write smoke tests (intentionally left in place to preserve the audit trail).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "demo@neksathi.app/demo1234 and admin@safeqr.com/admin1234 — both verified working via POST /api/auth/login on the external URL.",
+  "context_for_next_testing_agent": "Reusable liveness suite at /app/backend/tests/test_api_liveness_iter12.py (run: cd /app/backend && python -m pytest tests/test_api_liveness_iter12.py -v; pytest.ini already sets -n/--dist, do not pass extra xdist flags). Login is IP rate-limited at 10/minute — if you see 429 on auth tests, wait ~60s. Push (401 invalid X-Push-Key) and MSG91 WhatsApp MOCK warnings in backend logs are expected in preview.",
+  "rca_of_the_issue": "User-reported intermittent 404s on /api/faqs, /api/plans, /api/auth/login could not be reproduced: 20/20 external-URL checks returned expected codes and 5 spaced /api/faqs probes all returned 200. Root cause is the preview container cold-start / uvicorn --reload worker restart window (supervisor backend had ~1 min uptime when testing began, and a worker reload was observed in backend.err.log). During that window the k8s ingress has no healthy /api upstream and serves a 404/5xx while the static frontend bundle still loads — matching the reported symptom exactly. No routing, prefix or code defect found."
+}

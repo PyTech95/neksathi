@@ -25,7 +25,7 @@ import jwt
 import secrets
 import stripe
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response, status, UploadFile, File
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response, UploadFile, File
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -3879,6 +3879,25 @@ async def public_qr_alert(request: Request, qr_id: str, payload: ScanAlertIn):
         "contact_channels": channels,
     }
     await db.alerts.insert_one(dict(alert))
+    # WhatsApp + SMS fan-out to owner & vehicle contacts so they are reached even
+    # when the app is closed (mirrors the tag-alert flow). Gated by provider config:
+    # runs live only if MSG91_WHATSAPP_TEMPLATE / MSG91_SMS_FLOW_ID are set, else mock.
+    titles_msg = {
+        "emergency": "🚨 EMERGENCY", "wrong_parking": "🅿️ Wrong parking",
+        "theft": "🔒 Theft alert", "fire": "🔥 Fire alert", "towing": "🚛 Being towed",
+    }
+    body = f"{titles_msg.get(payload.type, 'Alert')}: Your vehicle {v.get('number_plate','')} was reported via a Nek Sathi QR scan."
+    if payload.scanner_note:
+        body += f" Note: {payload.scanner_note[:100]}"
+    if payload.scanner_lat is not None and payload.scanner_lng is not None:
+        body += f" Location: https://maps.google.com/?q={payload.scanner_lat},{payload.scanner_lng}"
+    for phone in list(dict.fromkeys([comms.e164(p) for p in channels if p])):
+        try:
+            wa = await notify_whatsapp(phone, body, meta={"vehicle_id": v["id"], "kind": "scan_alert"})
+            if wa.get("status") == "failed":
+                await send_sms(phone, body, meta={"vehicle_id": v["id"], "kind": "scan_alert_fallback"})
+        except Exception as _e:
+            log.warning("vehicle alert whatsapp/sms failed: %s", _e)
     # Fire-and-forget push to the owner. Never blocks the primary op.
     try:
         if v.get("owner_id"):
