@@ -49,7 +49,8 @@ import AdminIntruder from "@/pages/AdminIntruder";
 import PersonaLanding from "@/pages/PersonaLanding";
 import OrgDashboard from "@/pages/OrgDashboard";
 import AdminOrgs from "@/pages/AdminOrgs";
-
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import DeleteAccount from "./pages/DeleteAccount";
 function Protected({ children, adminOnly, dealerOnly, orgOnly }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="spinner" data-testid="auth-loading" />;
@@ -97,6 +98,8 @@ function Shell() {
           <Route path="/support" element={<Protected><Support /></Protected>} />
           <Route path="/settings" element={<Protected><Settings /></Protected>} />
           <Route path="/safety" element={<Protected><Safety /></Protected>} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/delete-account" element={<DeleteAccount />} />
           <Route path="/scanner" element={<Protected><Scanner /></Protected>} />
           <Route path="/community" element={<Protected><Community /></Protected>} />
           <Route path="/stolen-phone" element={<Protected><StolenPhone /></Protected>} />
