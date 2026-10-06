@@ -1,0 +1,54 @@
+name: Build Android APK (Capacitor)
+
+# Builds a debug APK of the Nek Sathi Capacitor app on every push to main
+# and on manual dispatch. Runs on x86_64 Ubuntu runners (no ARM aapt2 issues).
+# Download the APK from the workflow run's "Artifacts" section.
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install JS deps
+        run: yarn install --frozen-lockfile
+
+      - name: Build web assets
+        run: GENERATE_SOURCEMAP=false CI=false yarn build
+        env:
+          REACT_APP_BACKEND_URL: https://neksathi-deploy.preview.emergentagent.com
+
+      - name: Capacitor sync (Android)
+        run: npx cap sync android
+
+      - name: Build debug APK
+        run: chmod +x android/gradlew && cd android && ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neksathi-debug-apk
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
