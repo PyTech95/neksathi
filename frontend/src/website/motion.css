@@ -1,0 +1,63 @@
+/* Production image-motion layer. Scoped to the public website, not app/admin pages. */
+.ns-photo-scene { overflow:hidden; isolation:isolate; background:#11131a; }
+.ns-photo-scene .ns-scene-photo { display:block; position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:50% 50%; transform-origin:52% 48%; animation:ns-photo-pan 14s ease-in-out infinite alternate; }
+.ns-scene-signals { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+.ns-signal-ring { position:absolute; left:48%; top:52%; width:44px; height:44px; margin:-22px; border:1px solid rgba(255,60,65,.8); border-radius:50%; box-shadow:0 0 25px #ff273640; animation:ns-signal 3.8s ease-out infinite; }
+.ns-signal-second { animation-delay:1.9s; }
+.ns-scan-line { position:absolute; width:19%; height:2px; left:37%; top:53%; background:linear-gradient(90deg,transparent,#ff314b,white,#ff314b,transparent); box-shadow:0 0 13px #ff304a; animation:ns-scan 4.2s ease-in-out infinite; }
+.ns-photo-family .ns-signal-ring {left:50%;top:37%}.ns-photo-family .ns-scan-line,.ns-photo-together .ns-scan-line,.ns-photo-safety .ns-scan-line{display:none}
+.ns-photo-parking .ns-signal-ring {left:60%;top:52%}.ns-photo-parking .ns-scan-line{left:52%;top:52%}
+.ns-photo-lost .ns-signal-ring {left:56%;top:47%}.ns-photo-lost .ns-scan-line{left:49%;top:50%}
+.ns-photo-safety .ns-signal-ring {left:68%;top:43%}
+.ns-photo-theft .ns-scan-line{display:none}.ns-photo-theft .ns-signal-ring{left:63%;top:62%}
+/* Replace the legacy oversized SVG offsets at ALL breakpoints. */
+.cx-hero-panel .cx-hero-scene.ns-photo-scene { position:absolute!important; inset:0 0 0 auto!important; width:74%!important; height:100%!important; max-width:none!important; opacity:1; }
+.cx-hero-shade {background:linear-gradient(90deg,#10141e 0%,#10141e 22%,#10141ee6 33%,#10141e55 53%,#10141e09 77%),linear-gradient(0deg,#10141ea0,transparent 30%)}
+.cx-hero-panel .cx-hero-copy {max-width:520px}.cx-hero-panel .cx-hero-copy h1{font-size:clamp(48px,4.6vw,70px)}
+.cx-hero-panel .cx-hero-copy>p {max-width:410px}
+.cx-story-visual > .ns-photo-scene {position:absolute;inset:0;width:100%;height:100%}
+.cx-story-visual > .ns-photo-scene > img {width:100%;height:100%;inset:0;object-fit:cover}
+.cx-story-visual {height:auto!important;min-height:370px;aspect-ratio:1.36; background:#181c24}
+.cx-story-visual .cx-visual-topline {z-index:2;color:white;text-shadow:0 1px 5px #000;background:linear-gradient(180deg,#0009,transparent);padding:14px;border-radius:8px}
+.cx-story-visual .cx-visual-caption {z-index:2;background:#ffffffed;backdrop-filter:blur(10px)}
+.cx-story-visual .cx-art-credit {color:white;text-shadow:0 1px 4px black;z-index:2}
+.cx-feature-story[data-step="1"] .ns-scan-line {animation-duration:2.3s}
+.cx-feature-story[data-step="2"] .ns-signal-ring {animation-duration:2.2s}
+.cx-inner-scene > .ns-photo-scene {position:absolute;inset:0;width:100%;height:100%}
+.cx-inner-scene-label {z-index:2}
+.cx-contact-scene.ns-photo-scene {position:relative;min-height:280px}
+.ns-family-journeys {position:absolute;inset:0;width:100%;height:63%;z-index:1}
+.cx-family-map > .cx-map-art {position:absolute!important;inset:auto 0 0!important;height:42%!important;opacity:.9}
+.cx-family-map .cx-map-pill,.cx-family-map .cx-map-note {z-index:3}
+.ns-sos-photo {position:absolute;inset:0;width:100%;height:100%;border-radius:18px}
+.cx-sos-art {isolation:isolate;overflow:hidden;border-radius:18px;background:#111821}
+.cx-sos-art .cx-sos-button {z-index:2;width:110px;height:110px;position:absolute;left:24px;bottom:50px;top:auto;transform:none;box-shadow:0 8px 35px #090f28a0}
+.cx-sos-art .cx-sos-button strong{font-size:26px}.cx-sos-art .cx-sos-button small{font-size:6px}
+.cx-sos-art>i{display:none}.cx-sos-contact-one{left:20px;top:20px!important}.cx-sos-contact-two{right:14px;bottom:58px}
+.cx-sos-art .cx-sos-disclaimer{z-index:3;background:#141825d9;color:#fff;bottom:0;left:0;right:0;padding:13px 12px;margin:0}
+.ns-motion-control {position:fixed;bottom:16px;right:16px;z-index:49;font:600 11px/1.4 inherit;font-size:11px;line-height:1.4;border:1px solid #ffffff70;border-radius:30px;padding:10px 15px;background:#151922ed;color:#fff;box-shadow:0 4px 20px #0002;cursor:pointer}
+.ns-motion-control:focus-visible{outline:3px solid #fa3a53;outline-offset:3px}
+.cx-paused .ns-photo-scene *, .ns-document-hidden *, .ns-motion-offscreen * {animation-play-state:paused!important}
+@keyframes ns-photo-pan {from{transform:scale(1.025) translate3d(-.4%,0,0)}to{transform:scale(1.09) translate3d(.4%,-.7%,0)}}
+@keyframes ns-signal {0%{transform:scale(.55);opacity:0}18%{opacity:.75}100%{transform:scale(2.6);opacity:0}}
+@keyframes ns-scan {0%,100%{transform:translateY(-14px);opacity:0}25%,75%{opacity:.7}50%{transform:translateY(18px);opacity:1}}
+@media(max-width:1023px) and (min-width:768px){.cx-hero-panel .cx-hero-copy h1{font-size:50px}.cx-hero-panel .cx-hero-copy>p{max-width:330px}.cx-hero-shade{background:linear-gradient(90deg,#10141e 0%,#10141eee 30%,#10141e88 55%,#10141e00 85%)}.cx-story-visual{min-height:320px}}
+@media(max-width:767px){
+ .cx-hero-stage{height:800px!important}
+ .cx-hero-panel .cx-hero-scene.ns-photo-scene {inset:auto 0 0!important;width:100%!important;height:365px!important}
+ .cx-hero-panel .cx-hero-shade {background:linear-gradient(180deg,#10141e 0%,#10141e 50%,#10141e00 62%,#10141e00 87%,#10141e88 100%)}
+ .cx-hero-panel .cx-hero-content {display:block;padding-top:32px}
+ .cx-hero-panel .cx-hero-copy{max-width:100%;padding-top:0}
+ .cx-hero-panel .cx-hero-copy h1{font-size:47px;line-height:1.08}
+ .cx-hero-panel .cx-hero-copy>p{font-size:13px;line-height:1.8;max-width:100%;margin:20px 0}
+ .cx-hero-panel .cx-hero-note{bottom:25px;right:0;max-width:285px}
+ .cx-hero-panel .cx-scene-caption{top:auto;bottom:320px;right:20px;font-size:6px}
+ .cx-hero-hindi{font-size:11px}
+ .cx-story-visual{height:auto!important;min-height:280px;aspect-ratio:1.24}
+ .cx-family-map{min-height:420px}.cx-inner-scene{height:335px}.cx-contact-scene.ns-photo-scene{min-height:260px}
+ .cx-sos-art{height:395px}.cx-sos-art .cx-sos-button{left:20px;bottom:52px}
+ .ns-motion-control{bottom:10px;right:10px;font-size:10px;padding:9px 12px}
+}
+@media(max-width:355px){.cx-hero-panel .cx-hero-copy h1{font-size:40px}.cx-hero-panel .cx-hero-copy>p{font-size:12px}.cx-story-visual{min-height:260px}}
+@media(prefers-reduced-motion:reduce){.ns-photo-scene *{animation:none!important;transform:none!important}.ns-scene-signals{display:none}}
+@media print{.ns-motion-control{display:none}}
