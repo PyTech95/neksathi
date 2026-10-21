@@ -16,8 +16,29 @@ from qrcode.constants import ERROR_CORRECT_H
 from PIL import Image, ImageDraw, ImageFont
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_TEMPLATE = os.path.join(_HERE, "assets", "sticker_template.png")
-_MARK = os.path.join(_HERE, "assets", "logo-mark.png")
+
+
+def _find_assets() -> str:
+    """Locate the baked ``assets/`` folder regardless of where this module
+    lives. After the package refactor sticker.py sits in app/services/ while
+    assets/ stays at the backend root, so we search a few sensible candidates
+    (and honour STICKER_ASSETS_DIR if set)."""
+    env = os.environ.get("STICKER_ASSETS_DIR", "").strip()
+    cands = [env] if env else []
+    cands += [
+        os.path.join(_HERE, "assets"),                                  # app/services/assets (old layout)
+        os.path.abspath(os.path.join(_HERE, "..", "..", "assets")),     # backend/assets (current)
+        os.path.abspath(os.path.join(_HERE, "..", "..", "..", "assets")),
+    ]
+    for c in cands:
+        if c and os.path.isfile(os.path.join(c, "sticker_template.png")):
+            return c
+    return os.path.join(_HERE, "assets")
+
+
+_ASSETS = _find_assets()
+_TEMPLATE = os.path.join(_ASSETS, "sticker_template.png")
+_MARK = os.path.join(_ASSETS, "logo-mark.png")
 
 RED = (236, 14, 20)
 WHITE = (255, 255, 255)
@@ -30,14 +51,14 @@ SCAN_TOP = 1122      # top of the lock / "SCAN TO CONNECT" line
 HDR = (180, 470, 844, 549)   # inner red header band (wipe + retitle for tags)
 
 _FONT_PATHS = [
-    os.path.join(_HERE, "assets", "fonts", "PoppinsBold.ttf"),
-    os.path.join(_HERE, "assets", "font-bold.ttf"),
+    os.path.join(_ASSETS, "fonts", "PoppinsBold.ttf"),
+    os.path.join(_ASSETS, "font-bold.ttf"),
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
 ]
 _FONT_XB = [
-    os.path.join(_HERE, "assets", "fonts", "PoppinsXB.ttf"),
-    os.path.join(_HERE, "assets", "fonts", "PoppinsBold.ttf"),
-    os.path.join(_HERE, "assets", "font-bold.ttf"),
+    os.path.join(_ASSETS, "fonts", "PoppinsXB.ttf"),
+    os.path.join(_ASSETS, "fonts", "PoppinsBold.ttf"),
+    os.path.join(_ASSETS, "font-bold.ttf"),
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
 ]
 
@@ -76,11 +97,22 @@ def _make_qr(url: str) -> Image.Image:
     return q
 
 
+_TEMPLATE_CACHE = None
+
+
+def _template() -> "Image.Image":
+    """Decode the baked template once and reuse (fast for bulk sheets)."""
+    global _TEMPLATE_CACHE
+    if _TEMPLATE_CACHE is None:
+        _TEMPLATE_CACHE = Image.open(_TEMPLATE).convert("RGB")
+    return _TEMPLATE_CACHE.copy()
+
+
 def render_sticker(url: str, code: str, title: str | None = None) -> bytes:
     """Return PNG bytes of the finished sticker for ``url`` with ``code`` printed.
     Deterministic: same url+code+title always yields the same image.
     """
-    img = Image.open(_TEMPLATE).convert("RGB")
+    img = _template()
     d = ImageDraw.Draw(img)
 
     # optional: repaint the red header band with a custom title (tags)

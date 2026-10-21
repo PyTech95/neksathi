@@ -72,6 +72,17 @@ export default function AdminOrders() {
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) { alert(e?.response?.data?.detail || "Could not open sticker"); }
   };
+  // Download the same sticker as a print-ready PDF.
+  const downloadStickerPdf = async (o) => {
+    try {
+      const r = await api.get(`/admin/orders/${o.id}/sticker.pdf`, { responseType: "blob" });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = `neksathi-${(o.number_plate || o.id)}-${o.sticker_code || ""}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) { alert(e?.response?.data?.detail || "Could not download PDF"); }
+  };
 
   // Print a clean shipping/address label for the order (what to print on the parcel)
   const esc = (s) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
@@ -193,7 +204,8 @@ body{margin:0;color:#111;padding:14px}.lbl{border:2px solid #111;border-radius:1
                           <div style={{ display: "flex", flexDirection: "column", gap: 6 }} data-testid={`sticker-${o.id}`}>
                             {o.sticker_code && <span className="muted" style={{ fontSize: 11 }}><QrCode size={11} style={{ verticalAlign: "-1px" }} /> CODE {o.sticker_code}</span>}
                             <div style={{ display: "flex", gap: 6 }}>
-                              <button className="btn btn-primary btn-sm" style={{ padding: "6px 10px" }} onClick={() => downloadSticker(o)} data-testid={`dl-sticker-${o.id}`}><Download size={13} /> Download</button>
+                              <button className="btn btn-primary btn-sm" style={{ padding: "6px 10px" }} onClick={() => downloadSticker(o)} data-testid={`dl-sticker-${o.id}`}><Download size={13} /> PNG</button>
+                              <button className="btn btn-ghost btn-sm" style={{ padding: "6px 10px" }} onClick={() => downloadStickerPdf(o)} data-testid={`pdf-sticker-${o.id}`}><FileText size={13} /> PDF</button>
                               <button className="btn btn-ghost btn-sm" style={{ padding: "6px 10px" }} onClick={() => printSticker(o)} data-testid={`print-sticker-${o.id}`}><Printer size={13} /> Print</button>
                             </div>
                           </div>

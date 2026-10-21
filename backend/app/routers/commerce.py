@@ -818,8 +818,8 @@ async def admin_order_advance(oid: str, body: AdvanceIn, _: dict = Depends(requi
     return {"ok": True, "status": body.status}
 
 
-@router.get("/admin/orders/{oid}/sticker.png")
-async def admin_order_sticker(oid: str, request: Request, _: dict = Depends(require_admin)):
+async def _order_sticker_png(oid: str, request: Request):
+    """Shared: render the order's sticker PNG + a base filename (no extension)."""
     o = await db.qr_orders.find_one({"id": oid})
     if not o:
         raise HTTPException(404, "Order not found")
@@ -837,9 +837,26 @@ async def admin_order_sticker(oid: str, request: Request, _: dict = Depends(requ
     title = "Safety QR Tag" if product == "tag" else None
     url = _scan_url(product, qr_id, request)
     png = sticker.render_sticker(url, code, title=title)
-    fname = f"neksathi-{(o.get('number_plate') or qr_id)}-{code}.png".replace(" ", "_")
+    base = f"neksathi-{(o.get('number_plate') or qr_id)}-{code}".replace(" ", "_")
+    return png, base
+
+
+@router.get("/admin/orders/{oid}/sticker.png")
+async def admin_order_sticker(oid: str, request: Request, _: dict = Depends(require_admin)):
+    png, base = await _order_sticker_png(oid, request)
     return StreamingResponse(io.BytesIO(png), media_type="image/png",
-                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+                             headers={"Content-Disposition": f'attachment; filename="{base}.png"'})
+
+
+@router.get("/admin/orders/{oid}/sticker.pdf")
+async def admin_order_sticker_pdf(oid: str, request: Request, _: dict = Depends(require_admin)):
+    png, base = await _order_sticker_png(oid, request)
+    from PIL import Image  # local import; PIL is already a dependency (sticker renderer)
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="PDF", resolution=150.0)
+    return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{base}.pdf"'})
 
 
 # =========================================================================== ADMIN · Razorpay settings

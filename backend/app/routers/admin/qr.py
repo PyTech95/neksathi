@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import base64
+import io
 import os
 from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
-from app.services.sticker_html import build_sticker_html
+from PIL import Image
+from app.services.sticker_html import build_sticker_html, build_sticker_sheet_images
 from app.services.sticker_html import VARIANTS as STICKER_VARIANTS
+from app.services.sticker import render_sticker, new_sticker_code
 from app.db import db
 from app.schemas import BulkGenerateIn, MarkSoldIn
 from app.security import require_admin
@@ -121,23 +125,33 @@ async def admin_qr_batch_stickers(
     per_row: int = 3,
     limit: int = 200,
 ):
-    """Printable HTML sticker sheet — open in browser then Ctrl/Cmd+P.
+    """Printable sticker sheet for a whole batch (dealer/vendor stock).
 
-    Public endpoint by design: the scan URLs it renders are meant to be
-    printed on stickers anyway. The random batch_id UUID guards against
-    accidental exposure.
+    Each sticker is the SAME red/black "IN CASE OF EMERGENCY" design as a single
+    order sticker — its own QR (claim URL) + a unique 6-digit code — so a bulk
+    batch looks identical to an individual one. Open in browser then Print /
+    Save PDF. Public by design (the random batch_id guards it); limited per page.
     """
-    if variant not in STICKER_VARIANTS:
-        variant = "neon"
-    per_row = max(1, min(6, per_row))
-    limit = max(1, min(500, limit))
-    base = os.environ.get("PUBLIC_APP_URL", "").rstrip("/") or ""
+    per_row = max(1, min(5, per_row))
+    limit = max(1, min(200, limit))
+    base = (os.environ.get("FRONTEND_URL") or os.environ.get("PUBLIC_WEB_URL")
+            or os.environ.get("PUBLIC_APP_URL") or "").rstrip("/")
     items: list[tuple[str, str]] = []
     async for d in db.qr_inventory.find({"batch_id": batch_id}).sort("seq", 1).limit(limit):
-        items.append((d["serial_no"], f"{base}/claim/{d['serial_no']}"))
+        # a stable unique code per inventory item (generated + stored once)
+        code = d.get("code")
+        if not code:
+            code = new_sticker_code()
+            await db.qr_inventory.update_one({"id": d["id"]}, {"$set": {"code": code}})
+        png = render_sticker(f"{base}/claim/{d['serial_no']}", code)
+        img = Image.open(io.BytesIO(png)).convert("RGB")
+        img.thumbnail((460, 690))   # shrink for a light-weight print sheet
+        buf = io.BytesIO(); img.save(buf, "JPEG", quality=85)  # JPEG keeps the sheet small; QR scans fine (ERROR_CORRECT_H)
+        du = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+        items.append((d["serial_no"], du))
     if not items:
         raise HTTPException(status_code=404, detail="Batch not found or empty")
-    html = build_sticker_html(items, variant=variant, per_row=per_row)
+    html = build_sticker_sheet_images(items, per_row=per_row)
     return Response(content=html, media_type="text/html; charset=utf-8")
 
 

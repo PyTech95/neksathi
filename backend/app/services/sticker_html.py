@@ -132,27 +132,28 @@ def build_sticker_html(
   .sheet {{
     display: grid;
     grid-template-columns: repeat({per_row}, 1fr);
-    gap: 10mm;
-    padding: 10mm;
+    gap: 6mm;
+    padding: 6mm;
+    align-items: start;
   }}
   .sticker {{
     width: 100%;
-    aspect-ratio: 3 / 4;
-    background: #FFFFFF;
+    max-width: 62mm;
+    margin: 0 auto;
     border-radius: 12px;
-    padding: 4px;
+    padding: 3px;
     background: repeating-linear-gradient(45deg,
-      {palette['primary']} 0 12px,
-      #06060D 12px 24px);
+      {palette['primary']} 0 10px,
+      #06060D 10px 20px);
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     page-break-inside: avoid;
+    break-inside: avoid;
   }}
   .border-tape {{
     background: #0F0F1A;
-    border-radius: 8px;
-    height: 100%;
-    padding: 10px 8px;
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    border-radius: 9px;
+    padding: 10px 8px 9px;
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
     color: #F5F5F7;
     position: relative;
     overflow: hidden;
@@ -179,7 +180,7 @@ def build_sticker_html(
     box-shadow: 0 0 16px {palette['primary']}55;
     z-index: 2;
   }}
-  .qr-wrap img {{ width: 105px; height: 105px; display: block; }}
+  .qr-wrap img {{ width: 148px; height: 148px; display: block; }}
   .serial {{
     font-family: "SF Mono", Menlo, Consolas, monospace;
     font-size: 12px; font-weight: 900; letter-spacing: 2px;
@@ -201,8 +202,9 @@ def build_sticker_html(
   }}
   .masked .dot {{ width: 6px; height: 6px; border-radius: 3px; background: #DC2626; }}
   .footer {{
-    margin-top: auto; text-align: center; z-index: 2;
+    text-align: center; z-index: 2;
     display: flex; flex-direction: column; gap: 2px;
+    margin-top: 2px;
   }}
   .brand {{ font-size: 11px; font-weight: 900; color: {palette['secondary']}; letter-spacing: 1px; }}
   .tag {{ font-size: 7px; color: #A1A1AA; font-weight: 700; letter-spacing: 0.5px; font-style: italic; }}
@@ -216,6 +218,58 @@ def build_sticker_html(
   </div>
   <div class="sheet">
     {body_html}
+  </div>
+</body>
+</html>
+"""
+
+
+def build_sticker_sheet_images(items, per_row: int = 3) -> str:
+    """Printable sheet where EACH sticker is the real rendered sticker image
+    (the same red/black "IN CASE OF EMERGENCY" design as a single order sticker),
+    so a dealer/vendor batch looks identical to an individual one.
+
+    ``items`` is an iterable of ``(serial_no, image_data_uri)`` tuples.
+    """
+    items = list(items)
+    count = len(items)
+    cards = "".join(
+        f'<div class="st"><img src="{du}" alt="{serial}" /><div class="sn">{serial}</div></div>'
+        for serial, du in items
+    )
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Nek Sathi · Sticker Sheet</title>
+<style>
+  @page {{ size: A4; margin: 8mm; }}
+  * {{ box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+  body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #F5F5F7; }}
+  .toolbar {{
+    position: sticky; top: 0; z-index: 10; background: #0F0F1A; color: #F5F5F7;
+    padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    border-bottom: 2px solid #e9254a;
+  }}
+  .toolbar h1 {{ margin: 0; font-size: 15px; font-weight: 900; letter-spacing: 1px; }}
+  .toolbar button {{
+    background: linear-gradient(90deg,#b3122f,#e92546); color: #fff; border: 0;
+    padding: 10px 22px; border-radius: 999px; font-weight: 900; font-size: 12px; letter-spacing: 1.2px; cursor: pointer;
+  }}
+  .sheet {{ display: grid; grid-template-columns: repeat({per_row}, 1fr); gap: 6mm; padding: 6mm; align-items: start; }}
+  .st {{ page-break-inside: avoid; break-inside: avoid; text-align: center; }}
+  .st img {{ width: 100%; max-width: 62mm; height: auto; display: block; margin: 0 auto; border-radius: 6px; }}
+  .sn {{ font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 10px; font-weight: 700; color: #333; margin-top: 3px; letter-spacing: 1px; }}
+  @media print {{ .toolbar {{ display: none; }} .sheet {{ padding: 0; }} }}
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>Nek Sathi · Printable Sticker Sheet ({count} stickers)</h1>
+    <button onclick="window.print()">🖨 Print / Save PDF</button>
+  </div>
+  <div class="sheet">
+    {cards}
   </div>
 </body>
 </html>
