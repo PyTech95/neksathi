@@ -43,8 +43,12 @@ async def rtc_call_start(request: Request, qr_id: str):
     await db.webrtc_calls.insert_one(dict(call))
     try:
         await send_push(recipients=[v["owner_id"]], data={
+            # keys the native CallMessagingService looks for (full-screen call UI)
+            "type": "incoming_call",
+            "call_id": call["id"],
+            "number_plate": v["number_plate"],
             "title": "📞 Incoming call", "message": f"Someone is calling about {v['number_plate']}",
-            "action_url": "/dashboard"}, idempotency_key="ring-" + call["id"])
+            "action_url": "/dashboard"}, idempotency_key="ring-" + call["id"], data_only=True)
     except Exception:
         pass
     return {"call_id": call["id"]}

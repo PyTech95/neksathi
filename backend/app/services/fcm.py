@@ -39,7 +39,7 @@ def _fcm_init():
     return _fcm_app
 
 
-async def fcm_send_to_user(owner_id, title, body, data=None):
+async def fcm_send_to_user(owner_id, title, body, data=None, data_only=False):
     if _fcm_init() is None:
         return
     try:
@@ -51,12 +51,25 @@ async def fcm_send_to_user(owner_id, title, body, data=None):
         return
     def _send():
         from firebase_admin import messaging
-        msg = messaging.MulticastMessage(
-            tokens=tokens,
-            notification=messaging.Notification(title=title, body=body),
-            data={k: str(v) for k, v in (data or {}).items()},
-            android=messaging.AndroidConfig(priority="high", notification=messaging.AndroidNotification(sound="default")),
-        )
+        payload = {k: str(v) for k, v in (data or {}).items()}
+        if data_only:
+            # DATA-ONLY, high priority: wakes our FirebaseMessagingService
+            # (onMessageReceived) even when the app is backgrounded / the phone is
+            # locked — required so the native full-screen incoming-call UI fires.
+            # A `notification` block would instead be shown by the system tray and
+            # our service would never run.
+            msg = messaging.MulticastMessage(
+                tokens=tokens,
+                data=payload,
+                android=messaging.AndroidConfig(priority="high"),
+            )
+        else:
+            msg = messaging.MulticastMessage(
+                tokens=tokens,
+                notification=messaging.Notification(title=title, body=body),
+                data=payload,
+                android=messaging.AndroidConfig(priority="high", notification=messaging.AndroidNotification(sound="default")),
+            )
         resp = messaging.send_each_for_multicast(msg)
         dead = []
         for i, r in enumerate(resp.responses):
@@ -73,16 +86,21 @@ async def fcm_send_to_user(owner_id, title, body, data=None):
         _fcm_log.warning("FCM send failed: %s", e)
 
 
-async def send_push(recipients, data, idempotency_key=None):
+async def send_push(recipients, data, idempotency_key=None, data_only=False):
     # FCM-backed push (shadows Emergent relay) for incidents, SOS, family, calls.
+    # Pass data_only=True for incoming calls so the native service shows the
+    # full-screen call UI over the lock screen (see fcm_send_to_user).
     if not recipients:
         return
     title = str(data.get("title") or "Nek Sathi")
     body = str(data.get("message") or "")
-    extra = {k: str(v) for k, v in (data or {}).items() if k not in ("title", "message") and v is not None}
+    if data_only:
+        payload = {k: str(v) for k, v in (data or {}).items() if v is not None}
+    else:
+        payload = {k: str(v) for k, v in (data or {}).items() if k not in ("title", "message") and v is not None}
     for rid in recipients:
         try:
-            await fcm_send_to_user(rid, title, body, extra)
+            await fcm_send_to_user(rid, title, body, payload, data_only=data_only)
         except Exception as e:
             _fcm_log.warning("send_push->fcm failed: %s", e)
 
