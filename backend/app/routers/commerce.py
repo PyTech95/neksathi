@@ -1015,6 +1015,33 @@ async def admin_vendor_dashboard(vendor_id: str, skip: int = 0, limit: int = 50,
             "counts": counts, "customers": customers, "customers_total": total_cust}
 
 
+@router.get("/admin/vendors/{vendor_id}/qr-stock")
+async def admin_vendor_qr_stock(vendor_id: str, skip: int = 0, limit: int = 50,
+                                status: Optional[str] = None, _: dict = Depends(require_admin)):
+    """Every QR serial assigned to this dealer, with its status — so the admin
+    sees exactly which serials the dealer holds, not just the counts."""
+    vendor = await db.vendors.find_one({"id": vendor_id})
+    if not vendor:
+        raise HTTPException(404, "Vendor not found")
+    name = vendor["name"]
+    filt: dict = {"sold_to_vendor": name}
+    if status:
+        filt["status"] = status
+    skip = max(0, int(skip)); limit = max(1, min(200, int(limit)))
+    total = await db.qr_inventory.count_documents(filt)
+    items = []
+    cursor = db.qr_inventory.find(
+        filt, {"_id": 0, "serial_no": 1, "status": 1, "product_type": 1, "sold_at": 1},
+    ).sort("serial_no", 1).skip(skip).limit(limit)
+    async for d in cursor:
+        items.append({
+            "serial_no": d.get("serial_no"), "status": d.get("status"),
+            "product_type": d.get("product_type"),
+            "sold_at": _aware(d["sold_at"]).isoformat() if d.get("sold_at") else None,
+        })
+    return {"items": items, "total": total}
+
+
 @router.get("/dealer/assignments")
 async def dealer_assignments(skip: int = 0, limit: int = 50, user: dict = Depends(require_dealer)):
     """What a dealer has handed out: each QR/vehicle they activated for a

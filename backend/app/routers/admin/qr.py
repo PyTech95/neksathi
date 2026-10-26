@@ -10,7 +10,7 @@ from app.services.sticker_html import build_sticker_html, build_sticker_sheet_im
 from app.services.sticker_html import VARIANTS as STICKER_VARIANTS
 from app.services.sticker import render_sticker, new_sticker_code
 from app.db import db
-from app.schemas import BulkGenerateIn, MarkSoldIn, AssignDealerIn
+from app.schemas import BulkGenerateIn, AssignDealerIn
 from app.security import require_admin
 from app.utils import new_id, now_utc
 
@@ -104,6 +104,17 @@ async def admin_qr_batches(_: dict = Depends(require_admin)):
             "sold": g["sold"], "assigned": g["assigned"],
             "created_at": g["first_created"],
         })
+    # Which dealer(s) each batch's handed-out QRs belong to, so the table can
+    # show "Assigned to Ajit" per batch.
+    dmap: dict = {}
+    async for g in db.qr_inventory.aggregate([
+        {"$match": {"sold_to_vendor": {"$ne": None}}},
+        {"$group": {"_id": {"batch_id": "$batch_id", "vendor": "$sold_to_vendor"}, "count": {"$sum": 1}}},
+    ]):
+        if g["_id"].get("vendor"):
+            dmap.setdefault(g["_id"]["batch_id"], []).append({"name": g["_id"]["vendor"], "count": g["count"]})
+    for b in out:
+        b["dealers"] = sorted(dmap.get(b["batch_id"], []), key=lambda x: -x["count"])
     return {"batches": out}
 
 
@@ -159,37 +170,40 @@ async def admin_qr_batch_stickers(
     return Response(content=html, media_type="text/html; charset=utf-8")
 
 
-@router.post("/admin/qr/mark-sold")
-async def admin_qr_mark_sold(body: MarkSoldIn, _: dict = Depends(require_admin)):
-    now = now_utc()
-    r = await db.qr_inventory.update_many(
-        {"serial_no": {"$gte": body.serial_from, "$lte": body.serial_to}, "status": "unclaimed"},
-        {"$set": {"status": "sold", "sold_to_vendor": body.vendor_name, "sold_at": now}},
-    )
-    return {"updated": r.modified_count}
-
-
 @router.post("/admin/qr/assign-dealer")
 async def admin_qr_assign_dealer(body: AssignDealerIn, _: dict = Depends(require_admin)):
     """Assign a whole batch (or a serial range) of still-available QR codes to a
-    dealer. Unlike mark-sold, this sets sold_vendor_id (by id), so the dealer's
-    own portal and the dealer-assign flow correctly recognise this stock."""
+    dealer. Sets sold_vendor_id (by id), so the dealer's own portal and the
+    dealer-assign flow correctly recognise this stock. Only Available (unclaimed)
+    QRs are handed over, so a serial already with a dealer is never reassigned."""
     vendor = await db.vendors.find_one({"id": body.vendor_id})
     if not vendor:
         raise HTTPException(status_code=404, detail="Dealer not found")
-    filt: dict = {"status": "unclaimed"}
+    scope: dict = {}
     if body.batch_id:
-        filt["batch_id"] = body.batch_id
+        scope["batch_id"] = body.batch_id
     elif body.serial_from and body.serial_to:
-        filt["serial_no"] = {"$gte": body.serial_from, "$lte": body.serial_to}
+        scope["serial_no"] = {"$gte": body.serial_from, "$lte": body.serial_to}
     else:
         raise HTTPException(status_code=400, detail="Provide a batch or a serial range")
+    # Who already holds QRs in this scope — so a 0-assign can be explained
+    # ("already assigned to X") instead of looking like a silent failure.
+    already = []
+    async for g in db.qr_inventory.aggregate([
+        {"$match": {**scope, "sold_to_vendor": {"$ne": None}}},
+        {"$group": {"_id": "$sold_to_vendor", "count": {"$sum": 1}}},
+    ]):
+        if g["_id"]:
+            already.append({"name": g["_id"], "count": g["count"]})
     now = now_utc()
-    r = await db.qr_inventory.update_many(filt, {"$set": {
+    # Only still-Available (unclaimed) QRs are handed over — an already-sold
+    # serial is never silently moved to another dealer.
+    r = await db.qr_inventory.update_many({**scope, "status": "unclaimed"}, {"$set": {
         "status": "sold", "sold_to_vendor": vendor["name"],
         "sold_vendor_id": vendor["id"], "sold_at": now,
     }})
-    return {"assigned": r.modified_count, "vendor_name": vendor["name"], "vendor_id": vendor["id"]}
+    return {"assigned": r.modified_count, "vendor_name": vendor["name"],
+            "vendor_id": vendor["id"], "already": already}
 
 
 @router.post("/admin/qr/{serial_no}/block")

@@ -8,5 +8,5 @@ from .tags import TagIn, TagOut, PublicTagOut, TagAlertIn, TagCallIn
 from .cards import CardIn, CardOut, CardMessageIn
 from .billing import PlanOut, PlanIn, CheckoutIn, ConfirmIn, SubscriptionOut
 from .support import ContactFormIn, SupportTicketIn, SupportReplyIn, FAQIn, ContactStatusIn
-from .admin import BulkGenerateIn, ClaimIn, MarkSoldIn, AssignDealerIn, BlackspotIn, BlackspotOut, VendorIn, VendorOrderIn, VendorPaymentIn, GDriveConfigIn, DriveEvidenceIn, DealerAccountIn, OrgIn, OrgAccountIn
+from .admin import BulkGenerateIn, ClaimIn, AssignDealerIn, BlackspotIn, BlackspotOut, VendorIn, VendorOrderIn, VendorPaymentIn, GDriveConfigIn, DriveEvidenceIn, DealerAccountIn, OrgIn, OrgAccountIn
 from .incidents import BridgeReqIn, BridgeOut, IncidentCreateIn, RTCDescriptionIn, RTCCandidateIn, IncidentCallIn, IncidentRespondIn

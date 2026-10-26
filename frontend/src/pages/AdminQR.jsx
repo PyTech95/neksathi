@@ -73,13 +73,28 @@ export default function AdminQR() {
 
   const block = async (serial, blocked) => { await api.post(`/admin/qr/${serial}/block`, { blocked }); loadInv(statusF, q, skip, limit); loadBatches(); };
 
+  // Build a clear message from the assign result — a 0-assign is explained
+  // ("already assigned to X") instead of looking like a silent failure.
+  const assignMsgText = (d) => {
+    const others = (d.already || []).filter((a) => a.name !== d.vendor_name);
+    const mine = (d.already || []).find((a) => a.name === d.vendor_name);
+    if (d.assigned > 0) {
+      let m = `✅ ${d.assigned} QR assigned to ${d.vendor_name}.`;
+      if (others.length) m += ` (${others.map((a) => `${a.count} already with ${a.name}`).join(", ")}.)`;
+      return m;
+    }
+    if (others.length) return `Nothing new to assign — these are already with ${others.map((a) => `${a.name} (${a.count})`).join(", ")}.`;
+    if (mine) return `These are already assigned to ${d.vendor_name}.`;
+    return `0 assigned — no Available QR in this batch/range.`;
+  };
+
   const assignDealer = async (e) => {
     e.preventDefault(); setSoldMsg("");
     if (!sold.vendor_id) { setSoldMsg("Choose a dealer first."); return; }
     if (!sold.serial_from || !sold.serial_to) { setSoldMsg("Enter the serial range."); return; }
     try {
       const r = await api.post("/admin/qr/assign-dealer", { vendor_id: sold.vendor_id, serial_from: sold.serial_from, serial_to: sold.serial_to });
-      setSoldMsg(`✅ ${r.data.assigned} QR codes assigned to ${r.data.vendor_name}.`);
+      setSoldMsg(assignMsgText(r.data));
       loadInv(statusF, q, 0, limit); setSkip(0); loadBatches();
     } catch (err) { setSoldMsg(err?.response?.data?.detail || "Could not assign."); }
   };
@@ -90,7 +105,7 @@ export default function AdminQR() {
     setAssignMsg("");
     try {
       const r = await api.post("/admin/qr/assign-dealer", { vendor_id: vid, batch_id: batchId });
-      setAssignMsg(`✅ ${r.data.assigned} available QR codes from this batch assigned to ${r.data.vendor_name}.`);
+      setAssignMsg(assignMsgText(r.data));
       setBatchAssign((m) => ({ ...m, [batchId]: "" }));
       loadBatches(); loadInv(statusF, q, skip, limit);
     } catch (err) { setAssignMsg(err?.response?.data?.detail || "Could not assign."); }
@@ -156,7 +171,7 @@ export default function AdminQR() {
               <button className="btn btn-ghost btn-block" data-testid="sold-submit"><Store size={16} /> Assign to dealer</button>
             </form>
             {vendors.length === 0 && <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>No dealers yet — create one in <Link to="/admin/dealers" className="neon">Dealers</Link>.</p>}
-            {soldMsg && <p style={{ color: "#e92546", marginTop: 12, fontSize: 14 }} data-testid="sold-msg">{soldMsg}</p>}
+            {soldMsg && <p style={{ color: soldMsg.startsWith("✅") ? "#2fcf7a" : "#e92546", marginTop: 12, fontSize: 14 }} data-testid="sold-msg">{soldMsg}</p>}
           </div>
         </div>
 
@@ -165,21 +180,32 @@ export default function AdminQR() {
           <h2 style={{ fontSize: 20, marginBottom: 12 }}>Batches</h2>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-              <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th style={th}>Batch</th><th style={th}>Total</th><th style={th}>Available</th><th style={th}>Sold</th><th style={th}>Activated</th><th style={th}>Actions</th></tr></thead>
+              <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th style={th}>Batch</th><th style={th}>Total</th><th style={th}>Available</th><th style={th}>Sold</th><th style={th}>Activated</th><th style={th}>Dealer</th><th style={th}>Actions</th></tr></thead>
               <tbody>
-                {batches.length === 0 && <tr><td style={td} colSpan={6} className="muted">No batches yet — generate one above.</td></tr>}
+                {batches.length === 0 && <tr><td style={td} colSpan={7} className="muted">No batches yet — generate one above.</td></tr>}
                 {batches.map((b) => (
                   <tr key={b.batch_id} style={{ borderTop: "1px solid rgba(179,18,47,.12)" }} data-testid={`batch-${b.batch_id}`}>
                     <td style={td}>{b.batch_label}</td><td style={td}>{b.total}</td><td style={td}>{b.unclaimed}</td><td style={td}>{b.sold}</td><td style={td}>{b.assigned}</td>
+                    <td style={td} data-testid={`batch-dealer-${b.batch_id}`}>
+                      {b.dealers?.length
+                        ? <span style={{ color: "#2fcf7a", fontWeight: 600, fontSize: 13 }}>{b.dealers.map((dl) => `${dl.name} (${dl.count})`).join(", ")}</span>
+                        : <span className="muted">—</span>}
+                    </td>
                     <td style={td}>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                         <button className="btn btn-ghost btn-sm" onClick={() => exportCSV(b.batch_id, b.batch_label)} data-testid={`csv-${b.batch_id}`}><Download size={13} /> CSV</button>
                         <button className="btn btn-ghost btn-sm" onClick={() => printStickers(b.batch_id)} data-testid={`print-${b.batch_id}`}><Printer size={13} /> Print</button>
-                        <select className="input" style={{ maxWidth: 150, padding: "6px 8px", fontSize: 12 }} value={batchAssign[b.batch_id] || ""} onChange={(e) => setBatchAssign((m) => ({ ...m, [b.batch_id]: e.target.value }))} data-testid={`assign-sel-${b.batch_id}`}>
-                          <option value="">Assign to dealer…</option>
-                          {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                        </select>
-                        <button className="btn btn-ghost btn-sm" disabled={!batchAssign[b.batch_id]} onClick={() => assignBatch(b.batch_id)} data-testid={`assign-batch-${b.batch_id}`}><Store size={13} /> Assign</button>
+                        {b.unclaimed === 0 && b.dealers?.length ? (
+                          <span style={{ color: "#2fcf7a", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }} data-testid={`batch-assigned-${b.batch_id}`}><CheckCircle2 size={13} /> Assigned</span>
+                        ) : (
+                          <>
+                            <select className="input" style={{ maxWidth: 150, padding: "6px 8px", fontSize: 12 }} value={batchAssign[b.batch_id] || ""} onChange={(e) => setBatchAssign((m) => ({ ...m, [b.batch_id]: e.target.value }))} data-testid={`assign-sel-${b.batch_id}`}>
+                              <option value="">Assign to dealer…</option>
+                              {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                            </select>
+                            <button className="btn btn-ghost btn-sm" disabled={!batchAssign[b.batch_id]} onClick={() => assignBatch(b.batch_id)} data-testid={`assign-batch-${b.batch_id}`}><Store size={13} /> Assign</button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -187,7 +213,7 @@ export default function AdminQR() {
               </tbody>
             </table>
           </div>
-          {assignMsg && <p style={{ color: "#e92546", marginTop: 12, fontSize: 14 }} data-testid="assign-msg">{assignMsg}</p>}
+          {assignMsg && <p style={{ color: assignMsg.startsWith("✅") ? "#2fcf7a" : "#e92546", marginTop: 12, fontSize: 14 }} data-testid="assign-msg">{assignMsg}</p>}
         </div>
 
         {/* Inventory */}
