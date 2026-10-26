@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import api from "@/lib/api";
-import { Building2, Plus, ArrowLeft, X, KeyRound, School, HeartPulse, Briefcase, CheckCircle2, QrCode } from "lucide-react";
+import api, { API } from "@/lib/api";
+import { Building2, Plus, ArrowLeft, X, KeyRound, School, HeartPulse, Briefcase, CheckCircle2, QrCode, Printer, Download, Power } from "lucide-react";
 
 const ORG_ICON = { school: <School size={18} />, hospital: <HeartPulse size={18} />, office: <Briefcase size={18} />, other: <Building2 size={18} /> };
 const emptyOrg = { name: "", org_type: "school", city: "", phone: "" };
@@ -16,8 +16,29 @@ export default function AdminOrgs() {
   const [acctForm, setAcctForm] = useState({ email: "", password: "" });
   const [acctMsg, setAcctMsg] = useState("");
 
+  const [batchesFor, setBatchesFor] = useState(null); // org id whose batches are open
+  const [batchList, setBatchList] = useState([]);
+
   const load = useCallback(async () => setOrgs((await api.get("/admin/orgs")).data.results), []);
   useEffect(() => { load(); }, [load]);
+
+  const toggleBatches = async (o) => {
+    if (batchesFor === o.id) { setBatchesFor(null); return; }
+    try { setBatchList((await api.get(`/admin/orgs/${o.id}/batches`)).data.batches || []); setBatchesFor(o.id); }
+    catch (_) { setBatchList([]); setBatchesFor(o.id); }
+  };
+  const printBatch = (batchId) => window.open(`${API}/admin/qr/batch/${batchId}/stickers.html?variant=neon&per_row=3`, "_blank");
+  const csvBatch = async (batchId, label) => {
+    const res = await api.get(`/admin/qr/batch/${batchId}/export.csv`, { responseType: "blob" });
+    const url = URL.createObjectURL(new Blob([res.data], { type: "text/csv" }));
+    const a = document.createElement("a"); a.href = url; a.download = `qr-${(label || batchId).replace(/\s/g, "_")}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+  const toggleActive = async (o) => {
+    const activate = o.active === false;
+    if (!activate && !window.confirm(`Deactivate ${o.name}? Its tags won't be usable (no new registrations, scanning blocked) until reactivated.`)) return;
+    try { await api.patch(`/admin/orgs/${o.id}/active`, { active: activate }); load(); } catch (_) {}
+  };
 
   const createOrg = async (e) => {
     e.preventDefault(); setBusy(true); setErr("");
@@ -58,13 +79,36 @@ export default function AdminOrgs() {
               </div>
               <div className="grid grid-3" style={{ marginTop: 14, gap: 8, textAlign: "center" }}>
                 <div><div className="stat-num" style={{ fontSize: 20 }}>{o.counts.issued}</div><div className="muted" style={{ fontSize: 11 }}>Issued</div></div>
-                <div><div className="stat-num" style={{ fontSize: 20, color: "#10b981" }}>{o.counts.activated}</div><div className="muted" style={{ fontSize: 11 }}>Activated</div></div>
-                <div><div className="stat-num" style={{ fontSize: 20, color: "#f5a524" }}>{o.counts.unclaimed}</div><div className="muted" style={{ fontSize: 11 }}>Pending</div></div>
+                <div><div className="stat-num" style={{ fontSize: 20, color: "#10b981" }}>{o.counts.activated}</div><div className="muted" style={{ fontSize: 11 }}>Used</div></div>
+                <div><div className="stat-num" style={{ fontSize: 20, color: "#f5a524" }}>{o.counts.unclaimed}</div><div className="muted" style={{ fontSize: 11 }}>Remaining</div></div>
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
+                {o.active === false
+                  ? <span style={{ color: "#ff3b5c", fontWeight: 700, fontSize: 12.5 }} data-testid={`org-status-${o.id}`}>● Inactive</span>
+                  : <span style={{ color: "#2fcf7a", fontWeight: 700, fontSize: 12.5 }} data-testid={`org-status-${o.id}`}>● Active</span>}
                 <button className="btn btn-ghost btn-sm" onClick={() => { setAcct(o); setAcctMsg(""); setAcctForm({ email: o.account_email || "", password: "" }); }} data-testid={`org-login-btn-${o.id}`}><KeyRound size={14} /> {o.has_login ? "Reset login" : "Create login"}</button>
                 <Link to={`/admin/qr?org=${o.id}&type=tag`} className="btn btn-ghost btn-sm" data-testid={`org-batch-btn-${o.id}`}><QrCode size={14} /> Generate tags</Link>
+                <button className="btn btn-ghost btn-sm" onClick={() => toggleBatches(o)} data-testid={`org-print-btn-${o.id}`}><Printer size={14} /> Print QR</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(o)} data-testid={`org-active-btn-${o.id}`}><Power size={14} color={o.active === false ? "#2fcf7a" : "#ff3b5c"} /> {o.active === false ? "Activate" : "Deactivate"}</button>
               </div>
+              {batchesFor === o.id && (
+                <div className="glass" style={{ marginTop: 12, padding: 12, borderRadius: 12 }} data-testid={`org-batches-${o.id}`}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>QR batches — print or download (only the batch you pick)</div>
+                  {batchList.length === 0 ? <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>No QR batches yet. Use “Generate tags”.</p> : (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {batchList.map((b) => (
+                        <div key={b.batch_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", fontSize: 12.5 }} data-testid={`org-batch-${b.batch_id}`}>
+                          <span><b>{b.batch_label}</b> · {b.total} tags <span className="muted">({b.used} used, {b.remaining} left)</span></span>
+                          <span style={{ display: "flex", gap: 6 }}>
+                            <button className="btn btn-ghost btn-sm" onClick={() => printBatch(b.batch_id)} data-testid={`org-batch-print-${b.batch_id}`}><Printer size={13} /> Print PDF</button>
+                            <button className="btn btn-ghost btn-sm" onClick={() => csvBatch(b.batch_id, b.batch_label)}><Download size={13} /> CSV</button>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

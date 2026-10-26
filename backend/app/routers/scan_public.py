@@ -231,6 +231,10 @@ async def qr_claim(body: ClaimIn, user: dict = Depends(current_user)):
         raise HTTPException(status_code=404, detail="Serial not found")
     if d["status"] == "assigned":
         raise HTTPException(status_code=409, detail="This QR is already claimed")
+    if d.get("org_id"):
+        org = await db.organizations.find_one({"id": d["org_id"]})
+        if org is not None and org.get("active") is False:
+            raise HTTPException(status_code=403, detail="This organization's tags are deactivated. Please contact the organization.")
     p = body.payload or {}
     new_qr = d["qr_id"]
     new_doc_id = new_id()

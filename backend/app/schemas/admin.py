@@ -53,6 +53,22 @@ class VendorActiveIn(BaseModel):
     active: bool
 
 
+class OrgActiveIn(BaseModel):
+    active: bool
+
+
+class OrgTagRegisterIn(BaseModel):
+    serial_no: str
+    tag_type: str = "kid"
+    name: str = Field(min_length=1, max_length=120)
+    guardian_name: Optional[str] = Field(default=None, max_length=120)
+    guardian_phone: Optional[str] = Field(default=None, max_length=20)
+    blood_group: Optional[str] = Field(default=None, max_length=8)
+    description: Optional[str] = Field(default=None, max_length=300)
+    medical_notes: Optional[str] = Field(default=None, max_length=500)
+    metadata: dict = Field(default_factory=dict)
+
+
 class AssignDealerIn(BaseModel):
     """Assign QR codes to a dealer/vendor by id (sets sold_vendor_id so the
     dealer-assign flow recognises its own stock). Pass a batch_id OR a serial range."""
