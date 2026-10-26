@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import Pager from "@/components/Pager";
-import { Users, ArrowLeft, LogOut, QrCode, PackageOpen, PackageCheck } from "lucide-react";
+import { Users, ArrowLeft, LogOut, QrCode, PackageOpen, PackageCheck, Ban, Store } from "lucide-react";
 
 const PLAN_PILL = { active: "pill-ok", grace: "pill-warn", expired: "pill-danger", none: "pill-muted" };
 const th = { padding: "8px 10px", fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: ".04em" };
@@ -17,14 +17,33 @@ export default function DealerCustomers() {
   const [total, setTotal] = useState(0);
   const [skip, setSkip] = useState(0);
   const [limit, setLimit] = useState(50);
+  const [deactivated, setDeactivated] = useState(false);
+
+  const isDeact = (e) => e?.response?.status === 403 && /deactiv/i.test(e?.response?.data?.detail || "");
 
   const load = useCallback(async (sk, lim) => {
     const p = new URLSearchParams(); p.set("skip", sk); p.set("limit", lim);
-    const r = (await api.get(`/dealer/assignments?${p.toString()}`)).data;
-    setRows(r.customers); setTotal(r.customers_total ?? r.customers.length);
+    try {
+      const r = (await api.get(`/dealer/assignments?${p.toString()}`)).data;
+      setRows(r.customers); setTotal(r.customers_total ?? r.customers.length);
+    } catch (e) { if (isDeact(e)) setDeactivated(true); }
   }, []);
 
-  useEffect(() => { api.get("/dealer/me").then((r) => setMe(r.data)).catch(() => {}); load(0, 50); }, [load]);
+  useEffect(() => { api.get("/dealer/me").then((r) => setMe(r.data)).catch((e) => { if (isDeact(e)) setDeactivated(true); }); load(0, 50); }, [load]);
+
+  if (deactivated) return (
+    <div className="page" data-testid="dealer-deactivated"><div className="container-nk" style={{ maxWidth: 560 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <span className="chip"><Store size={13} /> Dealer portal</span>
+        <button className="btn btn-ghost btn-sm" data-testid="dealer-logout" onClick={() => { logout(); nav("/"); }}><LogOut size={15} /> Logout</button>
+      </div>
+      <div className="glass card-pad" style={{ padding: 34, marginTop: 24, textAlign: "center", border: "1px solid rgba(255,59,92,.5)" }}>
+        <Ban size={52} color="#ff3b5c" />
+        <h2 style={{ fontSize: 24, marginTop: 14 }}>Your account has been deactivated</h2>
+        <p className="muted" style={{ marginTop: 8 }}>You can log in, but you can't scan or assign QR codes right now. Please contact the admin to reactivate your account.</p>
+      </div>
+    </div></div>
+  );
 
   const fmt = (d) => d ? new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—";
 

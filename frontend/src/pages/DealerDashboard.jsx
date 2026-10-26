@@ -18,15 +18,33 @@ export default function DealerDashboard() {
   const [inv, setInv] = useState([]);
   const [statusF, setStatusF] = useState("");
   const [q, setQ] = useState("");
+  const [deactivated, setDeactivated] = useState(false);
+
+  const isDeact = (e) => e?.response?.status === 403 && /deactiv/i.test(e?.response?.data?.detail || "");
 
   const loadInv = useCallback(async (status = statusF, query = q) => {
     const p = new URLSearchParams();
     if (status) p.set("status", status);
     if (query) p.set("q", query);
-    setInv((await api.get(`/dealer/inventory?${p.toString()}`)).data.items);
+    try { setInv((await api.get(`/dealer/inventory?${p.toString()}`)).data.items); }
+    catch (e) { if (isDeact(e)) setDeactivated(true); }
   }, [statusF, q]);
 
-  useEffect(() => { api.get("/dealer/me").then((r) => setMe(r.data)); loadInv(); }, [loadInv]);
+  useEffect(() => { api.get("/dealer/me").then((r) => setMe(r.data)).catch((e) => { if (isDeact(e)) setDeactivated(true); }); loadInv(); }, [loadInv]);
+
+  if (deactivated) return (
+    <div className="page" data-testid="dealer-deactivated"><div className="container-nk" style={{ maxWidth: 560 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <span className="chip"><Store size={13} /> Dealer portal</span>
+        <button className="btn btn-ghost btn-sm" data-testid="dealer-logout" onClick={() => { logout(); nav("/"); }}><LogOut size={15} /> Logout</button>
+      </div>
+      <div className="glass card-pad" style={{ padding: 34, marginTop: 24, textAlign: "center", border: "1px solid rgba(255,59,92,.5)" }}>
+        <Ban size={52} color="#ff3b5c" />
+        <h2 style={{ fontSize: 24, marginTop: 14 }}>Your account has been deactivated</h2>
+        <p className="muted" style={{ marginTop: 8 }}>You can log in, but you can't scan or assign QR codes right now. Please contact the admin to reactivate your account.</p>
+      </div>
+    </div></div>
+  );
 
   return (
     <div className="page" data-testid="dealer-page">

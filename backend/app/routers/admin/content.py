@@ -4,7 +4,7 @@ from datetime import timedelta
 from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from app.db import db
-from app.schemas import ContactStatusIn, FAQIn, PlanIn, PlanOut, SupportReplyIn, VendorIn, VendorOrderIn, VendorPaymentIn
+from app.schemas import ContactStatusIn, FAQIn, PlanIn, PlanOut, SupportReplyIn, VendorIn, VendorActiveIn, VendorOrderIn, VendorPaymentIn
 from app.security import require_admin
 from app.utils import clean, new_id, now_utc, plan_out
 
@@ -32,6 +32,7 @@ def _vendor_out(v: dict) -> dict:
         "address": v.get("address"), "city": v.get("city"),
         "state": v.get("state"), "gstin": v.get("gstin"),
         "notes": v.get("notes"),
+        "active": v.get("active", True),
         "created_at": v["created_at"],
     }
 
@@ -67,6 +68,7 @@ async def _vendor_totals(vendor_id: str) -> dict:
 async def admin_vendor_create(body: VendorIn, admin: dict = Depends(require_admin)):
     doc = {
         "id": new_id(), **body.model_dump(),
+        "active": True,
         "created_at": now_utc(), "created_by": admin["id"],
     }
     await db.vendors.insert_one(doc)
@@ -159,6 +161,16 @@ async def admin_vendor_update(vendor_id: str, body: VendorIn, _: dict = Depends(
         raise HTTPException(404, "Vendor not found")
     v = await db.vendors.find_one({"id": vendor_id})
     return _vendor_out(v)
+
+
+@router.patch("/admin/vendors/{vendor_id}/active")
+async def admin_vendor_set_active(vendor_id: str, body: VendorActiveIn, _: dict = Depends(require_admin)):
+    """Activate / deactivate a dealer. A deactivated dealer can still log in but
+    every dealer action (portal, scan & assign) is blocked with a clear message."""
+    r = await db.vendors.update_one({"id": vendor_id}, {"$set": {"active": bool(body.active)}})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Vendor not found")
+    return {"id": vendor_id, "active": bool(body.active)}
 
 
 @router.delete("/admin/vendors/{vendor_id}")

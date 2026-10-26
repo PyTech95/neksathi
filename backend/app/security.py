@@ -109,4 +109,7 @@ def to_user_out(u: dict) -> UserOut:
 async def require_dealer(user: dict = Depends(current_user)) -> dict:
     if not user.get("is_dealer") or not user.get("vendor_id"):
         raise HTTPException(status_code=403, detail="Dealer access only")
+    vendor = await db.vendors.find_one({"id": user["vendor_id"]})
+    if vendor is not None and vendor.get("active") is False:
+        raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact the admin.")
     return user

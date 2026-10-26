@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { Store, Plus, ArrowLeft, X, KeyRound, Check } from "lucide-react";
+import { Store, Plus, ArrowLeft, X, KeyRound, Check, Power } from "lucide-react";
 
 export default function AdminDealers() {
   const [dealers, setDealers] = useState([]);
@@ -25,6 +25,12 @@ export default function AdminDealers() {
     finally { setBusy(false); }
   };
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  const toggleActive = async (v) => {
+    const activate = v.active === false;  // currently off -> turn on
+    if (!activate && !window.confirm(`Deactivate ${v.name}? They can still log in but won't be able to scan or assign any QR until reactivated.`)) return;
+    try { await api.patch(`/admin/vendors/${v.id}/active`, { active: activate }); load(); } catch (_) {}
+  };
 
   const createAccount = async (e) => {
     e.preventDefault(); setAcctMsg(""); setAcctBusy(true);
@@ -55,13 +61,23 @@ export default function AdminDealers() {
         <div className="glass card-pad" style={{ padding: 22 }}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-              <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th style={th}>Dealer</th><th style={th}>Contact</th><th style={th}>City</th><th style={th}>QR given</th><th style={th}>Login</th></tr></thead>
+              <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th style={th}>Dealer</th><th style={th}>Contact</th><th style={th}>City</th><th style={th}>QR given</th><th style={th}>Status</th><th style={th}>Login</th></tr></thead>
               <tbody>
-                {dealers.length === 0 && <tr><td style={td} colSpan={5} className="muted">No dealers yet.</td></tr>}
+                {dealers.length === 0 && <tr><td style={td} colSpan={6} className="muted">No dealers yet.</td></tr>}
                 {dealers.map((v) => (
                   <tr key={v.id} style={{ borderTop: "1px solid rgba(179,18,47,.12)" }} data-testid={`dealer-${v.name}`}>
                     <td style={td}><Link to={`/admin/dealers/${v.id}`} style={{ color: "#ff5a74", fontWeight: 700, textDecoration: "none" }} data-testid={`open-dealer-${v.name}`}>{v.name}</Link></td><td style={td} className="muted">{v.contact_name || v.phone || "—"}</td>
                     <td style={td} className="muted">{v.city || "—"}</td><td style={td}>{v.qr_assigned ?? v.total_qty ?? 0}</td>
+                    <td style={td}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        {v.active === false
+                          ? <span style={{ color: "#ff3b5c", fontWeight: 700, fontSize: 12.5 }}>● Inactive</span>
+                          : <span style={{ color: "#2fcf7a", fontWeight: 700, fontSize: 12.5 }}>● Active</span>}
+                        <button className="btn btn-ghost btn-sm" onClick={() => toggleActive(v)} data-testid={`toggle-active-${v.name}`} title={v.active === false ? "Activate dealer" : "Deactivate dealer"}>
+                          <Power size={13} color={v.active === false ? "#2fcf7a" : "#ff3b5c"} /> {v.active === false ? "Activate" : "Deactivate"}
+                        </button>
+                      </div>
+                    </td>
                     <td style={td}>
                       {v.has_login
                         ? <span style={{ color: "#e92546", fontSize: 12, fontWeight: 700 }}><Check size={13} style={{ verticalAlign: "-2px" }} /> {v.account_email}</span>

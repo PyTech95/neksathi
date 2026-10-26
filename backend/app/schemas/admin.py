@@ -49,6 +49,10 @@ class ClaimIn(BaseModel):
     payload: dict
 
 
+class VendorActiveIn(BaseModel):
+    active: bool
+
+
 class AssignDealerIn(BaseModel):
     """Assign QR codes to a dealer/vendor by id (sets sold_vendor_id so the
     dealer-assign flow recognises its own stock). Pass a batch_id OR a serial range."""
