@@ -1,14 +1,19 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 // Reusable CENTERED modal/popup dialog (not a bottom sheet).
 //
-// Built as a scroll container: the backdrop itself scrolls, and an inner
-// wrapper with `min-height:100%` + flex-centering holds the card. So when the
-// card fits it sits in the middle, and when it's taller than the screen (small
-// phones, or when the mobile keyboard shrinks the viewport) the WHOLE popup
-// scrolls up/down — every control (e.g. the Verify button, the close ✕) always
-// stays reachable and never gets clipped.
+// Rendered through a PORTAL into <body> so it escapes any ancestor that has a
+// transform / filter / backdrop-filter (e.g. our `.glass` cards). Without the
+// portal, `position: fixed` would be relative to that ancestor instead of the
+// viewport, which pushed the popup down the page (especially on mobile).
+//
+// It is also a scroll container: the backdrop scrolls and an inner wrapper with
+// `min-height:100%` + flex-centering holds the card, so when the card fits it
+// sits dead-center, and when it's taller than the screen (small phones, or when
+// the keyboard shrinks the viewport) the whole popup scrolls — every control
+// (Verify button, close ✕) always stays reachable and nothing is clipped.
 export default function Modal({ open, onClose, title, children, maxWidth = 440 }) {
   useEffect(() => {
     if (!open) return;
@@ -23,15 +28,16 @@ export default function Modal({ open, onClose, title, children, maxWidth = 440 }
   }, [open, onClose]);
 
   if (!open) return null;
+  if (typeof document === "undefined") return null;
 
-  return (
+  const node = (
     <div
       onClick={onClose}
       data-testid="modal-backdrop"
       style={{
-        position: "fixed", inset: 0, zIndex: 8000,
+        position: "fixed", inset: 0, zIndex: 9999,
         overflowY: "auto", WebkitOverflowScrolling: "touch",
-        background: "rgba(3,3,8,.68)", backdropFilter: "blur(5px)",
+        background: "rgba(3,3,8,.72)", backdropFilter: "blur(5px)", WebkitBackdropFilter: "blur(5px)",
         animation: "sheetFade .18s ease",
       }}
     >
@@ -44,14 +50,13 @@ export default function Modal({ open, onClose, title, children, maxWidth = 440 }
         <div
           onClick={(e) => e.stopPropagation()}
           data-testid="modal"
-          className="glass"
           style={{
             width: "100%", maxWidth,
             background: "#0f0f17",
             border: "1px solid rgba(233,37,70,.35)",
             borderRadius: 20,
             padding: "18px 20px 22px",
-            boxShadow: "0 28px 70px -14px rgba(0,0,0,.8)",
+            boxShadow: "0 28px 70px -14px rgba(0,0,0,.85)",
             animation: "modalPop .22s cubic-bezier(.2,.8,.2,1)",
           }}
         >
@@ -69,4 +74,6 @@ export default function Modal({ open, onClose, title, children, maxWidth = 440 }
       </div>
     </div>
   );
+
+  return createPortal(node, document.body);
 }

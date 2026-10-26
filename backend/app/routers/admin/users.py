@@ -42,7 +42,7 @@ async def admin_stats(_: dict = Depends(require_admin)):
 
 
 @router.get("/admin/users")
-async def admin_users(_: dict = Depends(require_admin), q: Optional[str] = None, limit: int = 100):
+async def admin_users(_: dict = Depends(require_admin), q: Optional[str] = None, skip: int = 0, limit: int = 50):
     filt: dict = {}
     if q:
         filt = {"$or": [
@@ -50,8 +50,11 @@ async def admin_users(_: dict = Depends(require_admin), q: Optional[str] = None,
             {"name": {"$regex": q, "$options": "i"}},
             {"phone": {"$regex": q, "$options": "i"}},
         ]}
+    skip = max(0, skip)
+    limit = max(1, min(200, limit))
+    total = await db.users.count_documents(filt)
     users = []
-    async for u in db.users.find(filt).sort("created_at", -1).limit(limit):
+    async for u in db.users.find(filt).sort("created_at", -1).skip(skip).limit(limit):
         v_count = await db.vehicles.count_documents({"owner_id": u["id"]})
         users.append({
             "id": u["id"],
@@ -63,7 +66,7 @@ async def admin_users(_: dict = Depends(require_admin), q: Optional[str] = None,
             "vehicles": v_count,
             "created_at": u["created_at"],
         })
-    return {"count": len(users), "results": users}
+    return {"total": total, "count": len(users), "results": users}
 
 
 @router.post("/admin/users/{user_id}/suspend")

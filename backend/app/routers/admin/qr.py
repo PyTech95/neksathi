@@ -10,7 +10,7 @@ from app.services.sticker_html import build_sticker_html, build_sticker_sheet_im
 from app.services.sticker_html import VARIANTS as STICKER_VARIANTS
 from app.services.sticker import render_sticker, new_sticker_code
 from app.db import db
-from app.schemas import BulkGenerateIn, MarkSoldIn
+from app.schemas import BulkGenerateIn, MarkSoldIn, AssignDealerIn
 from app.security import require_admin
 from app.utils import new_id, now_utc
 
@@ -42,7 +42,8 @@ async def admin_qr_bulk_generate(body: BulkGenerateIn, admin: dict = Depends(req
             "id": new_id(), "seq": seq, "serial_no": _next_serial(seq),
             "qr_id": new_id(), "status": "unclaimed",
             "batch_id": batch_id, "batch_label": batch_label, "notes": body.notes,
-            "intended_type": body.product_type, "org_name": (org_name or None), "org_id": org_id,
+            "intended_type": body.product_type, "intended_subtype": body.product_subtype,
+            "org_name": (org_name or None), "org_id": org_id,
             "assigned_to_user_id": None, "product_type": None, "assigned_at": None,
             "sold_to_vendor": None, "sold_at": None,
             "created_at": now_utc(), "created_by": admin["id"],
@@ -60,14 +61,17 @@ async def admin_qr_bulk_generate(body: BulkGenerateIn, admin: dict = Depends(req
 async def admin_qr_inventory(
     _: dict = Depends(require_admin),
     status: Optional[str] = None, batch_id: Optional[str] = None,  # noqa: F811
-    q: Optional[str] = None, limit: int = 200,
+    q: Optional[str] = None, skip: int = 0, limit: int = 50,
 ):
     filt: dict = {}
     if status: filt["status"] = status
     if batch_id: filt["batch_id"] = batch_id
     if q: filt["serial_no"] = {"$regex": q, "$options": "i"}
+    skip = max(0, skip)
+    limit = max(1, min(200, limit))
+    total = await db.qr_inventory.count_documents(filt)
     items = []
-    async for d in db.qr_inventory.find(filt).sort("seq", -1).limit(limit):
+    async for d in db.qr_inventory.find(filt).sort("seq", -1).skip(skip).limit(limit):
         items.append({
             "id": d["id"], "serial_no": d["serial_no"], "qr_id": d["qr_id"],
             "status": d["status"], "batch_label": d.get("batch_label"),
@@ -76,7 +80,7 @@ async def admin_qr_inventory(
             "assigned_to_user_id": d.get("assigned_to_user_id"),
             "created_at": d["created_at"], "assigned_at": d.get("assigned_at"),
         })
-    return {"count": len(items), "items": items}
+    return {"total": total, "count": len(items), "items": items}
 
 
 @router.get("/admin/qr/batches")
@@ -163,6 +167,29 @@ async def admin_qr_mark_sold(body: MarkSoldIn, _: dict = Depends(require_admin))
         {"$set": {"status": "sold", "sold_to_vendor": body.vendor_name, "sold_at": now}},
     )
     return {"updated": r.modified_count}
+
+
+@router.post("/admin/qr/assign-dealer")
+async def admin_qr_assign_dealer(body: AssignDealerIn, _: dict = Depends(require_admin)):
+    """Assign a whole batch (or a serial range) of still-available QR codes to a
+    dealer. Unlike mark-sold, this sets sold_vendor_id (by id), so the dealer's
+    own portal and the dealer-assign flow correctly recognise this stock."""
+    vendor = await db.vendors.find_one({"id": body.vendor_id})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Dealer not found")
+    filt: dict = {"status": "unclaimed"}
+    if body.batch_id:
+        filt["batch_id"] = body.batch_id
+    elif body.serial_from and body.serial_to:
+        filt["serial_no"] = {"$gte": body.serial_from, "$lte": body.serial_to}
+    else:
+        raise HTTPException(status_code=400, detail="Provide a batch or a serial range")
+    now = now_utc()
+    r = await db.qr_inventory.update_many(filt, {"$set": {
+        "status": "sold", "sold_to_vendor": vendor["name"],
+        "sold_vendor_id": vendor["id"], "sold_at": now,
+    }})
+    return {"assigned": r.modified_count, "vendor_name": vendor["name"], "vendor_id": vendor["id"]}
 
 
 @router.post("/admin/qr/{serial_no}/block")

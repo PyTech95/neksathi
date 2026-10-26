@@ -999,8 +999,12 @@ async def admin_vendor_dashboard(vendor_id: str, skip: int = 0, limit: int = 50,
         elif st["status"] == "expired":
             expired += 1
         owner = await db.users.find_one({"id": v["owner_id"]}, {"_id": 0, "phone": 1, "name": 1})
+        qrdoc = await db.qr_inventory.find_one({"qr_id": v.get("qr_id")}, {"_id": 0, "serial_no": 1})
         customers.append({
             "vehicle_id": v["id"], "number_plate": v.get("number_plate"),
+            "vehicle_type": v.get("vehicle_type"), "make_model": v.get("make_model"), "color": v.get("color"),
+            "serial_no": (qrdoc or {}).get("serial_no"),
+            "customer_name": (owner or {}).get("name"),
             "mobile": (owner or {}).get("phone"), "plan_name": v.get("plan_name"),
             "plan_status": st["status"], "days_left": st["days_left"], "expires_at": st["expires_at"],
             "assigned_at": _aware(v.get("created_at")).isoformat() if v.get("created_at") else None})
@@ -1009,3 +1013,30 @@ async def admin_vendor_dashboard(vendor_id: str, skip: int = 0, limit: int = 50,
     return {"vendor": {"id": vendor["id"], "name": name, "city": vendor.get("city"),
                        "phone": vendor.get("phone")},
             "counts": counts, "customers": customers, "customers_total": total_cust}
+
+
+@router.get("/dealer/assignments")
+async def dealer_assignments(skip: int = 0, limit: int = 50, user: dict = Depends(require_dealer)):
+    """What a dealer has handed out: each QR/vehicle they activated for a
+    customer, with the customer, vehicle, plan, validity and date."""
+    vendor_id = user.get("vendor_id")
+    vendor = await db.vendors.find_one({"id": vendor_id})
+    if not vendor:
+        raise HTTPException(404, "Dealer profile not found")
+    skip = max(0, int(skip)); limit = max(1, min(100, int(limit)))
+    total = await db.vehicles.count_documents({"vendor_id": vendor_id})
+    customers = []
+    cursor = db.vehicles.find({"vendor_id": vendor_id}).sort("created_at", -1).skip(skip).limit(limit)
+    async for v in cursor:
+        st = plan_state(v)
+        owner = await db.users.find_one({"id": v["owner_id"]}, {"_id": 0, "phone": 1, "name": 1})
+        qrdoc = await db.qr_inventory.find_one({"qr_id": v.get("qr_id")}, {"_id": 0, "serial_no": 1})
+        customers.append({
+            "vehicle_id": v["id"], "number_plate": v.get("number_plate"),
+            "vehicle_type": v.get("vehicle_type"), "make_model": v.get("make_model"), "color": v.get("color"),
+            "serial_no": (qrdoc or {}).get("serial_no"),
+            "customer_name": (owner or {}).get("name"), "mobile": (owner or {}).get("phone"),
+            "plan_name": v.get("plan_name"), "plan_status": st["status"],
+            "days_left": st["days_left"], "expires_at": st["expires_at"],
+            "assigned_at": _aware(v.get("created_at")).isoformat() if v.get("created_at") else None})
+    return {"customers": customers, "customers_total": total}

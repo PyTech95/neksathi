@@ -4,6 +4,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { runCheckout, rupee } from "@/lib/pay";
 import { Car, QrCode, CheckCircle2, MapPin, CreditCard, ChevronRight, Plus, ShieldCheck, ShieldAlert } from "lucide-react";
+import VehicleFields, { tidyVehicle } from "@/components/VehicleFields";
 
 const TYPES = ["car", "bike", "tractor", "commercial", "other"];
 const emptyAddr = { name: "", phone: "", line1: "", line2: "", city: "", pincode: "", landmark: "" };
@@ -19,7 +20,7 @@ export default function BuyQR() {
   const [vid, setVid] = useState(vehicleId || "");
   const [planId, setPlanId] = useState("");
   const [addr, setAddr] = useState(emptyAddr);
-  const [newV, setNewV] = useState({ number_plate: "", vehicle_type: "car", make_model: "" });
+  const [newV, setNewV] = useState({ number_plate: "", vehicle_type: "car", brand: "", model: "", color: "" });
   const [addingV, setAddingV] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -45,9 +46,9 @@ export default function BuyQR() {
   const addVehicle = async (e) => {
     e.preventDefault(); setErr(""); setAddingV(true);
     try {
-      const r = await api.post("/vehicles", { ...newV, speed_limit_kmh: 80 });
+      const r = await api.post("/vehicles", { number_plate: newV.number_plate, vehicle_type: newV.vehicle_type, ...tidyVehicle(newV), speed_limit_kmh: 80 });
       setVehicles((vs) => [r.data, ...vs]);
-      setVid(r.data.id); setNewV({ number_plate: "", vehicle_type: "car", make_model: "" });
+      setVid(r.data.id); setNewV({ number_plate: "", vehicle_type: "car", brand: "", model: "", color: "" });
       setStep("plan");
     } catch (e) { setErr(e?.response?.data?.detail || "Could not add vehicle"); }
     finally { setAddingV(false); }
@@ -110,10 +111,12 @@ export default function BuyQR() {
               <h3 style={{ fontSize: 16, marginBottom: 10 }}>…or add a new vehicle</h3>
               <form onSubmit={addVehicle}>
                 <div className="field"><label>Number plate</label><input className="input" value={newV.number_plate} onChange={(e) => setNewV({ ...newV, number_plate: e.target.value })} required data-testid="newv-plate" placeholder="MH12 AB 1234" /></div>
-                <div className="grid grid-2">
-                  <div className="field"><label>Type</label><select className="input" value={newV.vehicle_type} onChange={(e) => setNewV({ ...newV, vehicle_type: e.target.value })} data-testid="newv-type">{TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
-                  <div className="field"><label>Make & model</label><input className="input" value={newV.make_model} onChange={(e) => setNewV({ ...newV, make_model: e.target.value })} data-testid="newv-model" placeholder="Honda City" /></div>
-                </div>
+                <div className="field"><label>Type</label><select className="input" value={newV.vehicle_type} onChange={(e) => setNewV({ ...newV, vehicle_type: e.target.value })} data-testid="newv-type">{TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+                <VehicleFields
+                  value={{ brand: newV.brand, model: newV.model, color: newV.color }}
+                  onChange={(patch) => setNewV((v) => ({ ...v, ...patch }))}
+                  idPrefix="newv"
+                />
                 {err && <p style={{ color: "var(--danger)", fontSize: 13, marginBottom: 8 }}>{err}</p>}
                 <button className="btn btn-ghost btn-block" disabled={addingV} data-testid="newv-submit"><Plus size={16} /> {addingV ? "Adding…" : "Add & continue"}</button>
               </form>

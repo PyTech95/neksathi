@@ -29,7 +29,9 @@ export default function AdminIntruder() {
               <div style={{ fontWeight: 700, marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><ShieldAlert size={15} style={{ color: "#ff3b5c" }} /> {ev.attempt_count} attempts · {ev.device_name}{ev.triggered_lock && <Lock size={13} style={{ color: "#ff3b5c" }} />}</div>
               <div className="muted" style={{ fontSize: 12.5, marginTop: 3 }}>Owner: {ev.owner_name || "—"} {ev.owner_phone ? `· ${ev.owner_phone}` : ""}</div>
               <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{ev.created_at ? new Date(ev.created_at).toLocaleString() : ""}</div>
-              {ev.latitude != null && <a className="neon" href={`https://maps.google.com/?q=${ev.latitude},${ev.longitude}`} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 4, marginTop: 4 }}><MapPin size={13} /> Location</a>}
+              {ev.latitude != null ? (
+                <a className="btn btn-danger btn-sm" href={`https://maps.google.com/?q=${ev.latitude},${ev.longitude}`} target="_blank" rel="noreferrer" data-testid={`intruder-loc-${ev.id}`} style={{ marginTop: 8, width: "100%" }}><MapPin size={14} /> See location</a>
+              ) : <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>No location sent by the phone</div>}
             </div>
           ))}
         </div>

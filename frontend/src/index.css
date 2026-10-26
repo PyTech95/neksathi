@@ -39,6 +39,8 @@
 * { box-sizing: border-box; }
 
 html, body, #root { height: 100%; }
+/* Stop rubber-band over-scroll bounce (which also made the sticky header jitter). */
+html { overscroll-behavior-y: none; }
 
 body {
   margin: 0;
@@ -167,7 +169,9 @@ h1, h2, h3, .head { font-family: 'Chakra Petch', sans-serif; letter-spacing: -0.
   opacity: .55; transition: opacity .3s ease;
 }
 .topnav.scrolled {
-  padding: 10px 26px;
+  /* NOTE: do NOT change padding/height here — a sticky header that resizes on
+     scroll changes the document height near the page bottom and makes the
+     header jitter/shake on over-scroll. Only change look (bg + shadow). */
   background: rgba(7, 7, 13, 0.92);
   box-shadow: 0 14px 40px -22px rgba(179, 18, 47, 0.75);
 }

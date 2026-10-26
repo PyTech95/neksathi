@@ -12,6 +12,11 @@ class FamilyJoinIn(BaseModel):
     invite_code: str = Field(min_length=4, max_length=12)
 
 
+class FamilyAddByPhoneIn(BaseModel):
+    phone: str = Field(min_length=4, max_length=20)
+    name: Optional[str] = Field(default=None, max_length=60)
+
+
 class SharingIn(BaseModel):
     share_location: bool = True
     share_activity: bool = True

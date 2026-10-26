@@ -6,7 +6,7 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from app.db import db
 from app.ratelimit import rate_limit
-from app.schemas import ActivityIn, AlertRulesIn, CheckInIn, CheckInRespondIn, FamilyCreateIn, FamilyJoinIn, NudgeIn, SharingIn, StatusIn, ZoneMuteIn
+from app.schemas import ActivityIn, AlertRulesIn, CheckInIn, CheckInRespondIn, FamilyAddByPhoneIn, FamilyCreateIn, FamilyJoinIn, NudgeIn, SharingIn, StatusIn, ZoneMuteIn
 from app.security import current_user
 from app.services.background import _build_family_digest, _digest_text, _send_family_digest
 from app.services.fcm import send_push
@@ -53,6 +53,68 @@ async def join_family(payload: FamilyJoinIn, user: dict = Depends(current_user))
                                         "role": "member", "name": user.get("name", "Member"),
                                         "share_location": True, "share_activity": True, "joined_at": now_utc()})
     return {"joined": True, "family_name": fam["name"]}
+
+
+@router.post("/family/add-by-phone")
+async def family_add_by_phone(payload: FamilyAddByPhoneIn, user: dict = Depends(current_user)):
+    """Guardian adds a family member straight by their mobile number. The number
+    must belong to a Nek Sathi account — that's how the app knows which phone to
+    push the intruder alert to. (If they're not on Nek Sathi yet, share the
+    invite code; they join once they install and sign up with that number.)"""
+    fam = await _my_family(user["id"])
+    if not fam or fam["guardian_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the guardian can add family members.")
+    if await db.family_members.count_documents({"family_id": fam["id"]}) >= fam.get("max_members", FAMILY_MAX):
+        raise HTTPException(status_code=400, detail="This family circle is full.")
+    raw = payload.phone.strip()
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    candidates = [c for c in {raw, digits, digits[-10:] if len(digits) >= 10 else ""} if c]
+    target = None
+    for c in candidates:
+        target = await db.users.find_one({"phone": c})
+        if not target:
+            target = await db.users.find_one({"phone": {"$regex": c + "$"}})
+        if target:
+            break
+    if not target:
+        raise HTTPException(status_code=404, detail="No Nek Sathi account uses this number yet. Ask them to install the app and sign up with this number, or share your invite code — then they can join.")
+    if await db.family_members.find_one({"user_id": target["id"]}):
+        raise HTTPException(status_code=400, detail="This person is already in a family circle.")
+    await db.family_members.insert_one({"id": new_id(), "family_id": fam["id"], "user_id": target["id"],
+                                        "role": "member", "name": payload.name or target.get("name", "Member"),
+                                        "phone": target.get("phone"),
+                                        "share_location": True, "share_activity": True, "joined_at": now_utc()})
+    return {"added": True, "name": payload.name or target.get("name"), "user_id": target["id"]}
+
+
+@router.get("/family/intruder-alerts")
+async def family_intruder_alerts(user: dict = Depends(current_user), limit: int = 50):
+    """Intruder captures across the whole family circle — each member's stolen /
+    locked phone front-camera photo + location. This is the family view the user
+    asked for: tap Location to see where the phone is, and see the photo inline."""
+    fam = await _my_family(user["id"])
+    if not fam:
+        return {"in_family": False, "items": []}
+    names, ids = {}, []
+    async for m in db.family_members.find({"family_id": fam["id"]}):
+        if m.get("user_id"):
+            names[m["user_id"]] = m.get("name")
+            ids.append(m["user_id"])
+    items = []
+    async for e in db.intruder_events.find({"user_id": {"$in": ids}}).sort("created_at", -1).limit(min(limit, 200)):
+        items.append({
+            "id": e["id"],
+            "owner_name": names.get(e.get("user_id")) or "Family member",
+            "is_me": e.get("user_id") == user["id"],
+            "device_name": e.get("device_name"),
+            "attempt_count": e.get("attempt_count"),
+            "triggered_lock": bool(e.get("triggered_lock")),
+            "photo_base64": e.get("photo_base64"),
+            "has_photo": bool(e.get("photo_base64")),
+            "latitude": e.get("latitude"), "longitude": e.get("longitude"),
+            "created_at": e.get("created_at"),
+        })
+    return {"in_family": True, "items": items}
 
 
 @router.get("/family")

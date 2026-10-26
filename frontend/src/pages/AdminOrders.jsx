@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import { rupee } from "@/lib/pay";
-import { ArrowLeft, Truck, CreditCard, Save, RefreshCw, Download, Printer, QrCode, Car, Tag as TagIcon, MapPin, FileText, Copy } from "lucide-react";
+import { ArrowLeft, Truck, CreditCard, Save, RefreshCw, Download, Printer, QrCode, Car, Tag as TagIcon, MapPin, FileText, Copy, Clock } from "lucide-react";
 
 const FLOW = ["generating", "printed", "shipped", "out_for_delivery", "delivered"];
 const LABEL = { pending_payment: "Payment pending", paid: "Paid", generating: "QR generating", printed: "Printed", shipped: "Shipped", out_for_delivery: "Out for delivery", delivered: "Delivered" };
@@ -179,6 +179,11 @@ body{margin:0;color:#111;padding:14px}.lbl{border:2px solid #111;border-radius:1
                         <div className="muted" style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
                           {isTag ? <TagIcon size={11} /> : <Car size={11} />}{isTag ? (o.tag_type || "tag") : "vehicle"}
                         </div>
+                        {o.created_at && (
+                          <div className="muted" style={{ fontSize: 10.5, display: "flex", alignItems: "center", gap: 4, marginTop: 3 }} data-testid={`order-datetime-${o.id}`}>
+                            <Clock size={10} />{new Date(o.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
+                          </div>
+                        )}
                       </td>
                       <td style={td} className="muted">
                         <b style={{ color: "var(--text)" }}>{o.user?.name}</b><br />

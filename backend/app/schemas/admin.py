@@ -38,6 +38,7 @@ class BulkGenerateIn(BaseModel):
     batch_label: Optional[str] = None
     notes: Optional[str] = None
     product_type: Optional[Literal["vehicle", "tag", "card"]] = None
+    product_subtype: Optional[str] = Field(default=None, max_length=60)  # e.g. "car", "pet", "mobile"
     org_name: Optional[str] = Field(default=None, max_length=120)
     org_id: Optional[str] = None
 
@@ -52,6 +53,15 @@ class MarkSoldIn(BaseModel):
     serial_from: str
     serial_to: str
     vendor_name: str
+
+
+class AssignDealerIn(BaseModel):
+    """Assign QR codes to a dealer/vendor by id (sets sold_vendor_id so the
+    dealer-assign flow recognises its own stock). Pass a batch_id OR a serial range."""
+    vendor_id: str
+    batch_id: Optional[str] = None
+    serial_from: Optional[str] = None
+    serial_to: Optional[str] = None
 
 
 class VendorIn(BaseModel):

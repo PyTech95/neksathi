@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { QrCode, CheckCircle2, LogIn, Car, Ban, Tag as TagIcon } from "lucide-react";
+import VehicleFields, { tidyVehicle } from "@/components/VehicleFields";
 
 const TYPES = ["car", "bike", "tractor", "commercial", "other"];
 const TAG_TYPES = [
@@ -19,7 +20,7 @@ export default function Claim() {
   const [state, setState] = useState("loading"); // loading | activate | blocked | error | done
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ number_plate: "", vehicle_type: "car", make_model: "", speed_limit_kmh: 80 });
+  const [form, setForm] = useState({ number_plate: "", vehicle_type: "car", brand: "", model: "", color: "", speed_limit_kmh: 80 });
   const [tagForm, setTagForm] = useState({ name: "", tag_type: "kid", description: "", blood_group: "", medical_notes: "", guardian_name: "", guardian_phone: "" });
 
   const isTag = preview?.intended_type === "tag";
@@ -41,7 +42,7 @@ export default function Claim() {
     setErr(""); setBusy(true);
     try {
       const product_type = isTag ? "tag" : "vehicle";
-      const payload = isTag ? { ...tagForm } : { ...form, speed_limit_kmh: Number(form.speed_limit_kmh) };
+      const payload = isTag ? { ...tagForm } : { number_plate: form.number_plate, vehicle_type: form.vehicle_type, ...tidyVehicle(form), speed_limit_kmh: Number(form.speed_limit_kmh) };
       const r = await api.post(`/qr/claim`, { serial_no: serial, product_type, payload });
       setState("done");
       setPreview((p) => ({ ...p, qr_id: r.data.qr_id, item_id: r.data.id }));
@@ -96,7 +97,11 @@ export default function Claim() {
                     <div className="field"><label>Vehicle type</label>
                       <select className="input" value={form.vehicle_type} onChange={set("vehicle_type")} data-testid="claim-type">{TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select>
                     </div>
-                    <div className="field"><label>Make & model</label><input className="input" value={form.make_model} onChange={set("make_model")} data-testid="claim-model" placeholder="Honda City" /></div>
+                    <VehicleFields
+                      value={{ brand: form.brand, model: form.model, color: form.color }}
+                      onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+                      idPrefix="claim"
+                    />
                   </>
                 )}
                 {err && <p style={{ color: "var(--danger)", fontSize: 14, marginBottom: 10 }} data-testid="claim-error-msg">{err}</p>}

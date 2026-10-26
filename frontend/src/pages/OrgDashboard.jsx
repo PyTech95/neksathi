@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { TAG_META } from "@/pages/Tags";
-import { Building2, QrCode, CheckCircle2, Clock, BellRing, MapPin, School, HeartPulse, Briefcase, ExternalLink } from "lucide-react";
+import { Building2, QrCode, CheckCircle2, Clock, BellRing, MapPin, School, HeartPulse, Briefcase, ExternalLink, LogOut, PackageOpen } from "lucide-react";
 
 const ORG_ICON = { school: <School size={22} />, hospital: <HeartPulse size={22} />, office: <Briefcase size={22} />, other: <Building2 size={22} /> };
 
@@ -16,16 +18,19 @@ function Stat({ icon, label, value, color, testid }) {
 }
 
 export default function OrgDashboard() {
+  const { logout } = useAuth();
+  const nav = useNavigate();
   const [me, setMe] = useState(null);
   const [tags, setTags] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [inv, setInv] = useState([]);
   const [tab, setTab] = useState("tags");
 
   const load = useCallback(async () => {
-    const [m, t, a] = await Promise.all([
-      api.get("/org/me"), api.get("/org/tags"), api.get("/org/alerts"),
+    const [m, t, a, iv] = await Promise.all([
+      api.get("/org/me"), api.get("/org/tags"), api.get("/org/alerts"), api.get("/org/inventory"),
     ]);
-    setMe(m.data); setTags(t.data.results); setAlerts(a.data.results);
+    setMe(m.data); setTags(t.data.results); setAlerts(a.data.results); setInv(iv.data.results || []);
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -37,10 +42,11 @@ export default function OrgDashboard() {
       <div className="container-nk">
         <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 22 }}>
           <div className="brand-badge" style={{ width: 52, height: 52, borderRadius: 14 }}>{ORG_ICON[org.org_type] || ORG_ICON.other}</div>
-          <div>
+          <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: 30 }} data-testid="org-name">{org.name}</h1>
             <p className="muted" style={{ fontSize: 14 }}>{org.org_type?.[0]?.toUpperCase() + org.org_type?.slice(1)}{org.city ? ` · ${org.city}` : ""} · Organization portal</p>
           </div>
+          <button className="btn btn-ghost btn-sm" data-testid="org-logout" onClick={() => { logout(); nav("/"); }}><LogOut size={15} /> Logout</button>
         </div>
 
         <div className="grid grid-3" style={{ marginBottom: 24 }}>
@@ -49,8 +55,9 @@ export default function OrgDashboard() {
           <Stat testid="org-stat-unclaimed" icon={<Clock size={22} />} label="Yet to hand out" value={counts.unclaimed} color="#f5a524" />
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
           <button className={`btn btn-sm ${tab === "tags" ? "btn-primary" : "btn-ghost"}`} onClick={() => setTab("tags")} data-testid="org-tab-tags">Issued tags</button>
+          <button className={`btn btn-sm ${tab === "inventory" ? "btn-primary" : "btn-ghost"}`} onClick={() => setTab("inventory")} data-testid="org-tab-inventory"><PackageOpen size={14} /> To hand out ({inv.length})</button>
           <button className={`btn btn-sm ${tab === "alerts" ? "btn-primary" : "btn-ghost"}`} onClick={() => setTab("alerts")} data-testid="org-tab-alerts"><BellRing size={14} /> Scan alerts</button>
         </div>
 
@@ -69,6 +76,26 @@ export default function OrgDashboard() {
                       <td style={td} className="muted">{t.guardian_name || "—"}</td>
                       <td style={td} className="muted">{t.blood_group || "—"}</td>
                       <td style={td}>{t.lost_mode ? <span style={{ color: "#ff3b5c" }}>LOST</span> : <span style={{ color: "#10b981" }}>Active</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {tab === "inventory" && (
+          <div className="glass card-pad" style={{ padding: 0, overflow: "hidden" }} data-testid="org-inventory-table">
+            {inv.length === 0 ? <p className="muted" style={{ padding: 22 }}>No QR codes waiting to be handed out. Ask the admin to generate a tag batch for this organization.</p> : (
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr style={{ textAlign: "left", color: "#8891a7", fontSize: 12, textTransform: "uppercase", letterSpacing: ".04em" }}>
+                  <th style={th}>Serial</th><th style={th}>Status</th>
+                </tr></thead>
+                <tbody>
+                  {inv.map((d) => (
+                    <tr key={d.serial_no} data-testid={`org-inv-${d.serial_no}`} style={{ borderTop: "1px solid rgba(179,18,47,.12)" }}>
+                      <td style={td}><b>{d.serial_no}</b></td>
+                      <td style={td} className="muted">{d.status === "sold" ? "Ready" : "Available"}</td>
                     </tr>
                   ))}
                 </tbody>

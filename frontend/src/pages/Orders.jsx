@@ -56,7 +56,7 @@ export default function Orders() {
                     <span className="pill pill-muted" style={{ textTransform: "capitalize" }}>{o.product_type === "tag" ? (o.tag_type || "tag") : "vehicle"}</span>
                     <span className={`pill ${s.c}`}>{s.l}</span>
                   </div>
-                  <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>{o.plan_name} · {rupee(o.amount_paise)} · {new Date(o.created_at).toLocaleDateString()}</div>
+                  <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>{o.plan_name} · {rupee(o.amount_paise)} · {new Date(o.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</div>
                 </div>
                 <ChevronRight size={18} className="muted" />
               </Link>

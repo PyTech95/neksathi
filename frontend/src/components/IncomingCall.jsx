@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import api from "@/lib/api";
+import api, { API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { RTC_CONFIG, getIceConfig, makeRingtone, vibrate, stopVibrate } from "@/lib/rtc";
-import { notifyCallEnded } from "@/lib/callsetup";
+import { notifyCallEnded, notifyCallConnected, setCallAuth, isNativeApp } from "@/lib/callsetup";
 import { Phone, PhoneOff, Mic, MicOff, ShieldCheck, Car, Volume2, VolumeX } from "lucide-react";
 
 // WhatsApp-style round call-control button (Mute / Speaker / End).
@@ -31,12 +31,25 @@ export default function IncomingCall() {
   const [status, setStatus] = useState("idle");    // idle | connecting | connected | ended
   const [muted, setMuted] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [answering, setAnswering] = useState(false); // native lock-screen "Answer" tapped → show Connecting… at once
   const ringRef = useRef(null);
   const vibRef = useRef(null);
   const busyId = useRef(null); // call currently being handled (ring/active) to avoid duplicates
+  const acceptingRef = useRef(false); // guard so a call is only ever answered once
+  const rejectedIds = useRef(new Set()); // calls we've rejected/ended locally — never re-show
+
+  // Give native the API base + token so a lock-screen Decline can reject on the
+  // backend directly (keeps the two call layers in sync).
+  useEffect(() => {
+    try { setCallAuth(API, localStorage.getItem("nk_token")); } catch (_) {}
+  }, []);
 
   const startRing = () => {
     if (ringRef.current) return;
+    // On the app, when the screen is off / the app is in the background, the
+    // NATIVE layer owns ringing (full-screen lock-screen call). Don't also ring
+    // in the web layer or the phone rings twice.
+    if (isNativeApp() && typeof document !== "undefined" && document.visibilityState !== "visible") return;
     const tone = user?.notify_prefs?.ringtone || localStorage.getItem("nk_ringtone") || "classic";
     ringRef.current = makeRingtone(tone);
     ringRef.current.start();
@@ -62,20 +75,36 @@ export default function IncomingCall() {
   useEffect(() => {
     let stop = false;
     const tick = async () => {
-      if (busyId.current) return; // already ringing/active — don't stack
+      if (acceptingRef.current) return; // answering / in a call — leave it alone
+      if (busyId.current) {
+        // We think a call is ringing. Confirm it's still live — if it was
+        // declined/cancelled elsewhere (e.g. on the native lock screen) clear it
+        // so we never keep ringing or re-show a dead call.
+        try {
+          const d = (await api.get(`/me/calls/${busyId.current}`)).data;
+          if (["ended", "rejected", "missed"].includes(d.status)) reset();
+        } catch (_) {}
+        return;
+      }
       try {
         const items = (await api.get("/me/calls/incoming")).data.items || [];
         if (stop) return;
         const c = items.find((x) => x.has_offer) || items[0];
-        if (c) {
+        if (c && !rejectedIds.current.has(c.call_id)) {
           busyId.current = c.call_id;
           setIncoming({ call_id: c.call_id, number_plate: c.number_plate });
-          startRing();
-          // If the user already tapped "Answer" on the native call screen, pick up now.
+          // If the user already tapped "Answer" on the native lock-screen call,
+          // pick up immediately and do NOT start the in-app ringtone (the native
+          // screen already handled ringing). Otherwise ring and wait for a tap.
           if (pendingAnswer.current && pendingAnswer.current === c.call_id) {
             pendingAnswer.current = null;
             try { localStorage.removeItem("nk_answer_call_id"); } catch (_) {}
             accept();
+          } else {
+            // A normal ringing call (not the one the native screen auto-answered)
+            // → clear any stale "answering" mask and ring for a manual tap.
+            setAnswering(false);
+            startRing();
           }
         }
       } catch (_) {}
@@ -85,12 +114,60 @@ export default function IncomingCall() {
     return () => { stop = true; clearInterval(t); };
   }, []);
 
-  // Native call screen tapped "Answer" → remember which call to auto-answer.
+  // Native call screen tapped "Answer" → remember which call to auto-answer and
+  // show the "Connecting…" screen immediately (so the user never sees the app
+  // boot / dashboard flash). If that call is already ringing in-app, pick up now
+  // instead of waiting for the next 3s poll.
   useEffect(() => {
-    const read = () => { try { pendingAnswer.current = localStorage.getItem("nk_answer_call_id"); } catch (_) {} };
+    const read = () => {
+      try { pendingAnswer.current = localStorage.getItem("nk_answer_call_id"); } catch (_) {}
+      if (pendingAnswer.current) {
+        setAnswering(true);
+        if (busyId.current && busyId.current === pendingAnswer.current) {
+          pendingAnswer.current = null;
+          try { localStorage.removeItem("nk_answer_call_id"); } catch (_) {}
+          stopRing();
+          accept();
+        }
+      }
+    };
     read();
     window.addEventListener("nk-answer-call", read);
     return () => window.removeEventListener("nk-answer-call", read);
+  }, []);
+
+  // Safety net: if we were told to answer but no call materialises, don't leave
+  // the "Connecting…" screen stuck — clear it after a short window.
+  useEffect(() => {
+    if (!answering || active) return;
+    const t = setTimeout(() => { if (!busyId.current) reset(); }, 8000);
+    return () => clearTimeout(t);
+  }, [answering, active]);
+
+  // When the app comes to the foreground (e.g. the user unlocked the phone)
+  // mid-ring, take the call over in-app: auto-answer if the native screen asked
+  // to, otherwise ring in-app now (the native ring was cancelled on foreground).
+  useEffect(() => {
+    const onVis = async () => {
+      if (typeof document === "undefined" || document.visibilityState !== "visible") return;
+      if (!busyId.current || acceptingRef.current) return;
+      // The call may have been declined/cancelled on the native lock screen while
+      // we were hidden — confirm it's still live before ringing in-app.
+      try {
+        const d = (await api.get(`/me/calls/${busyId.current}`)).data;
+        if (["ended", "rejected", "missed"].includes(d.status)) { reset(); return; }
+      } catch (_) {}
+      if (!busyId.current || acceptingRef.current) return;
+      let pa = null; try { pa = localStorage.getItem("nk_answer_call_id"); } catch (_) {}
+      if (pa && pa === busyId.current) {
+        try { localStorage.removeItem("nk_answer_call_id"); } catch (_) {}
+        accept();
+      } else {
+        startRing();
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
 
   const cleanup = () => {
@@ -101,12 +178,12 @@ export default function IncomingCall() {
     remoteSet.current = false; appliedCands.current = 0;
   };
 
-  const reset = () => { cleanup(); busyId.current = null; setIncoming(null); setActive(null); setStatus("idle"); setSeconds(0); setMuted(false); endedRef.current = false; notifyCallEnded(); };
+  const reset = () => { cleanup(); busyId.current = null; acceptingRef.current = false; setIncoming(null); setActive(null); setStatus("idle"); setSeconds(0); setMuted(false); setAnswering(false); endedRef.current = false; try { localStorage.removeItem("nk_answer_call_id"); } catch (_) {} notifyCallEnded(); };
 
   const reject = async () => {
     stopRing();
     const id = busyId.current;
-    if (id) { try { await api.post(`/me/calls/${id}/reject`); } catch (_) {} }
+    if (id) { rejectedIds.current.add(id); try { await api.post(`/me/calls/${id}/reject`); } catch (_) {} }
     reset();
   };
 
@@ -114,15 +191,18 @@ export default function IncomingCall() {
     if (endedRef.current) { reset(); return; }
     endedRef.current = true;
     const id = busyId.current;
-    if (id) { try { await api.post(`/me/calls/${id}/end`); } catch (_) {} }
+    if (id) { rejectedIds.current.add(id); try { await api.post(`/me/calls/${id}/end`); } catch (_) {} }
     setStatus("ended");
-    setTimeout(reset, 900);
+    setTimeout(reset, 2500); // show "Call ended" briefly, then auto-close the popup
   };
 
   const accept = async () => {
     const id = busyId.current;
     if (!id) return;
+    if (acceptingRef.current) return; // already answered this call — ignore repeats
+    acceptingRef.current = true;
     stopRing();
+    setAnswering(true);
     setIncoming(null);
     setActive({ call_id: id, number_plate: incoming?.number_plate });
     setStatus("connecting");
@@ -137,7 +217,7 @@ export default function IncomingCall() {
         if (e.candidate) api.post(`/me/calls/${id}/candidate`, { candidate: e.candidate.toJSON() }).catch(() => {});
       };
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === "connected") setStatus("connected");
+        if (pc.connectionState === "connected") { setStatus("connected"); notifyCallConnected(); }
         if (pc.connectionState === "failed") hangup();
       };
 
@@ -164,7 +244,15 @@ export default function IncomingCall() {
             try { await pc.addIceCandidate(cands[i]); } catch (_) {}
           }
           appliedCands.current = cands.length;
-          if (["ended", "rejected", "missed"].includes(d.status)) { setStatus("ended"); setTimeout(reset, 900); }
+          if (["ended", "rejected", "missed"].includes(d.status) && !endedRef.current) {
+            // The other side hung up → show "Call ended" briefly, then clear the
+            // popup automatically (don't leave it stuck on screen).
+            endedRef.current = true;
+            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            stopRing();
+            setStatus("ended");
+            setTimeout(reset, 2500);
+          }
         } catch (_) {}
       }, 1200);
     } catch (e) {
@@ -173,6 +261,14 @@ export default function IncomingCall() {
       reset();
     }
   };
+
+  // Don't let the call hang on "Connecting…" forever (bad network / no answer
+  // from the media server) — give up after 35s so the UI clears itself.
+  useEffect(() => {
+    if (status !== "connecting") return;
+    const t = setTimeout(() => { if (status === "connecting") hangup(); }, 35000);
+    return () => clearTimeout(t);
+  }, [status]);
 
   useEffect(() => {
     if (status !== "connected") return;
@@ -196,12 +292,12 @@ export default function IncomingCall() {
   };
   const fmt = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 
-  if (!incoming && !active) return null;
+  if (!incoming && !active && !answering) return null;
 
   return (
     <div data-testid="incoming-call-overlay" style={{ position: "fixed", inset: 0, background: "rgba(4,6,14,.82)", backdropFilter: "blur(8px)", zIndex: 6000, display: "grid", placeItems: "center", padding: 20 }}>
       <audio ref={remoteRef} autoPlay data-testid="incoming-call-audio" />
-      {incoming && !active ? (
+      {incoming && !active && !answering ? (
         <div className="glass card-pad" data-testid="incoming-call-ringing" style={{ width: "min(420px, 94vw)", padding: 30, textAlign: "center", borderRadius: 22, border: "1px solid rgba(233,37,70,.45)" }}>
           <div style={{ width: 84, height: 84, borderRadius: "50%", margin: "0 auto 16px", display: "grid", placeItems: "center", background: "linear-gradient(135deg,#b3122f,#e92546)", animation: "sosPulse 1.3s ease-in-out infinite" }}>
             <Phone size={34} color="#fff" />

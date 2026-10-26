@@ -28,6 +28,7 @@ import OtpLogin from "@/pages/OtpLogin";
 import ForgotPassword from "@/pages/ForgotPassword";
 import AdminOtpSettings from "@/pages/AdminOtpSettings";
 import DealerDashboard from "@/pages/DealerDashboard";
+import DealerCustomers from "@/pages/DealerCustomers";
 import Support from "@/pages/Support";
 import AdminPlans from "@/pages/AdminPlans";
 import AdminSupport from "@/pages/AdminSupport";
@@ -149,6 +150,7 @@ function Shell() {
           <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
           <Route path="/dealer" element={<Protected dealerOnly><DealerDashboard /></Protected>} />
           <Route path="/dealer/assign" element={<Protected dealerOnly><DealerAssign /></Protected>} />
+          <Route path="/dealer/customers" element={<Protected dealerOnly><DealerCustomers /></Protected>} />
           <Route path="/org" element={<Protected orgOnly><OrgDashboard /></Protected>} />
           <Route path="/vehicle/:id" element={<Protected><VehicleDetail /></Protected>} />
           <Route path="/track/:id" element={<Protected><Track /></Protected>} />

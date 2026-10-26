@@ -141,6 +141,10 @@ export default function OrderDetail() {
             {o.address?.line1}{o.address?.line2 ? `, ${o.address.line2}` : ""}<br />
             {o.address?.city} - {o.address?.pincode}{o.address?.landmark ? ` (${o.address.landmark})` : ""}
           </div>
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--panel-brd)", fontSize: 13, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+            <span className="muted"><Clock size={13} style={{ verticalAlign: "-2px" }} /> Date &amp; time</span>
+            <b>{new Date(o.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</b>
+          </div>
         </div>
 
         {plan && plan.status === "active" && o.status === "delivered" && (

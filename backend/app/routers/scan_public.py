@@ -28,6 +28,8 @@ async def public_qr_lookup(qr_id: str):
         qr_id=v["qr_id"],
         number_plate=v["number_plate"],
         vehicle_type=v["vehicle_type"],
+        brand=v.get("brand"),
+        model=v.get("model"),
         make_model=v.get("make_model"),
         color=v.get("color"),
         photo_base64=v.get("photo_base64"),
@@ -234,11 +236,15 @@ async def qr_claim(body: ClaimIn, user: dict = Depends(current_user)):
     new_doc_id = new_id()
     now = now_utc()
     if body.product_type == "vehicle":
+        _brand = (p.get("brand") or "").strip() or None
+        _model = (p.get("model") or "").strip() or None
         await db.vehicles.insert_one({
             "id": new_doc_id, "owner_id": user["id"], "qr_id": new_qr,
             "number_plate": (p.get("number_plate") or "").strip().upper() or "UNSET",
             "vehicle_type": p.get("vehicle_type", "car"),
-            "make_model": p.get("make_model"),
+            "brand": _brand, "model": _model,
+            "make_model": p.get("make_model") or (" ".join(x for x in [_brand, _model] if x) or None),
+            "color": (p.get("color") or "").strip() or None,
             "speed_limit_kmh": int(p.get("speed_limit_kmh", 80)),
             "lost_mode": False, "created_at": now,
         })

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { loadLeaflet } from "@/lib/leaflet";
-import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, BellRing, ChevronDown } from "lucide-react";
+import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, BellRing, ChevronDown, UserPlus, Camera, Lock } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
 
@@ -44,6 +44,11 @@ export default function Family() {
   const [zones, setZones] = useState([]);
   const [checkIns, setCheckIns] = useState({ incoming: [], outgoing: [] });
   const [activeSos, setActiveSos] = useState([]);
+  const [intruders, setIntruders] = useState([]);
+  const [addPhone, setAddPhone] = useState("");
+  const [addName, setAddName] = useState("");
+  const [addMsg, setAddMsg] = useState("");
+  const [adding, setAdding] = useState(false);
   const [digestOpen, setDigestOpen] = useState(false);
   const [digest, setDigest] = useState(null);
   const [sending, setSending] = useState(false);
@@ -68,6 +73,7 @@ export default function Family() {
         try { setZones((await api.get("/family/zones")).data.items || []); } catch (_) {}
         try { setCheckIns((await api.get("/family/check-ins")).data); } catch (_) {}
         try { setActiveSos((await api.get("/family/active-sos")).data.items || []); } catch (_) {}
+        try { setIntruders((await api.get("/family/intruder-alerts")).data.items || []); } catch (_) {}
         try { setDigest((await api.get("/family/digest")).data); } catch (_) {}
       }
     } finally { setLoading(false); }
@@ -133,6 +139,12 @@ export default function Family() {
 
   const create = async () => { setBusy(true); setErr(""); try { await api.post("/family", { name }); await load(); } catch (e) { setErr(e?.response?.data?.detail || "Could not create."); } finally { setBusy(false); } };
   const join = async () => { setBusy(true); setErr(""); try { await api.post("/family/join", { invite_code: code }); await load(); } catch (e) { setErr(e?.response?.data?.detail || "Could not join."); } finally { setBusy(false); } };
+  const addByPhone = async () => {
+    setAdding(true); setAddMsg("");
+    try { const r = (await api.post("/family/add-by-phone", { phone: addPhone, name: addName || undefined })).data; setAddMsg(`✓ Added ${r.name || "member"} — they'll now get intruder alerts (photo + location) on their phone and here.`); setAddPhone(""); setAddName(""); await load(); }
+    catch (e) { setAddMsg(e?.response?.data?.detail || "Could not add this number."); }
+    finally { setAdding(false); }
+  };
   const leave = async () => { if (!window.confirm(data.is_guardian ? "Leaving dissolves the whole circle. Continue?" : "Leave the family circle?")) return; await api.post("/family/leave"); load(); };
   const removeMember = async (id) => { if (!window.confirm("Remove this member?")) return; await api.delete(`/family/members/${id}`); load(); };
   const copyCode = () => { navigator.clipboard.writeText(data.invite_code); setCopied(true); setTimeout(() => setCopied(false), 1500); };
@@ -142,6 +154,18 @@ export default function Family() {
     try { if (navigator.getBattery) { const b = await navigator.getBattery(); batt = Math.round(b.level * 100); } } catch (_) {}
     navigator.geolocation.getCurrentPosition(async (p) => { await api.post("/me/status", { latitude: p.coords.latitude, longitude: p.coords.longitude, battery: batt }); load(); }, () => {}, { enableHighAccuracy: true, timeout: 8000 });
   };
+
+  // Share location by DEFAULT while in a family: as long as "Share location" is
+  // on (which it is by default), auto-post the user's location when the page
+  // opens and refresh it every 60s — no manual tap needed.
+  const _myShareLoc = !!data?.in_family && !!(data.members || []).find((m) => m.is_me)?.share_location;
+  useEffect(() => {
+    if (!_myShareLoc) return;
+    shareStatus();
+    const t = setInterval(shareStatus, 60000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_myShareLoc]);
 
   if (loading) return <div className="page" style={{ padding: 40 }}><div className="spinner" data-testid="family-loading" /></div>;
   const me = data.in_family ? data.members.find((m) => m.is_me) : null;
@@ -182,6 +206,19 @@ export default function Family() {
               <button className="btn btn-danger btn-sm" onClick={leave} data-testid="family-leave-btn"><LogOut size={14} /> Leave</button>
             </div>
           </div>
+
+          {data.is_guardian && (
+            <div className="glass" style={{ padding: 16, borderRadius: 14, marginBottom: 16 }} data-testid="family-add-phone-card">
+              <div style={{ fontWeight: 700, fontSize: 14.5, display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}><UserPlus size={17} className="neon" /> Add family by mobile number</div>
+              <p className="muted" style={{ fontSize: 12.5, marginTop: 0 }}>Enter a family member's Nek Sathi number. They'll receive intruder alerts (photo + location) on their phone and can see them here. (Not on Nek Sathi yet? Share the invite code above.)</p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <input className="input" value={addPhone} onChange={(e) => setAddPhone(e.target.value)} placeholder="Mobile number" data-testid="family-add-phone-input" style={{ flex: "1 1 160px" }} />
+                <input className="input" value={addName} onChange={(e) => setAddName(e.target.value)} placeholder="Name (optional)" data-testid="family-add-name-input" style={{ flex: "1 1 140px" }} />
+                <button className="btn btn-primary btn-sm" onClick={addByPhone} disabled={adding || !addPhone.trim()} data-testid="family-add-phone-btn">{adding ? <Loader2 className="spin" size={15} /> : <><UserPlus size={14} /> Add</>}</button>
+              </div>
+              {addMsg && <p style={{ fontSize: 12.5, marginTop: 8, color: addMsg.startsWith("✓") ? "#34d399" : "#ff7591" }} data-testid="family-add-msg">{addMsg}</p>}
+            </div>
+          )}
 
           {checkIns.incoming.length > 0 && (
             <div className="glass" style={{ padding: 16, borderRadius: 14, marginBottom: 16, borderColor: "rgba(245,165,36,.5)", background: "rgba(245,165,36,.06)" }} data-testid="checkin-incoming">
@@ -254,6 +291,28 @@ export default function Family() {
               </div>
             ))}
           </div>
+
+          <h2 style={{ fontSize: 18, margin: "26px 0 12px", display: "flex", alignItems: "center", gap: 8 }}><ShieldAlert size={17} style={{ color: "#ff3b5c" }} /> Intruder alerts</h2>
+          <p className="muted" style={{ fontSize: 13, marginTop: -6, marginBottom: 12 }}>If someone enters the wrong password on a family member's phone, the phone's front camera captures their photo. It shows up here with a button to see where the phone is.</p>
+          {intruders.length === 0 ? (
+            <p className="muted" data-testid="family-intruder-empty" style={{ textAlign: "center", padding: "14px 0", fontSize: 13.5 }}>No intruder captures in your family circle yet.</p>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(230px,1fr))", gap: 12 }} data-testid="family-intruder-list">
+              {intruders.map((ev) => (
+                <div key={ev.id} data-testid={`family-intruder-${ev.id}`} className="glass" style={{ padding: 12, borderRadius: 14 }}>
+                  {ev.photo_base64 ? (
+                    <img src={ev.photo_base64.startsWith("data:") ? ev.photo_base64 : `data:image/jpeg;base64,${ev.photo_base64}`} alt="intruder" style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 10 }} />
+                  ) : <div style={{ height: 160, borderRadius: 10, background: "rgba(255,255,255,.05)", display: "grid", placeItems: "center", flexDirection: "column", gap: 6 }} className="muted"><Camera size={22} /><span style={{ fontSize: 12 }}>No photo captured</span></div>}
+                  <div style={{ fontWeight: 700, marginTop: 10, fontSize: 13.5, display: "flex", alignItems: "center", gap: 6 }}><ShieldAlert size={14} style={{ color: "#ff3b5c" }} /> {ev.attempt_count} attempts {ev.triggered_lock && <Lock size={12} style={{ color: "#ff3b5c" }} />}</div>
+                  <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}><Smartphone size={12} style={{ verticalAlign: "-2px" }} /> {ev.owner_name}{ev.is_me ? " (you)" : ""} · {ev.device_name}</div>
+                  <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{ev.created_at ? new Date(ev.created_at).toLocaleString() : ""}</div>
+                  {ev.latitude != null ? (
+                    <a className="btn btn-danger btn-sm" href={`https://maps.google.com/?q=${ev.latitude},${ev.longitude}`} target="_blank" rel="noreferrer" data-testid={`family-intruder-loc-${ev.id}`} style={{ marginTop: 8, width: "100%" }}><MapPin size={14} /> See location</a>
+                  ) : <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>No location sent</div>}
+                </div>
+              ))}
+            </div>
+          )}
 
           <h2 style={{ fontSize: 18, margin: "26px 0 12px", display: "flex", alignItems: "center", gap: 8 }}><MapPin size={17} className="neon" /> Place alerts</h2>
           {placeEvents.length === 0 ? (

@@ -136,6 +136,45 @@ async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str)
                 "action_url": "/theft-protection"}, idempotency_key=event["id"])
     except Exception:
         pass
+    # Fan out to the owner's family circle too — a stolen/locked phone is exactly
+    # when family should get the alert and be able to see the intruder photo +
+    # location (in their own Nek Sathi app and on the Family web page).
+    try:
+        fm = await db.family_members.find_one({"user_id": user["id"]})
+        if fm:
+            fam_user_ids, fam_phones = [], []
+            async for m in db.family_members.find({"family_id": fm["family_id"]}):
+                if m.get("user_id") and m["user_id"] != user["id"]:
+                    fam_user_ids.append(m["user_id"])
+                if m.get("phone"):
+                    fam_phones.append(m["phone"])
+            if fam_user_ids:
+                async for mu in db.users.find({"id": {"$in": fam_user_ids}}):
+                    if mu.get("phone"):
+                        fam_phones.append(mu["phone"])
+            fam_body = (f"🚨 Nek Sathi FAMILY ALERT: {event['attempt_count']} failed unlock attempts on "
+                        f"{who}'s phone '{device.get('name','device')}'."
+                        f"{' The phone is now LOCKED.' if event.get('triggered_lock') else ''}"
+                        f"{loc} Open Nek Sathi → Family to see the intruder photo & location.")
+            for p in set(fam_phones):
+                try:
+                    await notify_whatsapp(p, fam_body, meta={"kind": "theft_family", "user_id": user["id"]})
+                except Exception:
+                    pass
+                try:
+                    await send_sms(p, fam_body, meta={"kind": "theft_family", "user_id": user["id"]})
+                except Exception:
+                    pass
+            if fam_user_ids:
+                try:
+                    await send_push(recipients=fam_user_ids, data={
+                        "title": "🚨 Family alert — intruder detected",
+                        "message": f"{event['attempt_count']} failed unlocks on {who}'s phone. Tap to see the photo & location.",
+                        "action_url": "/family"}, idempotency_key="fam-" + event["id"])
+                except Exception:
+                    pass
+    except Exception:
+        pass
     # Email the photo inline to the owner + super admins.
     email_targets = [e for e in ([user.get("email")] + admin_emails) if e]
     if email_targets and event.get("photo_base64"):

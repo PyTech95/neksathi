@@ -22,6 +22,8 @@ def to_vehicle_out(v: dict) -> VehicleOut:
         owner_id=v["owner_id"],
         number_plate=v["number_plate"],
         vehicle_type=v["vehicle_type"],
+        brand=v.get("brand"),
+        model=v.get("model"),
         make_model=v.get("make_model"),
         color=v.get("color"),
         photo_base64=v.get("photo_base64"),
@@ -48,12 +50,17 @@ async def list_vehicles(user: dict = Depends(current_user)):
 @router.post("/vehicles", response_model=VehicleOut)
 async def create_vehicle(payload: VehicleIn, user: dict = Depends(current_user)):
     v_id = new_id()
+    brand = (payload.brand or "").strip() or None
+    model = (payload.model or "").strip() or None
+    make_model = payload.make_model or (" ".join(x for x in [brand, model] if x) or None)
     doc = {
         "id": v_id,
         "owner_id": user["id"],
         "number_plate": payload.number_plate.upper().strip(),
         "vehicle_type": payload.vehicle_type,
-        "make_model": payload.make_model,
+        "brand": brand,
+        "model": model,
+        "make_model": make_model,
         "color": payload.color,
         "photo_base64": payload.photo_base64,
         "qr_id": new_id(),
@@ -78,10 +85,15 @@ async def update_vehicle(vehicle_id: str, payload: VehicleIn, user: dict = Depen
     v = await db.vehicles.find_one({"id": vehicle_id, "owner_id": user["id"]})
     if not v:
         raise HTTPException(status_code=404, detail="Vehicle not found")
+    brand = (payload.brand or "").strip() or None
+    model = (payload.model or "").strip() or None
+    make_model = payload.make_model or (" ".join(x for x in [brand, model] if x) or None)
     update = {
         "number_plate": payload.number_plate.upper().strip(),
         "vehicle_type": payload.vehicle_type,
-        "make_model": payload.make_model,
+        "brand": brand,
+        "model": model,
+        "make_model": make_model,
         "color": payload.color,
         "photo_base64": payload.photo_base64 if payload.photo_base64 is not None else v.get("photo_base64"),
         "speed_limit_kmh": payload.speed_limit_kmh,

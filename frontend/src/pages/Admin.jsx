@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
+import Pager from "@/components/Pager";
 import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox, Mail, Building2, Phone, MessageSquare, HardDrive, Truck, Tags as TagsIcon, Smartphone } from "lucide-react";
 
 function Badge({ n }) {
@@ -22,6 +23,9 @@ export default function Admin() {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [q, setQ] = useState("");
+  const [uSkip, setUSkip] = useState(0);
+  const [uLimit, setULimit] = useState(50);
+  const [uTotal, setUTotal] = useState(0);
   const [alerts, setAlerts] = useState([]);
   const [aType, setAType] = useState("");
   const [aDays, setADays] = useState(30);
@@ -30,7 +34,11 @@ export default function Admin() {
   const [inbox, setInbox] = useState({ open_tickets: 0, new_enquiries: 0 });
 
   const loadStats = async () => setStats((await api.get("/admin/stats")).data);
-  const loadUsers = async (query = "") => setUsers((await api.get(`/admin/users${query ? `?q=${encodeURIComponent(query)}` : ""}`)).data.results);
+  const loadUsers = async (query = "", sk = 0, lim = 50) => {
+    const p = new URLSearchParams(); if (query) p.set("q", query); p.set("skip", sk); p.set("limit", lim);
+    const r = (await api.get(`/admin/users?${p.toString()}`)).data;
+    setUsers(r.results); setUTotal(r.total ?? r.results.length);
+  };
   const loadAlerts = async (type = aType, days = aDays, query = aq) => {
     const params = new URLSearchParams();
     if (type) params.set("type", type);
@@ -57,7 +65,7 @@ export default function Admin() {
 
   const toggleSuspend = async (u) => {
     await api.post(`/admin/users/${u.id}/suspend`, { suspended: !u.suspended });
-    loadUsers(q);
+    loadUsers(q, uSkip, uLimit);
   };
 
   return (
@@ -128,7 +136,7 @@ export default function Admin() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
             <h2 style={{ fontSize: 22 }}>Users</h2>
             <input className="input" style={{ maxWidth: 280 }} placeholder="Search name / email / phone" value={q}
-              onChange={(e) => { setQ(e.target.value); loadUsers(e.target.value); }} data-testid="admin-user-search" />
+              onChange={(e) => { setQ(e.target.value); setUSkip(0); loadUsers(e.target.value, 0, uLimit); }} data-testid="admin-user-search" />
           </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
@@ -161,6 +169,9 @@ export default function Admin() {
               </tbody>
             </table>
           </div>
+          <Pager skip={uSkip} limit={uLimit} total={uTotal}
+            onSkip={(ns) => { setUSkip(ns); loadUsers(q, ns, uLimit); }}
+            onLimit={(nl) => { setULimit(nl); setUSkip(0); loadUsers(q, 0, nl); }} />
         </div>
 
         <div className="glass card-pad" style={{ padding: 24, marginTop: 18 }} data-testid="admin-alerts-section">

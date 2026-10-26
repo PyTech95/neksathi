@@ -63,7 +63,7 @@ export default function AdminOrgs() {
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
                 <button className="btn btn-ghost btn-sm" onClick={() => { setAcct(o); setAcctMsg(""); setAcctForm({ email: o.account_email || "", password: "" }); }} data-testid={`org-login-btn-${o.id}`}><KeyRound size={14} /> {o.has_login ? "Reset login" : "Create login"}</button>
-                <Link to="/admin/qr" className="btn btn-ghost btn-sm" data-testid={`org-batch-btn-${o.id}`}><QrCode size={14} /> Generate tags</Link>
+                <Link to={`/admin/qr?org=${o.id}&type=tag`} className="btn btn-ghost btn-sm" data-testid={`org-batch-btn-${o.id}`}><QrCode size={14} /> Generate tags</Link>
               </div>
             </div>
           ))}

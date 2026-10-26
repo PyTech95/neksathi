@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
-import { Store, QrCode, PackageCheck, PackageOpen, Ban, Smartphone } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { Store, QrCode, PackageCheck, PackageOpen, Ban, Smartphone, LogOut, Users } from "lucide-react";
 
 const STATUS_LABEL = { sold: "Available", assigned: "Activated", blocked: "Blocked", unclaimed: "Available" };
 const STATUS_COLOR = { sold: "#e92546", assigned: "#10b981", blocked: "#ff3b5c", unclaimed: "#e92546" };
@@ -11,6 +12,8 @@ function Stat({ icon, label, value, color }) {
 }
 
 export default function DealerDashboard() {
+  const { user, logout } = useAuth();
+  const nav = useNavigate();
   const [me, setMe] = useState(null);
   const [inv, setInv] = useState([]);
   const [statusF, setStatusF] = useState("");
@@ -28,10 +31,19 @@ export default function DealerDashboard() {
   return (
     <div className="page" data-testid="dealer-page">
       <div className="container-nk">
-        <span className="chip"><Store size={13} /> Dealer portal</span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+          <span className="chip"><Store size={13} /> Dealer portal</span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span className="muted" style={{ fontSize: 13 }}>{user?.name || user?.email}</span>
+            <button className="btn btn-ghost btn-sm" data-testid="dealer-logout" onClick={() => { logout(); nav("/"); }}><LogOut size={15} /> Logout</button>
+          </div>
+        </div>
         <h1 style={{ fontSize: 34, marginTop: 12 }}>{me?.vendor?.name || "Dealer"} <span className="neon">stock</span></h1>
         <p className="muted" style={{ marginBottom: 16 }}>{me?.vendor?.city ? `${me.vendor.city} · ` : ""}Your QR sticker inventory.</p>
-        <Link to="/dealer/assign" className="btn btn-primary" style={{ marginBottom: 22 }} data-testid="dealer-assign-btn"><Smartphone size={16} /> Scan & assign QR to customer</Link>
+        <div style={{ display: "flex", gap: 10, marginBottom: 22, flexWrap: "wrap" }}>
+          <Link to="/dealer/assign" className="btn btn-primary" data-testid="dealer-assign-btn"><Smartphone size={16} /> Scan &amp; assign QR to customer</Link>
+          <Link to="/dealer/customers" className="btn btn-ghost" data-testid="dealer-customers-btn"><Users size={16} /> My customers</Link>
+        </div>
 
         <div className="grid grid-4" style={{ marginBottom: 22 }}>
           <Stat icon={<QrCode size={22} />} label="Assigned" value={me?.stock?.assigned_total} color="#ff4d67" />

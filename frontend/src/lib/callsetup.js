@@ -16,6 +16,21 @@ export function notifyCallEnded() {
   try { NekNative.callEnded(); } catch (_) {}
 }
 
+// Tell native the call is now connected → remove the native "Connecting…" screen
+// that was masking the web-view boot.
+export function notifyCallConnected() {
+  if (!Capacitor.isNativePlatform()) return;
+  try { NekNative.callConnected(); } catch (_) {}
+}
+
+// Push the API base + bearer token to native so a lock-screen Decline can reject
+// the call on the backend directly (keeps native + web in sync).
+export function setCallAuth(api, token) {
+  if (!Capacitor.isNativePlatform()) return;
+  if (!api || !token) return;
+  try { NekNative.setCallAuth({ api, token }); } catch (_) {}
+}
+
 // Show the setup screen once, shortly after the user first reaches the app,
 // so calls can ring on the lock screen without the user hunting for settings.
 export function maybeAutoOpenCallSetup() {

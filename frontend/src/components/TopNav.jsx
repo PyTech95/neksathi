@@ -51,7 +51,9 @@ export default function TopNav() {  const { user, logout } = useAuth();
   useEffect(() => { setMobileOpen(false); }, [loc.pathname]);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
+    // Hysteresis: turn ON above 48px, OFF below 8px — a wide dead-band so the
+    // "scrolled" class never flickers on/off near a single threshold.
+    const onScroll = () => setScrolled((s) => (window.scrollY > (s ? 8 : 48)));
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);

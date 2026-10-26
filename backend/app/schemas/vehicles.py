@@ -9,7 +9,9 @@ from pydantic import BaseModel, Field
 class VehicleIn(BaseModel):
     number_plate: str = Field(min_length=1, max_length=20)
     vehicle_type: Literal["bike", "car", "tractor", "commercial", "other"] = "car"
-    make_model: Optional[str] = None
+    brand: Optional[str] = None            # e.g. "Mahindra"
+    model: Optional[str] = None            # e.g. "Scorpio"
+    make_model: Optional[str] = None       # kept for back-compat ("Mahindra Scorpio")
     color: Optional[str] = None
     photo_base64: Optional[str] = None  # data:image/... base64
     speed_limit_kmh: int = Field(default=80, ge=10, le=300)
@@ -20,6 +22,8 @@ class VehicleOut(BaseModel):
     owner_id: str
     number_plate: str
     vehicle_type: str
+    brand: Optional[str] = None
+    model: Optional[str] = None
     make_model: Optional[str] = None
     color: Optional[str] = None
     photo_base64: Optional[str] = None
@@ -68,6 +72,8 @@ class PublicVehicleOut(BaseModel):
     qr_id: str
     number_plate: str
     vehicle_type: str
+    brand: Optional[str] = None
+    model: Optional[str] = None
     make_model: Optional[str] = None
     color: Optional[str] = None
     photo_base64: Optional[str] = None

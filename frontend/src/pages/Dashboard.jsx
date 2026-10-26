@@ -4,6 +4,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Car, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, X, Phone, PhoneMissed, PhoneOff, PhoneOutgoing, Bike, Tractor, Truck, CircleHelp, Check } from "lucide-react";
 import BottomSheet from "@/components/BottomSheet";
+import VehicleFields, { tidyVehicle } from "@/components/VehicleFields";
 
 const VEHICLE_TYPES = ["car", "bike", "tractor", "commercial", "other"];
 const VEHICLE_TYPE_META = {
@@ -38,7 +39,7 @@ export default function Dashboard() {
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ number_plate: "", vehicle_type: "car", make_model: "", color: "", speed_limit_kmh: 80 });
+  const [form, setForm] = useState({ number_plate: "", vehicle_type: "car", brand: "", model: "", color: "", speed_limit_kmh: 80 });
   const [typePicker, setTypePicker] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -61,9 +62,14 @@ export default function Dashboard() {
     setErr("");
     setBusy(true);
     try {
-      await api.post("/vehicles", { ...form, speed_limit_kmh: Number(form.speed_limit_kmh) });
+      await api.post("/vehicles", {
+        number_plate: form.number_plate,
+        vehicle_type: form.vehicle_type,
+        ...tidyVehicle(form),
+        speed_limit_kmh: Number(form.speed_limit_kmh),
+      });
       setShowAdd(false);
-      setForm({ number_plate: "", vehicle_type: "car", make_model: "", color: "", speed_limit_kmh: 80 });
+      setForm({ number_plate: "", vehicle_type: "car", brand: "", model: "", color: "", speed_limit_kmh: 80 });
       load();
     } catch (e) {
       setErr(e?.response?.data?.detail || "Could not add vehicle");
@@ -229,16 +235,11 @@ export default function Dashboard() {
                   })()}
                 </button>
               </div>
-              <div className="grid grid-2">
-                <div className="field">
-                  <label>Make & model</label>
-                  <input className="input" value={form.make_model} onChange={set("make_model")} data-testid="vehicle-model" placeholder="Honda City" />
-                </div>
-                <div className="field">
-                  <label>Color</label>
-                  <input className="input" value={form.color} onChange={set("color")} data-testid="vehicle-color" placeholder="White" />
-                </div>
-              </div>
+              <VehicleFields
+                value={{ brand: form.brand, model: form.model, color: form.color }}
+                onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+                idPrefix="vehicle"
+              />
               <div className="field">
                 <label>Speed limit (km/h)</label>
                 <input className="input" type="number" min={10} max={300} value={form.speed_limit_kmh} onChange={set("speed_limit_kmh")} data-testid="vehicle-speed" />

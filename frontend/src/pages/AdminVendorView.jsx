@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
+import Pager from "@/components/Pager";
 import { ArrowLeft, Store, QrCode, PackageOpen, PackageCheck, Ban, Users, Clock, CheckCircle2 } from "lucide-react";
 
 const PILL = { active: "pill-ok", grace: "pill-warn", expired: "pill-danger", none: "pill-muted" };
@@ -13,12 +14,32 @@ export default function AdminVendorView() {
   const { id } = useParams();
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
+  const [skip, setSkip] = useState(0);
+  const [limit, setLimit] = useState(50);
+  const [batches, setBatches] = useState([]);
+  const [asg, setAsg] = useState({ batch_id: "", serial_from: "", serial_to: "" });
+  const [asgMsg, setAsgMsg] = useState("");
 
-  const load = useCallback(async () => {
-    try { setData((await api.get(`/admin/vendors/${id}/dashboard`)).data); }
-    catch (e) { setErr(e?.response?.data?.detail || "Vendor not found"); }
+  const load = useCallback(async (sk = 0, lim = 50) => {
+    try {
+      const p = new URLSearchParams(); p.set("skip", sk); p.set("limit", lim);
+      setData((await api.get(`/admin/vendors/${id}/dashboard?${p.toString()}`)).data);
+    } catch (e) { setErr(e?.response?.data?.detail || "Vendor not found"); }
   }, [id]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(0, 50); api.get("/admin/qr/batches").then((r) => setBatches(r.data.batches)).catch(() => {}); }, [load]);
+
+  const assign = async (e) => {
+    e.preventDefault(); setAsgMsg("");
+    if (!asg.batch_id && !(asg.serial_from && asg.serial_to)) { setAsgMsg("Pick a batch or a serial range."); return; }
+    try {
+      const body = asg.batch_id ? { vendor_id: id, batch_id: asg.batch_id } : { vendor_id: id, serial_from: asg.serial_from, serial_to: asg.serial_to };
+      const r = await api.post("/admin/qr/assign-dealer", body);
+      setAsgMsg(`✅ ${r.data.assigned} QR codes assigned to this dealer.`);
+      setAsg({ batch_id: "", serial_from: "", serial_to: "" });
+      load(skip, limit);
+    } catch (err2) { setAsgMsg(err2?.response?.data?.detail || "Could not assign."); }
+  };
+  const fmt = (d) => d ? new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) : "—";
 
   if (err) return <div className="page"><div className="container-nk"><p className="muted">{err}</p><Link to="/admin/dealers" className="btn btn-ghost" style={{ marginTop: 12 }}><ArrowLeft size={16} /> Dealers</Link></div></div>;
   if (!data) return <div className="page"><div className="spinner" /></div>;
@@ -44,26 +65,48 @@ export default function AdminVendorView() {
           <Stat icon={<Clock size={20} />} label="Pending OTP" value={c.pending} color="#ff8fa3" />
         </div>
 
+        {/* Assign QR to this dealer */}
+        <div className="glass card-pad" style={{ padding: 20, marginBottom: 18 }}>
+          <h2 style={{ fontSize: 18, marginBottom: 12 }}><QrCode size={18} style={{ verticalAlign: "-3px" }} /> Assign QR codes to this dealer</h2>
+          <form onSubmit={assign} style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div className="field" style={{ margin: 0, minWidth: 220 }}><label>Whole batch</label>
+              <select className="input" value={asg.batch_id} onChange={(e) => setAsg({ ...asg, batch_id: e.target.value, serial_from: "", serial_to: "" })} data-testid="vassign-batch">
+                <option value="">— Select batch —</option>
+                {batches.map((b) => <option key={b.batch_id} value={b.batch_id}>{b.batch_label} ({b.unclaimed} available)</option>)}
+              </select>
+            </div>
+            <span className="muted" style={{ fontSize: 12, paddingBottom: 10 }}>or serial range</span>
+            <div className="field" style={{ margin: 0 }}><label>From</label><input className="input" style={{ maxWidth: 170 }} value={asg.serial_from} onChange={(e) => setAsg({ ...asg, serial_from: e.target.value, batch_id: "" })} placeholder="NS-2610-000001" data-testid="vassign-from" /></div>
+            <div className="field" style={{ margin: 0 }}><label>To</label><input className="input" style={{ maxWidth: 170 }} value={asg.serial_to} onChange={(e) => setAsg({ ...asg, serial_to: e.target.value, batch_id: "" })} placeholder="NS-2610-000100" data-testid="vassign-to" /></div>
+            <button className="btn btn-primary" data-testid="vassign-submit"><Store size={15} /> Assign</button>
+          </form>
+          {asgMsg && <p style={{ color: "#e92546", marginTop: 10, fontSize: 14 }} data-testid="vassign-msg">{asgMsg}</p>}
+        </div>
+
         <div className="glass card-pad" style={{ padding: 20 }}>
           <h2 style={{ fontSize: 20, marginBottom: 14 }}>Customers ({data.customers_total})</h2>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-              <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th style={th}>Plate</th><th style={th}>Mobile</th><th style={th}>Plan</th><th style={th}>Status</th><th style={th}>Valid till</th><th style={th}>Assigned</th></tr></thead>
+              <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th style={th}>Vehicle</th><th style={th}>Customer</th><th style={th}>QR serial</th><th style={th}>Plan</th><th style={th}>Status</th><th style={th}>Valid till</th><th style={th}>Date</th></tr></thead>
               <tbody>
-                {data.customers.length === 0 && <tr><td style={td} colSpan={6} className="muted">No customers assigned yet.</td></tr>}
+                {data.customers.length === 0 && <tr><td style={td} colSpan={7} className="muted">No customers assigned yet.</td></tr>}
                 {data.customers.map((cu) => (
                   <tr key={cu.vehicle_id} style={{ borderTop: "1px solid rgba(179,18,47,.12)" }} data-testid={`vcust-${cu.number_plate}`}>
-                    <td style={td}><b>{cu.number_plate}</b></td>
-                    <td style={td} className="muted">{cu.mobile || "—"}</td>
+                    <td style={td}><b>{cu.number_plate}</b><div className="muted" style={{ fontSize: 11, textTransform: "capitalize" }}>{cu.vehicle_type}{cu.make_model ? ` · ${cu.make_model}` : ""}{cu.color ? ` · ${cu.color}` : ""}</div></td>
+                    <td style={td} className="muted">{cu.customer_name || "—"}<br /><span style={{ fontSize: 12 }}>{cu.mobile}</span></td>
+                    <td style={td} className="muted">{cu.serial_no || "—"}</td>
                     <td style={td} className="muted">{cu.plan_name || "—"}</td>
                     <td style={td}><span className={`pill ${PILL[cu.plan_status] || "pill-muted"}`}>{cu.plan_status === "active" ? `Active · ${cu.days_left}d` : cu.plan_status}</span></td>
                     <td style={td} className="muted">{cu.expires_at ? new Date(cu.expires_at).toLocaleDateString() : "—"}</td>
-                    <td style={td} className="muted">{cu.assigned_at ? new Date(cu.assigned_at).toLocaleDateString() : "—"}</td>
+                    <td style={td} className="muted">{fmt(cu.assigned_at)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <Pager skip={skip} limit={limit} total={data.customers_total}
+            onSkip={(ns) => { setSkip(ns); load(ns, limit); }}
+            onLimit={(nl) => { setLimit(nl); setSkip(0); load(0, nl); }} />
         </div>
       </div>
     </div>
