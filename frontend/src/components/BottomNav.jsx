@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Home, Shield, Users, QrCode, LayoutGrid, User } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { maybeAutoOpenCallSetup } from "@/lib/callsetup";
 
 const TABS = [
@@ -12,9 +13,17 @@ const TABS = [
   { to: "/settings", icon: User, label: "Profile" },
 ];
 
+// A dealer can only use the dealer portal, so they get just Home + Profile.
+const DEALER_TABS = [
+  { to: "/dealer", icon: Home, label: "Home" },
+  { to: "/dealer/profile", icon: User, label: "Profile" },
+];
+
 // Fixed bottom tab bar for the mobile app (logged-in users).
 export default function BottomNav() {
   const { pathname } = useLocation();
+  const { user } = useAuth();
+  const tabs = user?.is_dealer ? DEALER_TABS : TABS;
   // Reserve space at the bottom of pages so content isn't hidden behind the bar.
   useEffect(() => {
     document.body.classList.add("has-bottomnav");
@@ -22,10 +31,10 @@ export default function BottomNav() {
     return () => document.body.classList.remove("has-bottomnav");
   }, []);
   const isActive = (to) =>
-    to === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(to);
+    (to === "/dashboard" || to === "/dealer") ? pathname === to : pathname.startsWith(to);
   return (
     <nav className="bottom-nav" data-testid="bottom-nav">
-      {TABS.map(({ to, icon: Icon, label }) => {
+      {tabs.map(({ to, icon: Icon, label }) => {
         const active = isActive(to);
         return (
           <Link

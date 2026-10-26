@@ -50,7 +50,9 @@ async def dealer_me(user: dict = Depends(require_dealer)):
         raise HTTPException(status_code=404, detail="Dealer profile not found")
     stock = await _dealer_stock(vendor["name"])
     return {
-        "vendor": {"id": vendor["id"], "name": vendor["name"], "city": vendor.get("city"), "phone": vendor.get("phone")},
+        "vendor": {"id": vendor["id"], "name": vendor["name"], "city": vendor.get("city"), "phone": vendor.get("phone"),
+                   "contact_name": vendor.get("contact_name"), "email": vendor.get("email"),
+                   "state": vendor.get("state"), "address": vendor.get("address"), "active": vendor.get("active", True)},
         "stock": stock,
     }
 
