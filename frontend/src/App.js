@@ -52,6 +52,7 @@ import AdminIntegrations from "@/pages/AdminIntegrations";
 import AdminIntruder from "@/pages/AdminIntruder";
 import PersonaLanding from "@/pages/PersonaLanding";
 import OrgDashboard from "@/pages/OrgDashboard";
+import OrgProfile from "@/pages/OrgProfile";
 import AdminOrgs from "@/pages/AdminOrgs";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import DeleteAccount from "./pages/DeleteAccount";
@@ -154,6 +155,7 @@ function Shell() {
           <Route path="/dealer/customers" element={<Protected dealerOnly><DealerCustomers /></Protected>} />
           <Route path="/dealer/profile" element={<Protected dealerOnly><DealerProfile /></Protected>} />
           <Route path="/org" element={<Protected orgOnly><OrgDashboard /></Protected>} />
+          <Route path="/org/profile" element={<Protected orgOnly><OrgProfile /></Protected>} />
           <Route path="/vehicle/:id" element={<Protected><VehicleDetail /></Protected>} />
           <Route path="/track/:id" element={<Protected><Track /></Protected>} />
           <Route path="/tags" element={<Protected><Tags /></Protected>} />

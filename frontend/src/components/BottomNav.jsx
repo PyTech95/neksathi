@@ -19,11 +19,17 @@ const DEALER_TABS = [
   { to: "/dealer/profile", icon: User, label: "Profile" },
 ];
 
+// An organization is likewise limited to its own portal.
+const ORG_TABS = [
+  { to: "/org", icon: Home, label: "Home" },
+  { to: "/org/profile", icon: User, label: "Profile" },
+];
+
 // Fixed bottom tab bar for the mobile app (logged-in users).
 export default function BottomNav() {
   const { pathname } = useLocation();
   const { user } = useAuth();
-  const tabs = user?.is_dealer ? DEALER_TABS : TABS;
+  const tabs = user?.is_dealer ? DEALER_TABS : user?.is_org ? ORG_TABS : TABS;
   // Reserve space at the bottom of pages so content isn't hidden behind the bar.
   useEffect(() => {
     document.body.classList.add("has-bottomnav");
@@ -31,7 +37,7 @@ export default function BottomNav() {
     return () => document.body.classList.remove("has-bottomnav");
   }, []);
   const isActive = (to) =>
-    (to === "/dashboard" || to === "/dealer") ? pathname === to : pathname.startsWith(to);
+    (to === "/dashboard" || to === "/dealer" || to === "/org") ? pathname === to : pathname.startsWith(to);
   return (
     <nav className="bottom-nav" data-testid="bottom-nav">
       {tabs.map(({ to, icon: Icon, label }) => {
