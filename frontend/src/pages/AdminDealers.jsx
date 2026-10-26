@@ -50,7 +50,7 @@ export default function AdminDealers() {
         {summary && (
           <div className="grid grid-4" style={{ marginBottom: 20 }}>
             <div className="glass card-pad" data-testid="summary-dealers"><div className="stat-num">{summary.vendors ?? dealers.length}</div><div className="muted" style={{ fontSize: 13 }}>Dealers</div></div>
-            <div className="glass card-pad"><div className="stat-num">{summary.total_qty ?? 0}</div><div className="muted" style={{ fontSize: 13 }}>QR distributed</div></div>
+            <div className="glass card-pad"><div className="stat-num">{summary.qr_assigned_total ?? summary.total_qty ?? 0}</div><div className="muted" style={{ fontSize: 13 }}>QR distributed</div></div>
             <div className="glass card-pad"><div className="stat-num" style={{ fontSize: 26 }}>{rupee(summary.total_billed_paise)}</div><div className="muted" style={{ fontSize: 13 }}>Billed</div></div>
             <div className="glass card-pad"><div className="stat-num" style={{ fontSize: 26, color: "#f5a524" }}>{rupee(summary.outstanding_paise)}</div><div className="muted" style={{ fontSize: 13 }}>Outstanding</div></div>
           </div>
@@ -59,13 +59,13 @@ export default function AdminDealers() {
         <div className="glass card-pad" style={{ padding: 22 }}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-              <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th style={th}>Dealer</th><th style={th}>Contact</th><th style={th}>City</th><th style={th}>QR qty</th><th style={th}>Billed</th><th style={th}>Outstanding</th><th style={th}>Login</th></tr></thead>
+              <thead><tr style={{ textAlign: "left", color: "var(--muted)" }}><th style={th}>Dealer</th><th style={th}>Contact</th><th style={th}>City</th><th style={th}>QR given</th><th style={th}>Billed</th><th style={th}>Outstanding</th><th style={th}>Login</th></tr></thead>
               <tbody>
                 {dealers.length === 0 && <tr><td style={td} colSpan={7} className="muted">No dealers yet.</td></tr>}
                 {dealers.map((v) => (
                   <tr key={v.id} style={{ borderTop: "1px solid rgba(179,18,47,.12)" }} data-testid={`dealer-${v.name}`}>
                     <td style={td}><Link to={`/admin/dealers/${v.id}`} style={{ color: "#ff5a74", fontWeight: 700, textDecoration: "none" }} data-testid={`open-dealer-${v.name}`}>{v.name}</Link></td><td style={td} className="muted">{v.contact_name || v.phone || "—"}</td>
-                    <td style={td} className="muted">{v.city || "—"}</td><td style={td}>{v.total_qty || 0}</td>
+                    <td style={td} className="muted">{v.city || "—"}</td><td style={td}>{v.qr_assigned ?? v.total_qty ?? 0}</td>
                     <td style={td}>{rupee(v.total_billed_paise)}</td><td style={{ ...td, color: v.outstanding_paise ? "#f5a524" : undefined }}>{rupee(v.outstanding_paise)}</td>
                     <td style={td}>
                       {v.has_login

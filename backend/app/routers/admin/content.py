@@ -85,7 +85,11 @@ async def admin_vendors_list(_: dict = Depends(require_admin), q: Optional[str] 
     items = []
     async for v in db.vendors.find(filt).sort("created_at", -1).limit(limit):
         t = await _vendor_totals(v["id"])
-        items.append({**_vendor_out(v), **t})
+        # Actual QR this dealer holds (from inventory) — the assign-to-dealer
+        # flow hands QRs over without creating a billing order, so this, not
+        # the orders' total_qty, is the real "QR given" number.
+        qr_assigned = await db.qr_inventory.count_documents({"sold_to_vendor": v["name"]})
+        items.append({**_vendor_out(v), **t, "qr_assigned": qr_assigned})
     return {"count": len(items), "items": items}
 
 
@@ -104,10 +108,12 @@ async def admin_vendors_summary(_: dict = Depends(require_admin)):
     v_count = await db.vendors.count_documents({})
     billed = int(o[0]["billed"]) if o else 0
     paid = int(p[0]["paid"]) if p else 0
+    qr_assigned_total = await db.qr_inventory.count_documents({"sold_to_vendor": {"$ne": None}})
     return {
         "vendors": v_count,
         "orders": int(o[0]["orders"]) if o else 0,
         "total_qty": int(o[0]["qty"]) if o else 0,
+        "qr_assigned_total": qr_assigned_total,
         "total_billed_paise": billed,
         "total_paid_paise": paid,
         "outstanding_paise": max(0, billed - paid),
