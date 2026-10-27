@@ -9,6 +9,11 @@ let started = false;
 export async function initPush(userId) {
   if (!userId) return;
   if (!Capacitor.isNativePlatform()) return;
+  // Opt-out: a build without Firebase/FCM config (no google-services.json) would
+  // CRASH on PushNotifications.register(). Set REACT_APP_DISABLE_PUSH=1 in such a
+  // build (e.g. a quick test APK) to skip push entirely. Real builds that ship
+  // google-services.json leave this unset so push works normally.
+  if (process.env.REACT_APP_DISABLE_PUSH === "1") return;
   if (started) return;
   started = true;
 
