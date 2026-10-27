@@ -242,6 +242,27 @@ async def list_incidents(user: dict = Depends(current_user), status: Optional[st
     return {"count": len(out), "results": out}
 
 
+@router.get("/incidents/status")
+async def incidents_status(user: dict = Depends(current_user), limit: int = 100):
+    """Lightweight live-sync feed — statuses ONLY, no base64 photos. The Incidents
+    screen polls this every few seconds so any family member's 'I am coming' /
+    resolve / extend shows up on every other member's screen within seconds,
+    without re-downloading incident photos on each poll (keeps mobile data low)."""
+    visible = await _visible_vehicle_ids(user["id"])
+    filt: dict = {"vehicle_id": {"$in": visible}} if visible else {"vehicle_id": {"$in": []}}
+    out = []
+    async for inc in db.incidents.find(filt).sort("created_at", -1).limit(limit):
+        out.append({
+            "id": inc["id"],
+            "status": inc["status"],
+            "owner_response": inc.get("owner_response"),
+            "resolved": inc.get("resolved", False),
+            "call_attempted": inc.get("call_attempted", False),
+            "minutes_left": _minutes_left(inc["expires_at"]),
+        })
+    return {"count": len(out), "results": out}
+
+
 @router.post("/incidents/{incident_id}/respond")
 async def respond_incident(incident_id: str, payload: IncidentRespondIn, user: dict = Depends(current_user)):
     inc = await db.incidents.find_one({"id": incident_id})

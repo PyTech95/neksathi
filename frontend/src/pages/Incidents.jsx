@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import api from "@/lib/api";
 import { ParkingCircle, Siren, ShieldAlert, Check, X, CheckCircle2, Clock, MapPin, Phone, RefreshCw, BellRing, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare } from "lucide-react";
 
@@ -19,15 +19,38 @@ export default function Incidents() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const itemsRef = useRef([]);
+  useEffect(() => { itemsRef.current = items; }, [items]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try { setItems((await api.get("/incidents")).data.results); } finally { setLoading(false); }
   }, []);
-  useEffect(() => { load(); }, [load]);
 
-  const respond = async (id, response) => { await api.post(`/incidents/${id}/respond`, { response }); load(); };
-  const resolve = async (id) => { await api.post(`/incidents/${id}/resolve`); load(); };
-  const extend = async (id) => { await api.post(`/incidents/${id}/extend`); load(); };
+  // Live-sync across family members: poll the lightweight status feed and merge
+  // the changed fields in place (no photo re-download). If a brand-new incident
+  // appears, pull the full list once to get its photos/details.
+  const syncStatuses = useCallback(async () => {
+    let live;
+    try { live = (await api.get("/incidents/status")).data.results || []; }
+    catch (_) { return; }
+    const prevIds = new Set(itemsRef.current.map((x) => x.id));
+    if (live.some((x) => !prevIds.has(x.id))) { load(); return; }
+    const map = Object.fromEntries(live.map((x) => [x.id, x]));
+    setItems((cur) => cur.map((it) => (map[it.id] ? { ...it, ...map[it.id] } : it)));
+  }, [load]);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(syncStatuses, 8000);
+    const onVis = () => { if (document.visibilityState === "visible") syncStatuses(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
+  }, [load, syncStatuses]);
+
+  const respond = async (id, response) => { await api.post(`/incidents/${id}/respond`, { response }); syncStatuses(); };
+  const resolve = async (id) => { await api.post(`/incidents/${id}/resolve`); syncStatuses(); };
+  const extend = async (id) => { await api.post(`/incidents/${id}/extend`); syncStatuses(); };
 
   return (
     <div className="page" data-testid="incidents-page">
