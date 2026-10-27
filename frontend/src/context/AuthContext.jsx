@@ -16,7 +16,18 @@ export function AuthProvider({ children }) {
     }
     api
       .get("/auth/me")
-      .then((r) => setUser(r.data))
+      .then((r) => {
+        setUser(r.data);
+        // Sliding session: every time the app opens, swap the still-valid token
+        // for a fresh one so an active user is never logged out just because the
+        // app sat closed for a while. Best-effort — ignore if it fails.
+        api
+          .post("/auth/refresh")
+          .then((rr) => {
+            if (rr?.data?.access_token) localStorage.setItem("nk_token", rr.data.access_token);
+          })
+          .catch(() => {});
+      })
       .catch((e) => {
         const status = e?.response?.status;
         // Only log out when the token is actually rejected (invalid/expired).

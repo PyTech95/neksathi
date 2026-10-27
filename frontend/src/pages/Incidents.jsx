@@ -113,9 +113,11 @@ export default function Incidents() {
                       <div style={{ display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap", fontSize: 13 }}>
                         {(it.type === "wrong_parking" || it.type === "vehicle_blocking") && !it.resolved && <span className="muted"><Clock size={13} style={{ verticalAlign: "-2px" }} /> {it.minutes_left} min left</span>}
                         {it.scanner_phone && <a href={`tel:${it.scanner_phone}`} className="neon" style={{ fontWeight: 700 }}><Phone size={12} style={{ verticalAlign: "-1px" }} /> Reporter: {it.scanner_phone}</a>}
-                        {it.scanner_lat != null && <a href={`https://www.openstreetmap.org/?mlat=${it.scanner_lat}&mlon=${it.scanner_lng}#map=17/${it.scanner_lat}/${it.scanner_lng}`} target="_blank" rel="noreferrer" className="muted"><MapPin size={12} style={{ verticalAlign: "-1px" }} /> Location</a>}
                       </div>
                       <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                        {it.scanner_lat != null && (
+                          <a className="btn btn-danger btn-sm" href={`https://maps.google.com/?q=${it.scanner_lat},${it.scanner_lng}`} target="_blank" rel="noreferrer" data-testid={`incident-map-${it.id}`}><MapPin size={15} /> Scan location on map</a>
+                        )}
                         {pending && (
                           <>
                             <button className="btn btn-primary btn-sm" onClick={() => respond(it.id, "coming")} data-testid={`coming-${it.id}`}><Check size={15} /> I AM COMING</button>

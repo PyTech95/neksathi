@@ -70,6 +70,15 @@ async def me(user: dict = Depends(current_user)):
     return to_user_out(user)
 
 
+@router.post("/auth/refresh", response_model=TokenOut)
+async def refresh(user: dict = Depends(current_user)):
+    """Sliding session: exchange a still-valid token for a fresh one. The app
+    calls this on every launch, so a user who keeps opening the app within the
+    token window is never silently logged out."""
+    token = create_access_token(user["id"])
+    return TokenOut(access_token=token, user=to_user_out(user))
+
+
 @router.get("/auth/me/export")
 async def export_my_data(user: dict = Depends(current_user)):
     async def _all(collection, filt):
