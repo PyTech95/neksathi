@@ -33,6 +33,33 @@ export const RTC_CONFIG = {
 // Fetch fresh, short-lived TURN credentials from our own backend (self-hosted
 // coturn) so WebRTC relays audio reliably on mobile data / strict NAT. Falls
 // back to the static config above if the request fails.
+// Every mic stream we open is tracked so a new call can release leftovers first.
+// A stream still held from a previous attempt (or the other call component on
+// the same phone) makes getUserMedia fail on Android WebView with
+// NotReadableError "Could not start audio source".
+const _streams = new Set();
+export function registerStream(s) { _streams.add(s); return s; }
+export function releaseAllStreams() {
+  for (const s of _streams) { try { s.getTracks().forEach((t) => t.stop()); } catch (_) {} }
+  _streams.clear();
+}
+export async function getMic() {
+  releaseAllStreams();
+  const ask = () => navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  try {
+    return registerStream(await ask());
+  } catch (e) {
+    if (e && e.name === "NotReadableError") {
+      // The OS may still be releasing the mic from a previous session — wait
+      // briefly and try once more before giving up.
+      await new Promise((r) => setTimeout(r, 1200));
+      releaseAllStreams();
+      return registerStream(await ask());
+    }
+    throw e;
+  }
+}
+
 export async function getIceConfig() {
   try {
     const { data } = await api.get("/turn-credentials");

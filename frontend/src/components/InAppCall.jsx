@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
-import { RTC_CONFIG, getIceConfig } from "@/lib/rtc";
+import { RTC_CONFIG, getIceConfig, getMic, releaseAllStreams } from "@/lib/rtc";
 import { Phone, PhoneOff, Mic, MicOff, Loader2, ShieldCheck, PhoneMissed, X, Volume2, VolumeX } from "lucide-react";
 
 // WhatsApp-style round call-control button (Mute / Speaker / End).
@@ -60,6 +60,7 @@ export default function InAppCall({ qrId, onClose }) {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     if (pcRef.current) { try { pcRef.current.close(); } catch (_) {} pcRef.current = null; }
     if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
+    releaseAllStreams();
     try { localStorage.removeItem("nk_outgoing_call_id"); } catch (_) {}
   };
 
@@ -90,7 +91,7 @@ export default function InAppCall({ qrId, onClose }) {
           throw new Error(typeof window !== "undefined" && window.isSecureContext === false ? "not a secure context (page is not https)" : "getUserMedia unavailable in this browser");
         }
         stageRef.current = "mic";
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const stream = await getMic(); // releases leftover streams, retries once if the mic is busy
         if (stopped) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
         stageRef.current = "ice";

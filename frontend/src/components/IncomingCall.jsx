@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api, { API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { RTC_CONFIG, getIceConfig, makeRingtone, vibrate, stopVibrate } from "@/lib/rtc";
+import { RTC_CONFIG, getIceConfig, makeRingtone, vibrate, stopVibrate, getMic, releaseAllStreams } from "@/lib/rtc";
 import { notifyCallEnded, notifyCallConnected, setCallAuth, isNativeApp } from "@/lib/callsetup";
 import { Phone, PhoneOff, Mic, MicOff, ShieldCheck, Car, Volume2, VolumeX } from "lucide-react";
 
@@ -182,6 +182,7 @@ export default function IncomingCall() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     if (pcRef.current) { try { pcRef.current.close(); } catch (_) {} pcRef.current = null; }
     if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
+    releaseAllStreams();
     remoteSet.current = false; appliedCands.current = 0;
   };
 
@@ -215,7 +216,7 @@ export default function IncomingCall() {
     setStatus("connecting");
     let acceptedOk = false; // did OUR accept win the race?
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await getMic(); // releases leftover streams, retries once if the mic is busy
       streamRef.current = stream;
       const pc = new RTCPeerConnection(await getIceConfig());
       pcRef.current = pc;
