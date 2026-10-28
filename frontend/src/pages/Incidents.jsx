@@ -91,7 +91,22 @@ export default function Incidents() {
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
                         <span style={{ fontWeight: 700 }}>{m.label} · {it.number_plate}</span>
-                        <span className="chip" style={{ padding: "2px 10px", fontSize: 11, background: it.resolved ? "rgba(233,37,70,.16)" : `${m.color}22`, borderColor: it.resolved ? "rgba(233,37,70,.4)" : `${m.color}55`, color: it.resolved ? "#e92546" : "#fff" }}>{statusLabel(it.status)}</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          <span className="chip" style={{ padding: "2px 10px", fontSize: 11, background: it.resolved ? "rgba(233,37,70,.16)" : `${m.color}22`, borderColor: it.resolved ? "rgba(233,37,70,.4)" : `${m.color}55`, color: it.resolved ? "#e92546" : "#fff" }}>{statusLabel(it.status)}</span>
+                          {/* Location icon on EVERY incident: opens the scan spot in Maps when the
+                              reporter's GPS was captured; greyed out when it wasn't. */}
+                          {it.scanner_lat != null ? (
+                            <a href={`https://maps.google.com/?q=${it.scanner_lat},${it.scanner_lng}`} target="_blank" rel="noreferrer" title="Scan location on map" aria-label="Scan location on map" data-testid={`incident-map-${it.id}`}
+                               style={{ width: 36, height: 36, borderRadius: "50%", display: "grid", placeItems: "center", background: "linear-gradient(135deg,#b3122f,#e92546)", color: "#fff", flexShrink: 0, boxShadow: "0 4px 14px rgba(233,37,70,.35)" }}>
+                              <MapPin size={18} />
+                            </a>
+                          ) : (
+                            <span title="Location was not captured at scan" aria-label="Location not captured" data-testid={`incident-map-none-${it.id}`}
+                                  style={{ width: 36, height: 36, borderRadius: "50%", display: "grid", placeItems: "center", background: "rgba(255,255,255,.08)", color: "rgba(255,255,255,.35)", flexShrink: 0 }}>
+                              <MapPin size={18} />
+                            </span>
+                          )}
+                        </span>
                       </div>
                       {it.scanner_note && <p className="muted" style={{ fontSize: 14, marginTop: 6 }}>{it.scanner_note}</p>}
                       {(it.evidence_photo_base64 || it.reporter_photo_base64) && (
@@ -115,9 +130,6 @@ export default function Incidents() {
                         {it.scanner_phone && <a href={`tel:${it.scanner_phone}`} className="neon" style={{ fontWeight: 700 }}><Phone size={12} style={{ verticalAlign: "-1px" }} /> Reporter: {it.scanner_phone}</a>}
                       </div>
                       <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-                        {it.scanner_lat != null && (
-                          <a className="btn btn-danger btn-sm" href={`https://maps.google.com/?q=${it.scanner_lat},${it.scanner_lng}`} target="_blank" rel="noreferrer" data-testid={`incident-map-${it.id}`}><MapPin size={15} /> Scan location on map</a>
-                        )}
                         {pending && (
                           <>
                             <button className="btn btn-primary btn-sm" onClick={() => respond(it.id, "coming")} data-testid={`coming-${it.id}`}><Check size={15} /> I AM COMING</button>

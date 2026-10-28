@@ -64,11 +64,19 @@ async def fcm_send_to_user(owner_id, title, body, data=None, data_only=False):
                 android=messaging.AndroidConfig(priority="high"),
             )
         else:
+            # Heads-up, lock-screen-visible alert with sound (WhatsApp-style). The
+            # app creates the "nek_alerts" channel (high importance, public) on
+            # start; tapping opens the app at data.action_url.
             msg = messaging.MulticastMessage(
                 tokens=tokens,
                 notification=messaging.Notification(title=title, body=body),
                 data=payload,
-                android=messaging.AndroidConfig(priority="high", notification=messaging.AndroidNotification(sound="default")),
+                android=messaging.AndroidConfig(
+                    priority="high",
+                    notification=messaging.AndroidNotification(
+                        sound="default", channel_id="nek_alerts", visibility="public",
+                        priority="max", default_vibrate_timings=True),
+                ),
             )
         resp = messaging.send_each_for_multicast(msg)
         dead = []

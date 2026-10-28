@@ -59,7 +59,16 @@ async def _visible_vehicle_ids(user_id: str) -> List[str]:
             {"vehicle_id": 1},
         )
     ]
-    return list({*own, *shared})
+    # Family circle: every vehicle owned by anyone in my circle. Family members
+    # get the incident alert / ring for these, so they must be able to open the
+    # incident and respond ("I am coming", resolve) — not land on an empty list.
+    fam: list = []
+    fm = await db.family_members.find_one({"user_id": user_id})
+    if fm:
+        members = [m["user_id"] async for m in db.family_members.find({"family_id": fm["family_id"]}) if m.get("user_id")]
+        if members:
+            fam = [v["id"] async for v in db.vehicles.find({"owner_id": {"$in": members}}, {"id": 1})]
+    return list({*own, *shared, *fam})
 
 
 def plan_out(p: dict) -> PlanOut:

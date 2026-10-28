@@ -1,12 +1,33 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import api from "@/lib/api";
 import CameraCapture from "@/components/CameraCapture";
 import InAppCall from "@/components/InAppCall";
 import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare, Volume2 } from "lucide-react";
 
+// Reliable scan location. In the native app the Capacitor Geolocation plugin
+// is used (much more dependable inside the WebView); otherwise the browser API
+// with a high-accuracy attempt, then a quick cached/low-accuracy fallback.
+const _navPos = (opts) => new Promise((res, rej) => {
+  if (!navigator.geolocation) return rej(new Error("no geolocation"));
+  navigator.geolocation.getCurrentPosition((p) => res({ lat: p.coords.latitude, lng: p.coords.longitude }), rej, opts);
+});
+async function getLocation() {
+  try {
+    if (Capacitor.isNativePlatform()) {
+      const { Geolocation } = await import("@capacitor/geolocation");
+      try { await Geolocation.requestPermissions(); } catch (_) {}
+      const p = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+      return { lat: p.coords.latitude, lng: p.coords.longitude };
+    }
+  } catch (_) {}
+  try { return await _navPos({ enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }); } catch (_) {}
+  try { return await _navPos({ enableHighAccuracy: false, timeout: 6000, maximumAge: 120000 }); } catch (_) {}
+  return null;
+}
 const geo = (setC) => {
-  if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => setC({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {}, { timeout: 6000 });
+  getLocation().then((c) => { if (c) setC(c); });
 };
 
 const WINDOW_SECONDS = 15 * 60;
@@ -204,9 +225,13 @@ export default function PublicScan() {
     setBusy(true);
     primeSpeech();
     try {
+      // If GPS hadn't locked yet when the user tapped, try once more now so the
+      // owner reliably gets the scan location (the map button on their incident).
+      let c = coords;
+      if (!c) { c = await getLocation(); if (c) setCoords(c); }
       const r = await api.post(`/public/qr/${qrId}/incident`, {
         type, scanner_note: note || null, scanner_phone: phone || null,
-        scanner_lat: coords?.lat ?? null, scanner_lng: coords?.lng ?? null,
+        scanner_lat: c?.lat ?? null, scanner_lng: c?.lng ?? null,
         evidence_photo_base64: carPhoto || null, reporter_photo_base64: selfiePhoto || null,
       });
       setIncident(r.data);

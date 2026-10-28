@@ -9,7 +9,7 @@ from app.db import db
 from app.ratelimit import rate_limit
 from app.schemas import IncidentCallIn, IncidentCreateIn, IncidentRespondIn
 from app.security import _prefs, current_user
-from app.services.calls import _bridge_masked_call, _incident_recipients
+from app.services.calls import _bridge_masked_call, _call_callee_ids, _incident_recipients
 from app.services.fcm import send_push
 from app.services.notify import notify_whatsapp
 from app.utils import _aware, _visible_vehicle_ids, new_id, now_utc
@@ -130,16 +130,25 @@ async def create_incident(request: Request, qr_id: str, payload: IncidentCreateI
     op = _prefs(owner_doc)
     title = INCIDENT_TITLES.get(payload.type, "Vehicle alert")
     body = _incident_body(payload.type, v["number_plate"])
+    urgent = payload.type in URGENT_TYPES
     for r in recipients:
         # Family contacts always get alerted; the owner's own channel honours their prefs
         # (urgent reasons bypass prefs so the owner is never left unaware of an emergency).
-        urgent = payload.type in URGENT_TYPES
         if r["role"] == "owner" and not urgent and not (op.get("whatsapp") and op.get("incident_alerts")):
             continue
         await notify_whatsapp(r["phone"], body, meta={"incident_id": inc_id, "role": r["role"]})
+    # App push (lock-screen alert): the owner + every family member / shared user
+    # who can see this vehicle. Family always gets it; the owner's own push honours
+    # their prefs unless the reason is urgent.
     try:
-        if op.get("push") and op.get("incident_alerts"):
-            await send_push(recipients=[v["owner_id"]], data={"title": title, "message": v["number_plate"], "action_url": "/incidents"}, idempotency_key=inc_id)
+        push_to = await _call_callee_ids(v)
+        if not urgent and not (op.get("push") and op.get("incident_alerts")):
+            push_to = [i for i in push_to if i != v["owner_id"]]
+        if push_to:
+            await send_push(recipients=push_to, data={
+                "title": title, "message": f"{v['number_plate']} — tap to respond",
+                "type": "incident", "incident_id": inc_id, "action_url": "/incidents",
+            }, idempotency_key=inc_id)
     except Exception as _e:
         log.warning("push (incident) failed: %s", _e)
 
