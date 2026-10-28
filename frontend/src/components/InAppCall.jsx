@@ -23,6 +23,26 @@ function CallBtn({ onClick, on, danger, icon: Icon, label, testid }) {
 // call to the vehicle owner — connects inside the app, no phone numbers shared.
 export default function InAppCall({ qrId, onClose }) {
   const [status, setStatus] = useState("connecting"); // connecting | ringing | connected | ended | missed | rejected | error | denied
+  // Human reason + raw detail (stage · error) so a failed call says exactly WHY.
+  const [reason, setReason] = useState("");
+  const [detail, setDetail] = useState("");
+  const stageRef = useRef("init"); // unsupported | mic | ice | start | offer | ringing | connect
+  const explain = (e) => {
+    const name = e?.name || ""; const msg = e?.message || ""; const code = e?.response?.status;
+    const st = stageRef.current;
+    setDetail(`${st} · ${name || "Error"}${code ? " " + code : ""}${msg ? " · " + String(msg).slice(0, 90) : ""}`);
+    if (st === "unsupported") return "This browser can't make calls. Open this link in Chrome, and make sure the address starts with https://";
+    if (st === "mic") {
+      if (name === "NotAllowedError") return "Microphone blocked. Allow it in your browser settings and try again.";
+      if (name === "NotFoundError") return "No microphone found on this device.";
+      if (name === "NotReadableError") return "Microphone is busy in another app. Close it and retry.";
+      return "This browser can't use the microphone here. Open this link in Chrome (not inside the QR-scanner / WhatsApp browser).";
+    }
+    if (code === 429) return "Too many attempts — wait a minute and try again.";
+    if (st === "start" || st === "offer") return code ? `Server refused the call (HTTP ${code}).` : "Couldn't reach the server. Check your internet and try again.";
+    if (st === "connect") return "Your network blocked the voice connection (relay). Try again, or try on WiFi.";
+    return "Something went wrong starting the call.";
+  };
   const [muted, setMuted] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(true);
   const [seconds, setSeconds] = useState(0);
@@ -62,9 +82,17 @@ export default function InAppCall({ qrId, onClose }) {
     let stopped = false;
     (async () => {
       try {
+        // Calling needs a secure page (https) and a real browser. Inside some
+        // QR-scanner / chat in-app browsers, or on http://, getUserMedia is absent.
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          stageRef.current = "unsupported";
+          throw new Error(typeof window !== "undefined" && window.isSecureContext === false ? "not a secure context (page is not https)" : "getUserMedia unavailable in this browser");
+        }
+        stageRef.current = "mic";
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         if (stopped) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
+        stageRef.current = "ice";
         const pc = new RTCPeerConnection(await getIceConfig());
         pcRef.current = pc;
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
@@ -77,15 +105,18 @@ export default function InAppCall({ qrId, onClose }) {
         pc.onconnectionstatechange = () => {
           const s = pc.connectionState;
           if (s === "connected") setStatus("connected");
-          if (s === "failed") hangup("error");
+          if (s === "failed") { stageRef.current = "connect"; setReason(explain({ name: "ICE failed", message: "peer connection failed" })); hangup("error"); }
         };
 
+        stageRef.current = "start";
         const { call_id } = (await api.post(`/public/qr/${qrId}/call/start`)).data;
         callIdRef.current = call_id;
         const offer = await pc.createOffer({ offerToReceiveAudio: true });
         await pc.setLocalDescription(offer);
+        stageRef.current = "offer";
         await api.post(`/public/call/${call_id}/offer`, { sdp: { type: offer.type, sdp: offer.sdp } });
         if (stopped) return;
+        stageRef.current = "ringing";
         setStatus("ringing");
 
         pollRef.current = setInterval(async () => {
@@ -105,6 +136,7 @@ export default function InAppCall({ qrId, onClose }) {
           } catch (_) {}
         }, 1200);
       } catch (e) {
+        setReason(explain(e));
         setStatus(e?.name === "NotAllowedError" ? "denied" : "error");
       }
     })();
@@ -179,7 +211,12 @@ export default function InAppCall({ qrId, onClose }) {
           </div>
         ) : (
           <div style={{ marginTop: 20 }}>
-            {status === "denied" && <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>Allow microphone in your browser and try again.</p>}
+            {(status === "error" || status === "denied") && (
+              <>
+                <p className="muted" style={{ fontSize: 12.5, marginBottom: 6 }} data-testid="inapp-call-reason">{reason || "Allow microphone in your browser and try again."}</p>
+                {detail && <p className="muted" style={{ fontSize: 10.5, opacity: 0.6, marginBottom: 12, wordBreak: "break-all" }} data-testid="inapp-call-detail">{detail}</p>}
+              </>
+            )}
             {status === "missed" && <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>We've alerted the owner about your call. They'll see it in the app.</p>}
             <button className="btn btn-primary" onClick={onClose} data-testid="inapp-call-close"><X size={16} /> Close</button>
           </div>
