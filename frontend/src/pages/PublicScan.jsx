@@ -30,16 +30,33 @@ function softBeep(freq = 880, dur = 0.35) {
 
 // Visible circular countdown for the 15-minute owner window, with soft beeps
 // near the end so the waiting reporter knows time is almost up.
-function CountdownRing({ expiresAt }) {
-  const [left, setLeft] = useState(Math.max(0, Math.round((new Date(expiresAt) - new Date()) / 1000)));
+function CountdownRing({ expiresAt, minutesLeft }) {
+  // End time comes from the server's expires_at (precise); if it ever fails to
+  // parse, fall back to the server-computed minutes_left. Re-synced whenever the
+  // 5s poll delivers a new value, so an owner's "+10 min" extension shows within
+  // seconds instead of the ring sitting at 00:00 "window over".
+  const endAt = () => {
+    // Our backend's timestamps are UTC. If one arrives without a timezone
+    // suffix, say so explicitly — otherwise the browser reads it as LOCAL time
+    // (5.5h early in IST) and the ring shows "window over" immediately.
+    const s = expiresAt == null ? "" : String(expiresAt);
+    const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(s);
+    const d = new Date(hasTz ? s : s + "Z").getTime();
+    if (Number.isFinite(d)) return d;
+    return Date.now() + (Number(minutesLeft) || 0) * 60000;
+  };
+  const endRef = useRef(endAt());
+  const [left, setLeft] = useState(() => Math.max(0, Math.round((endRef.current - Date.now()) / 1000)));
   const beep60 = useRef(false);
   const beep10 = useRef(false);
   useEffect(() => {
-    const tick = () => setLeft(Math.max(0, Math.round((new Date(expiresAt) - new Date()) / 1000)));
+    endRef.current = endAt();
+    const tick = () => setLeft(Math.max(0, Math.round((endRef.current - Date.now()) / 1000)));
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [expiresAt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expiresAt, minutesLeft]);
   useEffect(() => {
     if (left <= 60 && left > 10 && !beep60.current) { beep60.current = true; softBeep(760, 0.3); }
     if (left <= 10 && left > 0 && !beep10.current) { beep10.current = true; softBeep(1040, 0.5); }
@@ -316,18 +333,20 @@ export default function PublicScan() {
 
         {screen === "waiting" && incident && (
           <div data-testid="scan-waiting">
-            {incident.owner_response === "coming" ? (
+            {incident.status === "resolved" ? (
+              // Resolved is terminal — it must win even after the owner said "coming"
+              // (resolving does not clear owner_response, so this check comes first).
+              <div className="glass card-pad center" style={{ padding: 34 }} data-testid="incident-resolved">
+                <CheckCircle2 size={56} color="#e92546" /><h2 style={{ fontSize: 24, marginTop: 12 }}>Resolved</h2>
+                <p className="muted">The owner marked this issue as resolved. Thank you!</p>
+              </div>
+            ) : incident.owner_response === "coming" ? (
               <div className="glass card-pad center" style={{ padding: 34, borderColor: "rgba(233,37,70,.5)" }} data-testid="owner-coming">
                 <CheckCircle2 size={56} color="#e92546" />
                 <h2 style={{ fontSize: 24, margin: "12px 0 8px" }}>Owner is coming!</h2>
                 <p className="muted">The vehicle owner has been notified and is coming within 15 minutes. Please wait.</p>
-                {WINDOW_TYPES.includes(incident.type) && incident.expires_at && <CountdownRing expiresAt={incident.expires_at} />}
+                {WINDOW_TYPES.includes(incident.type) && incident.expires_at && <CountdownRing expiresAt={incident.expires_at} minutesLeft={incident.minutes_left} />}
                 <button className="btn btn-ghost btn-sm" onClick={playArrivalAlarm} data-testid="owner-coming-replay" style={{ marginTop: 12 }}><Volume2 size={15} /> Play alert again</button>
-              </div>
-            ) : incident.status === "resolved" ? (
-              <div className="glass card-pad center" style={{ padding: 34 }} data-testid="incident-resolved">
-                <CheckCircle2 size={56} color="#e92546" /><h2 style={{ fontSize: 24, marginTop: 12 }}>Resolved</h2>
-                <p className="muted">The owner marked this issue as resolved. Thank you!</p>
               </div>
             ) : (
               <div className="glass card-pad center" style={{ padding: 30 }} data-testid="alert-sent">
@@ -339,7 +358,7 @@ export default function PublicScan() {
                     : "The owner & family have been notified."}
                 </p>
                 {WINDOW_TYPES.includes(incident.type) && incident.expires_at && (
-                  <CountdownRing expiresAt={incident.expires_at} />
+                  <CountdownRing expiresAt={incident.expires_at} minutesLeft={incident.minutes_left} />
                 )}
                 {WINDOW_TYPES.includes(incident.type) && (
                   <div className="chip" style={{ marginTop: 6 }}><Clock size={13} /> {incident.status === "no_response" ? "No response yet" : "Alert sent"}</div>

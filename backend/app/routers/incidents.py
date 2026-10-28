@@ -69,10 +69,13 @@ def _incident_public(inc: dict) -> dict:
         "status": inc["status"],
         "owner_response": inc.get("owner_response"),
         "minutes_left": _minutes_left(inc["expires_at"]),
-        "expires_at": inc["expires_at"],
+        # MongoDB returns datetimes timezone-naive; send them as explicit UTC so a
+        # phone in IST doesn't read the expiry as local time (5.5h early) and show
+        # the countdown as "window over" straight away.
+        "expires_at": _aware(inc["expires_at"]),
         "call_available": inc["type"] in URGENT_TYPES or inc["status"] in ("alert_sent", "no_response", "call_attempted"),
         "portal_number": NEK_PORTAL_NUMBER,
-        "created_at": inc["created_at"],
+        "created_at": _aware(inc["created_at"]),
     }
 
 

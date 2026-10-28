@@ -36,7 +36,11 @@ export const RTC_CONFIG = {
 export async function getIceConfig() {
   try {
     const { data } = await api.get("/turn-credentials");
-    if (data && Array.isArray(data.iceServers) && data.iceServers.length) {
+    // Only trust the backend list when a real TURN relay is configured there.
+    // When it isn't, the backend returns a STUN-only entry — using that would
+    // silently drop every TURN fallback below and calls would fail on mobile
+    // data / carrier NAT.
+    if (data && data.configured && Array.isArray(data.iceServers) && data.iceServers.length) {
       return {
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
