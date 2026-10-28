@@ -27,6 +27,33 @@ async def _incident_recipients(vehicle: dict) -> list[dict]:
 CALL_RING_TIMEOUT_SEC = 45
 
 
+async def _call_callee_ids(vehicle: dict) -> list[str]:
+    """Everyone who should RING for an in-app call about this vehicle: the owner,
+    users the vehicle is shared with (accepted share), and the owner's family
+    circle. First to answer wins; the rest stop ringing."""
+    ids = [vehicle["owner_id"]]
+    async for s in db.vehicle_shares.find({"vehicle_id": vehicle["id"], "status": "accepted"}):
+        if s.get("shared_with_user_id"):
+            ids.append(s["shared_with_user_id"])
+    fm = await db.family_members.find_one({"user_id": vehicle["owner_id"]})
+    if fm:
+        async for m in db.family_members.find({"family_id": fm["family_id"]}):
+            if m.get("user_id"):
+                ids.append(m["user_id"])
+    seen, out = set(), []
+    for i in ids:
+        if i and i not in seen:
+            seen.add(i)
+            out.append(i)
+    return out
+
+
+def _callee_filter(user_id: str) -> dict:
+    """Mongo filter: calls this user is a callee of (new calls carry callee_ids;
+    older in-flight calls only had owner_id)."""
+    return {"$or": [{"callee_ids": user_id}, {"owner_id": user_id}]}
+
+
 async def _notify_missed_call(c: dict):
     v = await db.vehicles.find_one({"id": c["vehicle_id"]})
     if not v:
@@ -40,7 +67,7 @@ async def _notify_missed_call(c: dict):
     except Exception as _e:
         log.warning("missed-call whatsapp failed: %s", _e)
     try:
-        await send_push(recipients=[c["owner_id"]], data={
+        await send_push(recipients=c.get("callee_ids") or [c["owner_id"]], data={
             "title": "📞 Missed call", "message": f"Scanner tried to call about {c['number_plate']}",
             "action_url": "/incidents"}, idempotency_key="miss-" + c["id"])
     except Exception as _e:

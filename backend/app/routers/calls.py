@@ -9,7 +9,7 @@ from app.db import db
 from app.ratelimit import rate_limit
 from app.schemas import RTCCandidateIn, RTCDescriptionIn
 from app.security import current_user, require_admin
-from app.services.calls import CALL_RING_TIMEOUT_SEC, _expire_stale_calls, _mask_phone, _notify_missed_call, _vobiz_xml
+from app.services.calls import CALL_RING_TIMEOUT_SEC, _call_callee_ids, _callee_filter, _expire_stale_calls, _mask_phone, _notify_missed_call, _vobiz_xml
 from app.services.fcm import send_push
 from app.utils import _aware, new_id, now_utc
 
@@ -33,16 +33,19 @@ async def rtc_call_start(request: Request, qr_id: str):
         raise HTTPException(status_code=404, detail="QR not found or vehicle removed")
     await _expire_stale_calls()
     now = now_utc()
+    # Simul-ring: owner + family. First to answer wins; the others stop ringing.
+    callee_ids = await _call_callee_ids(v)
     call = {
         "id": new_id(), "qr_id": qr_id, "vehicle_id": v["id"], "number_plate": v["number_plate"],
-        "owner_id": v["owner_id"], "status": "ringing",
+        "owner_id": v["owner_id"], "callee_ids": callee_ids, "answered_by": None, "rejected_by": [],
+        "status": "ringing",
         "caller_offer": None, "callee_answer": None,
         "caller_candidates": [], "callee_candidates": [],
         "created_at": now, "updated_at": now, "answered_at": None, "ended_at": None,
     }
     await db.webrtc_calls.insert_one(dict(call))
     try:
-        await send_push(recipients=[v["owner_id"]], data={
+        await send_push(recipients=callee_ids, data={
             # keys the native CallMessagingService looks for (full-screen call UI)
             "type": "incoming_call",
             "call_id": call["id"],
@@ -96,7 +99,10 @@ async def rtc_caller_end(call_id: str):
 async def rtc_incoming_calls(user: dict = Depends(current_user)):
     await _expire_stale_calls()
     out = []
-    async for c in db.webrtc_calls.find({"owner_id": user["id"], "status": "ringing"}).sort("created_at", -1):
+    # Ringing calls this user is a callee of (owner OR family), excluding ones
+    # they personally declined (a decline by one member doesn't stop the others).
+    q = {**_callee_filter(user["id"]), "status": "ringing", "rejected_by": {"$nin": [user["id"]]}}
+    async for c in db.webrtc_calls.find(q).sort("created_at", -1):
         out.append({"call_id": c["id"], "number_plate": c["number_plate"],
                     "created_at": c["created_at"], "has_offer": bool(c.get("caller_offer"))})
     return {"items": out}
@@ -107,7 +113,7 @@ async def rtc_recent_calls(user: dict = Depends(current_user), limit: int = 20):
     """Recent in-app calls for the owner (incl. missed) so nothing is lost."""
     await _expire_stale_calls()
     out = []
-    async for c in db.webrtc_calls.find({"owner_id": user["id"], "status": {"$ne": "ringing"}}).sort("created_at", -1).limit(min(limit, 50)):
+    async for c in db.webrtc_calls.find({**_callee_filter(user["id"]), "status": {"$ne": "ringing"}}).sort("created_at", -1).limit(min(limit, 50)):
         out.append({
             "id": c["id"], "number_plate": c["number_plate"], "status": c["status"],
             "created_at": c["created_at"], "answered_at": c.get("answered_at"), "ended_at": c.get("ended_at"),
@@ -118,39 +124,73 @@ async def rtc_recent_calls(user: dict = Depends(current_user), limit: int = 20):
 
 @router.get("/me/calls/{call_id}")
 async def rtc_owner_poll(call_id: str, user: dict = Depends(current_user)):
-    c = await db.webrtc_calls.find_one({"id": call_id, "owner_id": user["id"]})
+    c = await db.webrtc_calls.find_one({"id": call_id, **_callee_filter(user["id"])})
     if not c:
         raise HTTPException(status_code=404, detail="Call not found")
-    return {"status": c["status"], "offer": c.get("caller_offer"), "caller_candidates": c.get("caller_candidates", [])}
+    ab = c.get("answered_by")
+    return {"status": c["status"], "offer": c.get("caller_offer"), "caller_candidates": c.get("caller_candidates", []),
+            # Lets a still-ringing phone know another family member already picked up.
+            "answered_by_me": (ab == user["id"]) if ab else None}
 
 
 @router.post("/me/calls/{call_id}/accept")
 async def rtc_accept_call(call_id: str, payload: RTCDescriptionIn, user: dict = Depends(current_user)):
+    # Atomic: only the FIRST callee to accept flips ringing -> accepted.
     r = await db.webrtc_calls.update_one(
-        {"id": call_id, "owner_id": user["id"], "status": "ringing"},
-        {"$set": {"callee_answer": payload.sdp, "status": "accepted", "answered_at": now_utc(), "updated_at": now_utc()}})
+        {"id": call_id, **_callee_filter(user["id"]), "status": "ringing"},
+        {"$set": {"callee_answer": payload.sdp, "status": "accepted", "answered_by": user["id"],
+                  "answered_at": now_utc(), "updated_at": now_utc()}})
     if not r.matched_count:
         raise HTTPException(status_code=409, detail="Call no longer available")
+    # Tell every OTHER callee to stop ringing right away (native lock-screen ring
+    # + in-app ring). Their in-app poll also sees answered_by_me=false.
+    c = await db.webrtc_calls.find_one({"id": call_id})
+    others = [i for i in (c or {}).get("callee_ids", []) if i != user["id"]]
+    if others:
+        try:
+            await send_push(recipients=others, data={
+                "type": "call_cancel", "call_id": call_id,
+                "title": "Call answered", "message": f"Another family member answered the call about {c['number_plate']}",
+                "action_url": "/dashboard"}, idempotency_key="cancel-" + call_id, data_only=True)
+        except Exception:
+            pass
     return {"ok": True}
 
 
 @router.post("/me/calls/{call_id}/reject")
 async def rtc_reject_call(call_id: str, user: dict = Depends(current_user)):
-    await db.webrtc_calls.update_one(
-        {"id": call_id, "owner_id": user["id"], "status": "ringing"},
-        {"$set": {"status": "rejected", "ended_at": now_utc()}})
+    """One member declining removes only THEM from the ring; the call ends as
+    'rejected' only once every callee has declined."""
+    c = await db.webrtc_calls.find_one({"id": call_id, **_callee_filter(user["id"]), "status": "ringing"})
+    if not c:
+        return {"ok": True}
+    callees = c.get("callee_ids") or [c["owner_id"]]
+    rejected = set(c.get("rejected_by", [])) | {user["id"]}
+    if set(callees) <= rejected:
+        await db.webrtc_calls.update_one(
+            {"id": call_id, "status": "ringing"},
+            {"$set": {"status": "rejected", "rejected_by": sorted(rejected), "ended_at": now_utc()}})
+    else:
+        await db.webrtc_calls.update_one({"id": call_id}, {"$addToSet": {"rejected_by": user["id"]}})
     return {"ok": True}
 
 
 @router.post("/me/calls/{call_id}/candidate")
 async def rtc_owner_candidate(call_id: str, payload: RTCCandidateIn, user: dict = Depends(current_user)):
-    await db.webrtc_calls.update_one({"id": call_id, "owner_id": user["id"]}, {"$push": {"callee_candidates": payload.candidate}})
+    await db.webrtc_calls.update_one({"id": call_id, **_callee_filter(user["id"])}, {"$push": {"callee_candidates": payload.candidate}})
     return {"ok": True}
 
 
 @router.post("/me/calls/{call_id}/end")
 async def rtc_owner_end(call_id: str, user: dict = Depends(current_user)):
-    await db.webrtc_calls.update_one({"id": call_id, "owner_id": user["id"]}, {"$set": {"status": "ended", "ended_at": now_utc()}})
+    # Only the member who answered (or anyone while still ringing) may end it —
+    # a member who lost the answer race must not hang up the winner's call.
+    c = await db.webrtc_calls.find_one({"id": call_id, **_callee_filter(user["id"])})
+    if not c:
+        return {"ok": True}
+    if c.get("answered_by") and c["answered_by"] != user["id"]:
+        return {"ok": False, "detail": "Call is active with another member"}
+    await db.webrtc_calls.update_one({"id": call_id}, {"$set": {"status": "ended", "ended_at": now_utc()}})
     return {"ok": True}
 
 

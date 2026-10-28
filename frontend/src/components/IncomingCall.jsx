@@ -83,6 +83,8 @@ export default function IncomingCall() {
         try {
           const d = (await api.get(`/me/calls/${busyId.current}`)).data;
           if (["ended", "rejected", "missed"].includes(d.status)) reset();
+          // Another family member picked up first → stop ringing on this phone.
+          else if (d.status === "accepted" && d.answered_by_me === false) reset();
         } catch (_) {}
         return;
       }
@@ -156,6 +158,7 @@ export default function IncomingCall() {
       try {
         const d = (await api.get(`/me/calls/${busyId.current}`)).data;
         if (["ended", "rejected", "missed"].includes(d.status)) { reset(); return; }
+        if (d.status === "accepted" && d.answered_by_me === false) { reset(); return; }
       } catch (_) {}
       if (!busyId.current || acceptingRef.current) return;
       let pa = null; try { pa = localStorage.getItem("nk_answer_call_id"); } catch (_) {}
@@ -206,6 +209,7 @@ export default function IncomingCall() {
     setIncoming(null);
     setActive({ call_id: id, number_plate: incoming?.number_plate });
     setStatus("connecting");
+    let acceptedOk = false; // did OUR accept win the race?
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       streamRef.current = stream;
@@ -226,6 +230,7 @@ export default function IncomingCall() {
       for (let i = 0; i < 12 && !offer; i++) {
         const d = (await api.get(`/me/calls/${id}`)).data;
         if (["ended", "rejected", "missed"].includes(d.status)) { reset(); return; }
+        if (d.status === "accepted" && d.answered_by_me === false) { reset(); return; } // someone else got it
         offer = d.offer;
         if (!offer) await new Promise((r) => setTimeout(r, 600));
       }
@@ -235,6 +240,7 @@ export default function IncomingCall() {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       await api.post(`/me/calls/${id}/accept`, { sdp: { type: answer.type, sdp: answer.sdp } });
+      acceptedOk = true;
 
       pollRef.current = setInterval(async () => {
         try {
@@ -256,8 +262,16 @@ export default function IncomingCall() {
         } catch (_) {}
       }, 1200);
     } catch (e) {
-      // mic denied or error → end the call so the caller isn't left hanging
-      try { await api.post(`/me/calls/${id}/end`); } catch (_) {}
+      if (e?.response?.status === 409) {
+        // Lost the answer race — another family member picked up first. Step
+        // back quietly; do NOT end their call.
+        reset();
+        return;
+      }
+      // Mic denied / error: if our accept had already won, end the call so the
+      // caller isn't left hanging; otherwise just drop out of the ring so the
+      // other family members keep ringing.
+      try { await api.post(`/me/calls/${id}/${acceptedOk ? "end" : "reject"}`); } catch (_) {}
       reset();
     }
   };
