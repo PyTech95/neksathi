@@ -13,17 +13,20 @@ const _navPos = (opts) => new Promise((res, rej) => {
   if (!navigator.geolocation) return rej(new Error("no geolocation"));
   navigator.geolocation.getCurrentPosition((p) => res({ lat: p.coords.latitude, lng: p.coords.longitude }), rej, opts);
 });
-async function getLocation() {
+// fast=true (used at submit time) accepts a quick network/cached fix so the
+// report is never held up for long; the slow high-accuracy pass runs on mount.
+async function getLocation(fast = false) {
+  const hi = { enableHighAccuracy: !fast, timeout: fast ? 6000 : 10000, maximumAge: fast ? 300000 : 30000 };
   try {
     if (Capacitor.isNativePlatform()) {
       const { Geolocation } = await import("@capacitor/geolocation");
       try { await Geolocation.requestPermissions(); } catch (_) {}
-      const p = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+      const p = await Geolocation.getCurrentPosition(hi);
       return { lat: p.coords.latitude, lng: p.coords.longitude };
     }
   } catch (_) {}
-  try { return await _navPos({ enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }); } catch (_) {}
-  try { return await _navPos({ enableHighAccuracy: false, timeout: 6000, maximumAge: 120000 }); } catch (_) {}
+  try { return await _navPos(hi); } catch (_) {}
+  try { return await _navPos({ enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }); } catch (_) {}
   return null;
 }
 const geo = (setC) => {
@@ -228,7 +231,7 @@ export default function PublicScan() {
       // If GPS hadn't locked yet when the user tapped, try once more now so the
       // owner reliably gets the scan location (the map button on their incident).
       let c = coords;
-      if (!c) { c = await getLocation(); if (c) setCoords(c); }
+      if (!c) { c = await getLocation(true); if (c) setCoords(c); }
       const r = await api.post(`/public/qr/${qrId}/incident`, {
         type, scanner_note: note || null, scanner_phone: phone || null,
         scanner_lat: c?.lat ?? null, scanner_lng: c?.lng ?? null,
@@ -283,7 +286,7 @@ export default function PublicScan() {
         <div><div className="chip" data-testid="scan-plate">{vehicle.number_plate}</div>
           <p className="muted" style={{ marginTop: 6, fontSize: 13, textTransform: "capitalize" }}>{vehicle.vehicle_type}{vehicle.make_model ? ` · ${vehicle.make_model}` : ""}</p></div>
       </div>
-      <p className="muted" style={{ marginTop: 12, fontSize: 13 }}><MapPin size={12} style={{ verticalAlign: "-2px" }} /> {coords ? "Location ready" : "Location optional"} · Owner's number stays private</p>
+      <p className="muted" style={{ marginTop: 12, fontSize: 13 }}><MapPin size={12} style={{ verticalAlign: "-2px" }} /> {coords ? <span style={{ color: "#16a34a", fontWeight: 700 }}>Location ready ✓</span> : <span style={{ color: "#f5a524" }}>Getting your location…</span>} · Owner's number stays private</p>
     </div>
   );
 

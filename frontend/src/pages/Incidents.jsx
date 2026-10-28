@@ -101,10 +101,11 @@ export default function Incidents() {
                               <MapPin size={18} />
                             </a>
                           ) : (
-                            <span title="Location was not captured at scan" aria-label="Location not captured" data-testid={`incident-map-none-${it.id}`}
-                                  style={{ width: 36, height: 36, borderRadius: "50%", display: "grid", placeItems: "center", background: "rgba(255,255,255,.08)", color: "rgba(255,255,255,.35)", flexShrink: 0 }}>
+                            <button type="button" title="Location was not captured for this scan" aria-label="Location not captured" data-testid={`incident-map-none-${it.id}`}
+                                    onClick={() => alert("Location was not captured for this scan — the reporter's phone had no GPS fix at the time.")}
+                                    style={{ width: 36, height: 36, borderRadius: "50%", display: "grid", placeItems: "center", background: "linear-gradient(135deg,#b3122f,#e92546)", color: "#fff", flexShrink: 0, border: "none", cursor: "pointer", boxShadow: "0 4px 14px rgba(233,37,70,.35)" }}>
                               <MapPin size={18} />
-                            </span>
+                            </button>
                           )}
                         </span>
                       </div>
