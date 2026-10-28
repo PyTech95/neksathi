@@ -10,6 +10,11 @@ from app.security import current_user
 
 router = APIRouter()
 
+# Android notification channel for visible (non-call) alerts. Must match the id
+# the app creates in frontend/src/lib/push.js — a channel the app has not
+# created falls back to Android's silent default channel.
+ALERT_CHANNEL_ID = "nek_alerts_v2"
+
 
 _fcm_ready = False
 
@@ -65,8 +70,10 @@ async def fcm_send_to_user(owner_id, title, body, data=None, data_only=False):
             )
         else:
             # Heads-up, lock-screen-visible alert with sound (WhatsApp-style). The
-            # app creates the "nek_alerts" channel (high importance, public) on
-            # start; tapping opens the app at data.action_url.
+            # app creates the "nek_alerts_v2" channel (high importance, public,
+            # system default sound) on start; tapping opens the app at
+            # data.action_url. ("nek_alerts" v1 was accidentally created silent on
+            # the phones — see frontend/src/lib/push.js — hence the new id.)
             msg = messaging.MulticastMessage(
                 tokens=tokens,
                 notification=messaging.Notification(title=title, body=body),
@@ -74,7 +81,7 @@ async def fcm_send_to_user(owner_id, title, body, data=None, data_only=False):
                 android=messaging.AndroidConfig(
                     priority="high",
                     notification=messaging.AndroidNotification(
-                        sound="default", channel_id="nek_alerts", visibility="public",
+                        sound="default", channel_id=ALERT_CHANNEL_ID, visibility="public",
                         priority="max", default_vibrate_timings=True),
                 ),
             )

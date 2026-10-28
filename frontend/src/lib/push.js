@@ -27,13 +27,21 @@ export async function initPush(userId) {
     if (perm.receive !== "granted") { started = false; return; }
 
     // High-importance channel so alerts show as a heads-up banner on the lock
-    // screen with sound/vibration (WhatsApp-style). The backend targets this
-    // channel id. Creating it again is a harmless no-op.
+    // screen WITH the phone's notification sound + vibration (WhatsApp-style).
+    // The backend targets this channel id. Creating it again is a harmless no-op.
+    //
+    // Why "_v2": the first channel was created with sound:"default", which the
+    // Capacitor plugin resolves to res/raw/default — a file that does not exist —
+    // so Android made the channel SILENT. Android never lets an app change a
+    // channel's sound after creation (even delete+recreate restores the old
+    // settings), so the only fix is a new channel id. Leaving `sound` out makes
+    // the channel use the system default notification sound.
+    try { await PushNotifications.deleteChannel({ id: "nek_alerts" }); } catch (_) {}
     try {
       await PushNotifications.createChannel({
-        id: "nek_alerts", name: "Nek Sathi alerts",
+        id: "nek_alerts_v2", name: "Nek Sathi alerts",
         description: "Vehicle incidents, family alerts and SOS",
-        importance: 5, visibility: 1, sound: "default", vibration: true, lights: true,
+        importance: 5, visibility: 1, vibration: true, lights: true,
       });
     } catch (_) {}
 

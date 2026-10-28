@@ -113,13 +113,24 @@ async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str)
         g = await db.emergency_contacts.find_one({"id": gid, "user_id": user["id"]})
         if g and g.get("phone") and g["phone"] not in phones:
             phones.append(g["phone"])
-    admin_phones, admin_emails = [], []
+    admin_phones, admin_emails, admin_ids = [], [], []
     if device.get("super_admin_alerts", True):
         async for a in db.users.find({"is_admin": True}):
+            admin_ids.append(a["id"])
             if a.get("phone"):
                 admin_phones.append(a["phone"])
             if a.get("email"):
                 admin_emails.append(a["email"])
+    # Admin app/web push (lock-screen) with the photo/location one tap away.
+    if admin_ids:
+        try:
+            await send_push(recipients=admin_ids, data={
+                "type": "intruder", "title": "🚨 Intruder alert (admin)",
+                "message": f"{event['attempt_count']} failed unlocks on {who}'s phone '{device.get('name','device')}'."
+                           + (" Location attached." if event.get("latitude") is not None else ""),
+                "action_url": "/admin/intruder"}, idempotency_key="adm-" + event["id"])
+        except Exception:
+            pass
     for p in phones + admin_phones:
         try:
             await notify_whatsapp(p, body, meta={"kind": "theft", "user_id": user["id"]})

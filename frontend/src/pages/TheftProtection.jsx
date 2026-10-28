@@ -1,6 +1,107 @@
 import { useEffect, useRef, useState } from "react";
-import api from "@/lib/api";
-import { ShieldCheck, Smartphone, Plus, Trash2, Pencil, Lock, Unlock, X, Loader2, MapPin, Camera, AlertTriangle, Info, Volume2, VolumeX, Signal } from "lucide-react";
+import api, { API } from "@/lib/api";
+import { ShieldCheck, Smartphone, Plus, Trash2, Pencil, Lock, Unlock, X, Loader2, MapPin, Camera, AlertTriangle, Info, Volume2, VolumeX, Signal, CheckCircle2, Circle, RefreshCw } from "lucide-react";
+import { isNativeApp, theftStatus, setTheftConfig, requestTheftPermissions, openDeviceAdmin, removeDeviceAdmin, openOverlaySettings, testIntruderCapture, theftReady } from "@/lib/theft";
+import { setCallAuth } from "@/lib/callsetup";
+
+const BOUND_KEY = "nk_theft_device_id";
+
+// Native-only card: binds THIS phone to one of the registered devices and walks
+// through the three Android permissions the intruder capture needs. The actual
+// detection runs in Java (TheftAdminReceiver -> IntruderCaptureService); this
+// card only configures it and shows what is still missing.
+function ThisPhoneCard({ devices, onCreateDevice, onEvents }) {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const boundId = (() => { try { return localStorage.getItem(BOUND_KEY) || ""; } catch (_) { return ""; } })();
+  const bound = devices.find((d) => d.id === (st?.device_id || boundId));
+
+  const refresh = async () => { setSt(await theftStatus()); };
+  useEffect(() => {
+    // Make sure native has the API base + token for the upload (normally set by
+    // the global IncomingCall component; repeated here to be safe).
+    try { setCallAuth(API, localStorage.getItem("nk_token")); } catch (_) {}
+    refresh();
+    const onVis = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
+  // Keep the native threshold in sync when the bound device is edited anywhere.
+  useEffect(() => {
+    if (bound && st?.supported && (st.device_id !== bound.id || st.threshold !== bound.lock_threshold || !st.enabled)) {
+      setTheftConfig({ device_id: bound.id, threshold: bound.lock_threshold, enabled: true }).then(setSt);
+    }
+  }, [bound?.id, bound?.lock_threshold, st?.supported]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const bind = async (id) => {
+    let d = devices.find((x) => x.id === id);
+    if (id === "__new__") { setBusy("bind"); try { d = await onCreateDevice(); } finally { setBusy(""); } }
+    if (!d) return;
+    try { localStorage.setItem(BOUND_KEY, d.id); } catch (_) {}
+    setSt(await setTheftConfig({ device_id: d.id, threshold: d.lock_threshold, enabled: true }));
+  };
+  const disable = async () => { setSt(await removeDeviceAdmin()); try { localStorage.removeItem(BOUND_KEY); } catch (_) {} };
+  const test = async () => {
+    setBusy("test"); setMsg("Taking a front-camera photo and sending it… (3–10 s)");
+    await testIntruderCapture();
+    setTimeout(async () => { await onEvents(); await refresh(); setBusy(""); setMsg("Done — the capture should appear under “Intruder captures” below and on your family's phones."); }, 9000);
+  };
+
+  if (!st) return null;
+  if (!st.supported) return null;
+  const ready = theftReady(st);
+  const Step = ({ ok, label, action, onClick }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+      {ok ? <CheckCircle2 size={18} style={{ color: "#34d399", flexShrink: 0 }} /> : <Circle size={18} className="muted" style={{ flexShrink: 0 }} />}
+      <span style={{ flex: 1, fontSize: 13.5 }}>{label}</span>
+      {!ok && onClick && <button className="btn btn-primary btn-sm" onClick={onClick} data-testid={`theft-step-${action}`}>{action}</button>}
+    </div>
+  );
+  return (
+    <div className="glass" data-testid="this-phone-card" style={{ padding: 16, borderRadius: 14, marginBottom: 20, borderColor: ready ? "rgba(52,211,153,.35)" : "rgba(233,37,70,.3)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Smartphone size={20} className={ready ? "" : "neon"} style={ready ? { color: "#34d399" } : {}} />
+          <div>
+            <div style={{ fontWeight: 800 }}>This phone {ready ? <span style={{ color: "#34d399", fontSize: 12.5, marginLeft: 6 }}>● Protected</span> : <span style={{ color: "#ff7591", fontSize: 12.5, marginLeft: 6 }}>● Not protected yet</span>}</div>
+            <div className="muted" style={{ fontSize: 12.5 }}>
+              {ready ? `After ${st.threshold} wrong unlock attempts: front-camera photo + location → you, your family circle and admin.` : "Finish the steps below to switch intruder capture on."}
+            </div>
+          </div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={refresh} title="Refresh status" data-testid="theft-refresh"><RefreshCw size={14} /></button>
+      </div>
+
+      <div style={{ marginTop: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+          {bound ? <CheckCircle2 size={18} style={{ color: "#34d399", flexShrink: 0 }} /> : <Circle size={18} className="muted" style={{ flexShrink: 0 }} />}
+          <span style={{ fontSize: 13.5 }}>Which registered device is this phone?</span>
+          <select className="input" style={{ flex: 1, minWidth: 140, padding: "6px 8px" }} value={bound?.id || ""} onChange={(e) => bind(e.target.value)} disabled={busy === "bind"} data-testid="theft-bind-select">
+            <option value="">— choose —</option>
+            {devices.map((d) => <option key={d.id} value={d.id}>{d.name} (locks after {d.lock_threshold})</option>)}
+            <option value="__new__">+ Register this phone as a new device</option>
+          </select>
+        </div>
+        <Step ok={st.camera && st.location} label="Camera + location permission (to photograph the intruder and send where the phone is)" action="Allow" onClick={async () => { await requestTheftPermissions(); setTimeout(refresh, 1500); }} />
+        <Step ok={st.admin_active} label="Device admin — lets Nek Sathi notice wrong PIN / pattern attempts" action="Enable" onClick={openDeviceAdmin} />
+        <Step ok={st.overlay} label="Display over other apps — lets the capture start while the phone is locked (Android 10+)" action="Open settings" onClick={openOverlaySettings} />
+        <Step ok={st.auth} label="Signed in on this phone (needed to upload the capture)" />
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <button className="btn btn-ghost btn-sm" disabled={!ready || !!busy} onClick={test} data-testid="theft-test-btn">{busy === "test" ? <Loader2 className="spin" size={14} /> : <Camera size={14} />} Test capture now</button>
+        {st.admin_active && <button className="btn btn-ghost btn-sm" onClick={disable} data-testid="theft-disable-btn">Turn protection off</button>}
+        {st.pending && <span className="muted" style={{ fontSize: 12 }}>1 capture waiting for network…</span>}
+        {msg && <span className="muted" style={{ fontSize: 12 }} data-testid="theft-msg">{msg}</span>}
+      </div>
+      <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>
+        Tip: Xiaomi / Vivo / Oppo / Realme phones also need <b>Autostart</b> and battery set to <b>No restrictions</b> for Nek Sathi (same as for calls — see Call setup).
+      </div>
+    </div>
+  );
+}
 
 function useSiren() {
   const ctxRef = useRef(null);
@@ -61,6 +162,13 @@ export default function TheftProtection() {
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+  const loadEvents = async () => { try { setEvents((await api.get("/intruder-events")).data); } catch (_) {} };
+  const createThisPhone = async () => {
+    const name = (navigator.userAgent.match(/;\s*([^;)]+)\s+Build\//) || [])[1]?.trim() || "My Android phone";
+    const r = await api.post("/devices", { name: name.slice(0, 60), platform: "android", lock_threshold: 2, guardian_contact_id: null, super_admin_alerts: true });
+    await load();
+    return r.data;
+  };
 
   const openAdd = () => { setEditing(null); setForm({ name: "", platform: "android", lock_threshold: 3, guardian_contact_id: "", super_admin_alerts: true }); setErr(""); setShow(true); };
   const openEdit = (d) => { setEditing(d.id); setForm({ name: d.name, platform: d.platform || "android", lock_threshold: d.lock_threshold, guardian_contact_id: d.guardian_contact_id || "", super_admin_alerts: d.super_admin_alerts }); setErr(""); setShow(true); };
@@ -96,6 +204,8 @@ export default function TheftProtection() {
           </div>
         </div>
       </div>
+
+      {isNativeApp() && !loading && <ThisPhoneCard devices={devices} onCreateDevice={createThisPhone} onEvents={loadEvents} />}
 
       {/* Devices */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>

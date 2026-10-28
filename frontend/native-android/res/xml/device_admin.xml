@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Anti-theft policies for TheftAdminReceiver:
+     watch-login  - be told about failed / successful unlock attempts
+     force-lock   - allow the app to lock the screen (remote lock) -->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <watch-login />
+        <force-lock />
+    </uses-policies>
+</device-admin>
