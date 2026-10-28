@@ -89,8 +89,12 @@ export default function IncomingCall() {
         return;
       }
       try {
-        const items = (await api.get("/me/calls/incoming")).data.items || [];
+        let items = (await api.get("/me/calls/incoming")).data.items || [];
         if (stop) return;
+        // Never "answer" a call this very device is placing (same account on
+        // two phones, or a family member calling a family vehicle).
+        let mine = null; try { mine = localStorage.getItem("nk_outgoing_call_id"); } catch (_) {}
+        if (mine) items = items.filter((x) => x.call_id !== mine);
         const c = items.find((x) => x.has_offer) || items[0];
         if (c && !rejectedIds.current.has(c.call_id)) {
           busyId.current = c.call_id;

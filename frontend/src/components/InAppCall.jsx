@@ -60,6 +60,7 @@ export default function InAppCall({ qrId, onClose }) {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     if (pcRef.current) { try { pcRef.current.close(); } catch (_) {} pcRef.current = null; }
     if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
+    try { localStorage.removeItem("nk_outgoing_call_id"); } catch (_) {}
   };
 
   const hangup = async (next = "ended") => {
@@ -111,6 +112,10 @@ export default function InAppCall({ qrId, onClose }) {
         stageRef.current = "start";
         const { call_id } = (await api.post(`/public/qr/${qrId}/call/start`)).data;
         callIdRef.current = call_id;
+        // Remember OUR outgoing call so this same device's incoming-call poller
+        // never treats it as a call to answer (e.g. owner testing with their own
+        // account on two phones, or a family member scanning a family vehicle).
+        try { localStorage.setItem("nk_outgoing_call_id", call_id); } catch (_) {}
         const offer = await pc.createOffer({ offerToReceiveAudio: true });
         await pc.setLocalDescription(offer);
         stageRef.current = "offer";
