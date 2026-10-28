@@ -54,7 +54,25 @@ def _callee_filter(user_id: str) -> dict:
     return {"$or": [{"callee_ids": user_id}, {"owner_id": user_id}]}
 
 
+async def _push_call_cancel(c: dict, exclude: Optional[str] = None, reason: str = "ended"):
+    """Tell every callee phone to stop ringing NOW (native lock-screen ring +
+    notification + full-screen call UI). Sent when the caller hangs up, when the
+    ring times out, when everyone declined, or when another member answered."""
+    targets = [i for i in (c.get("callee_ids") or [c.get("owner_id")]) if i and i != exclude]
+    if not targets:
+        return
+    try:
+        await send_push(recipients=targets, data={
+            "type": "call_cancel", "call_id": c["id"], "reason": reason,
+            "title": "Call ended", "message": f"The call about {c.get('number_plate', 'your vehicle')} has ended",
+            "action_url": "/dashboard"}, idempotency_key=f"cancel-{reason}-{c['id']}", data_only=True)
+    except Exception as _e:
+        log.warning("call_cancel push failed: %s", _e)
+
+
 async def _notify_missed_call(c: dict):
+    # Stop every phone that is still ringing for this call.
+    await _push_call_cancel(c, reason="missed")
     v = await db.vehicles.find_one({"id": c["vehicle_id"]})
     if not v:
         return

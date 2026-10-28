@@ -9,7 +9,7 @@ from app.db import db
 from app.ratelimit import rate_limit
 from app.schemas import RTCCandidateIn, RTCDescriptionIn
 from app.security import current_user, require_admin
-from app.services.calls import CALL_RING_TIMEOUT_SEC, _call_callee_ids, _callee_filter, _expire_stale_calls, _mask_phone, _notify_missed_call, _vobiz_xml
+from app.services.calls import CALL_RING_TIMEOUT_SEC, _call_callee_ids, _callee_filter, _expire_stale_calls, _mask_phone, _notify_missed_call, _push_call_cancel, _vobiz_xml
 from app.services.fcm import send_push
 from app.utils import _aware, new_id, now_utc
 
@@ -89,9 +89,14 @@ async def rtc_caller_poll(call_id: str):
 
 @router.post("/public/call/{call_id}/end")
 async def rtc_caller_end(call_id: str):
-    await db.webrtc_calls.update_one(
-        {"id": call_id, "status": {"$nin": ["missed", "rejected"]}},
+    c = await db.webrtc_calls.find_one({"id": call_id})
+    r = await db.webrtc_calls.update_one(
+        {"id": call_id, "status": {"$nin": ["missed", "rejected", "ended"]}},
         {"$set": {"status": "ended", "ended_at": now_utc()}})
+    # Caller hung up / cancelled while phones were still ringing (or mid-call):
+    # silence every callee's lock-screen ring right away.
+    if c and r.modified_count:
+        await _push_call_cancel(c, reason="ended")
     return {"ok": True}
 
 
@@ -145,15 +150,8 @@ async def rtc_accept_call(call_id: str, payload: RTCDescriptionIn, user: dict = 
     # Tell every OTHER callee to stop ringing right away (native lock-screen ring
     # + in-app ring). Their in-app poll also sees answered_by_me=false.
     c = await db.webrtc_calls.find_one({"id": call_id})
-    others = [i for i in (c or {}).get("callee_ids", []) if i != user["id"]]
-    if others:
-        try:
-            await send_push(recipients=others, data={
-                "type": "call_cancel", "call_id": call_id,
-                "title": "Call answered", "message": f"Another family member answered the call about {c['number_plate']}",
-                "action_url": "/dashboard"}, idempotency_key="cancel-" + call_id, data_only=True)
-        except Exception:
-            pass
+    if c:
+        await _push_call_cancel(c, exclude=user["id"], reason="answered")
     return {"ok": True}
 
 
@@ -170,6 +168,7 @@ async def rtc_reject_call(call_id: str, user: dict = Depends(current_user)):
         await db.webrtc_calls.update_one(
             {"id": call_id, "status": "ringing"},
             {"$set": {"status": "rejected", "rejected_by": sorted(rejected), "ended_at": now_utc()}})
+        await _push_call_cancel(c, reason="rejected")  # clear any lingering ring/notification
     else:
         await db.webrtc_calls.update_one({"id": call_id}, {"$addToSet": {"rejected_by": user["id"]}})
     return {"ok": True}
