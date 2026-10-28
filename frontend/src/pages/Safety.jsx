@@ -733,11 +733,20 @@ export default function Safety() {
                   <ShieldAlert size={16} style={{ color: "#ff3b5c" }} />
                   <span style={{ fontSize: 13.5 }}>Alerted {e.notified} contact{e.notified === 1 ? "" : "s"} · {(e.channels || []).join(", ") || "—"}</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                   {e.latitude != null && (
                     <a href={`https://maps.google.com/?q=${e.latitude},${e.longitude}`} target="_blank" rel="noreferrer" className="muted" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5 }}><MapPin size={13} /> Map</a>
                   )}
                   <span className="muted" style={{ fontSize: 12 }}>{new Date(e.created_at).toLocaleString()}</span>
+                  {/* An SOS stays active for the family until it is acknowledged —
+                      let the member mark it safe from here too, not only from the
+                      box shown right after sending. */}
+                  {e.acknowledged
+                    ? <span style={{ fontSize: 12, color: "#34d399", display: "inline-flex", alignItems: "center", gap: 4 }} data-testid={`sos-event-acked-${e.id}`}><CheckCircle2 size={13} /> Safe</span>
+                    : <button className="btn btn-primary btn-sm" data-testid={`sos-event-ack-${e.id}`}
+                        onClick={async () => { try { await api.post(`/me/sos-events/${e.id}/ack`); } catch (_) {} load(); }}>
+                        <CheckCircle2 size={14} /> I'm safe
+                      </button>}
                 </div>
               </div>
             ))}

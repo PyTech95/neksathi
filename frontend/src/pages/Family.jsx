@@ -245,7 +245,15 @@ export default function Family() {
                       <div className="muted" style={{ fontSize: 12.5 }}>{new Date(s.created_at).toLocaleString()}{s.message ? ` · "${s.message}"` : ""}</div>
                     </div>
                   </div>
-                  {s.latitude != null && <a className="btn btn-danger btn-sm" href={`https://maps.google.com/?q=${s.latitude},${s.longitude}`} target="_blank" rel="noreferrer" data-testid={`active-sos-nav-${s.id}`}><MapPin size={14} /> Navigate</a>}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {s.latitude != null && <a className="btn btn-danger btn-sm" href={`https://maps.google.com/?q=${s.latitude},${s.longitude}`} target="_blank" rel="noreferrer" data-testid={`active-sos-nav-${s.id}`}><MapPin size={14} /> Navigate</a>}
+                    {s.can_resolve !== false && (
+                      <button className="btn btn-ghost btn-sm" data-testid={`active-sos-resolve-${s.id}`} style={{ color: "#34d399" }}
+                        onClick={async () => { try { await api.post(`/family/sos/${s.id}/resolve`); } catch (_) {} setActiveSos((cur) => cur.filter((x) => x.id !== s.id)); }}>
+                        <CheckCircle2 size={14} /> Mark handled
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

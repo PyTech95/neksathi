@@ -112,6 +112,22 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
         "acknowledged": False, "escalated": False,
     }
     await db.sos_events.insert_one(dict(doc))
+    # Wake the family circle on their LOCK SCREEN (high-priority push) — they
+    # must learn about an SOS even when their app is closed. Tapping opens the
+    # Family page with the member's live location and Navigate.
+    try:
+        fm = await db.family_members.find_one({"user_id": user["id"]})
+        if fm:
+            fam_ids = [m["user_id"] async for m in db.family_members.find({"family_id": fm["family_id"]})
+                       if m.get("user_id") and m["user_id"] != user["id"]]
+            if fam_ids:
+                await send_push(recipients=fam_ids, data={
+                    "title": f"🆘 {who} raised an SOS",
+                    "message": (f"{payload.message} — " if payload.message else "") + "tap to see their live location",
+                    "type": "sos", "sos_id": doc["id"], "action_url": "/family",
+                }, idempotency_key="sos-" + doc["id"])
+    except Exception as _e:
+        log.warning("sos family push failed: %s", _e)
     if payload.photo_base64:
         asyncio.create_task(_gdrive_autobackup(user["id"], payload.photo_base64, f"sos-{doc['id']}.jpg", "image/jpeg"))
     return SOSEventOut(**{k: v for k, v in clean(doc).items() if k != "photo_base64"})

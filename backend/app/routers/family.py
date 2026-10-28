@@ -12,7 +12,7 @@ from app.services.background import _build_family_digest, _digest_text, _send_fa
 from app.services.fcm import send_push
 from app.services.geo import _evaluate_geofences, _ist_now
 from app.services.notify import notify_whatsapp
-from app.utils import clean, new_id, now_utc
+from app.utils import _aware, clean, new_id, now_utc
 
 router = APIRouter()
 
@@ -112,7 +112,7 @@ async def family_intruder_alerts(user: dict = Depends(current_user), limit: int 
             "photo_base64": e.get("photo_base64"),
             "has_photo": bool(e.get("photo_base64")),
             "latitude": e.get("latitude"), "longitude": e.get("longitude"),
-            "created_at": e.get("created_at"),
+            "created_at": _aware(e.get("created_at")),
         })
     return {"in_family": True, "items": items}
 
@@ -425,10 +425,33 @@ async def family_active_sos(user: dict = Depends(current_user)):
     async for s in db.sos_events.find({"user_id": {"$in": ids}, "acknowledged": {"$ne": True},
                                        "created_at": {"$gte": since}}).sort("created_at", -1):
         items.append({"id": s["id"], "member_name": names.get(s["user_id"]) or "Member",
+                      "member_user_id": s["user_id"],
                       "latitude": s.get("latitude"), "longitude": s.get("longitude"),
                       "message": s.get("message"), "escalated": bool(s.get("escalated")),
-                      "created_at": s.get("created_at")})
+                      # explicit UTC so phones show local time, not the raw UTC clock
+                      "created_at": _aware(s.get("created_at")),
+                      "can_resolve": is_guardian or s["user_id"] == user["id"]})
     return {"items": items}
+
+
+@router.post("/family/sos/{sos_id}/resolve")
+async def family_resolve_sos(sos_id: str, user: dict = Depends(current_user)):
+    """Mark a member's SOS handled. Allowed for the member themselves or the
+    guardian of their circle — so an alert never stays stuck for 2 hours just
+    because the member closed the app before tapping "I'm safe"."""
+    s = await db.sos_events.find_one({"id": sos_id})
+    if not s:
+        raise HTTPException(status_code=404, detail="SOS not found.")
+    allowed = s["user_id"] == user["id"]
+    if not allowed:
+        fam = await _my_family(user["id"])
+        if fam and fam["guardian_id"] == user["id"]:
+            m = await db.family_members.find_one({"family_id": fam["id"], "user_id": s["user_id"]})
+            allowed = m is not None
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Only the member or their guardian can mark this SOS handled.")
+    await db.sos_events.update_one({"id": sos_id}, {"$set": {"acknowledged": True, "acknowledged_at": now_utc(), "acknowledged_by": user["id"]}})
+    return {"ok": True, "acknowledged": True}
 
 
 @router.post("/family/nudge")
