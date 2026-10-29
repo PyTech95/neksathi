@@ -48,8 +48,23 @@ async def on_startup():
         pass
     # Email is unique only when present: OTP users may have no email, and many
     # such docs must coexist (a plain unique index would reject the 2nd one).
-    await db.users.create_index("email", unique=True,
-                                partialFilterExpression={"email": {"$type": "string"}})
+    # A pre-existing non-partial "email_1" index has DIFFERENT options, so a
+    # bare create_index() raises IndexOptionsConflict — which must NEVER abort
+    # startup (that would take the whole API, and the website, down). Try the
+    # partial index; on conflict, replace the old one; on any failure, log and
+    # carry on so the server still starts.
+    try:
+        await db.users.create_index("email", unique=True,
+                                    partialFilterExpression={"email": {"$type": "string"}})
+    except Exception as _e:
+        log.warning("email index (partial) create failed, trying to replace old one: %s", _e)
+        try:
+            await db.users.drop_index("email_1")
+            await db.users.create_index("email", unique=True,
+                                        partialFilterExpression={"email": {"$type": "string"}})
+            log.info("replaced email_1 with a partial-unique email index")
+        except Exception as _e2:
+            log.warning("could not replace email index; leaving existing one in place: %s", _e2)
     await db.vehicles.create_index("owner_id")
     await db.vehicles.create_index("qr_id", unique=True)
     await db.contacts.create_index("vehicle_id")

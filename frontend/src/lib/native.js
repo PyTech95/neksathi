@@ -62,8 +62,7 @@ export function locationHint(err) {
 export async function openLocationSettings() {
   if (!isNative) return false;
   try {
-    const { registerPlugin } = await import("@capacitor/core");
-    const NekNative = registerPlugin("NekNative");
+    const { default: NekNative } = await import("@/lib/neknative");
     await NekNative.openLocationSettings();
     return true;
   } catch (_) { return false; }

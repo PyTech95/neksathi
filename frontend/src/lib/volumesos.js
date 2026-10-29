@@ -1,10 +1,10 @@
-import { Capacitor, registerPlugin } from "@capacitor/core";
+import { Capacitor } from "@capacitor/core";
 
 // Bridge to the native "SOS by volume button" service (android VolumeSosService):
 // pressing volume-up 3 times within 5 seconds — on the lock screen, app closed —
 // sends an SOS (with location) to the family members the user chose. The sender's
 // phone only vibrates briefly; no sound, no popup. No-op on the web.
-const NekNative = registerPlugin("NekNative");
+import NekNative from "@/lib/neknative";
 
 export const isNativeApp = () => {
   try { return Capacitor.isNativePlatform(); } catch (_) { return false; }

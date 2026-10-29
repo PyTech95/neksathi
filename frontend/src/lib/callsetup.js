@@ -1,8 +1,8 @@
-import { Capacitor, registerPlugin } from "@capacitor/core";
+import { Capacitor } from "@capacitor/core";
 
 // Bridge to the native "Call setup" screen (full-screen call / lock-screen
 // permissions). No-op on the web.
-const NekNative = registerPlugin("NekNative");
+import NekNative from "@/lib/neknative";
 
 export function openCallSetup() {
   if (!Capacitor.isNativePlatform()) return false;

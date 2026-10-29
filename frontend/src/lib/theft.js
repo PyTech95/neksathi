@@ -1,9 +1,9 @@
-import { Capacitor, registerPlugin } from "@capacitor/core";
+import { Capacitor } from "@capacitor/core";
 
 // Bridge to the native anti-theft engine (Device Admin + front-camera intruder
 // capture) — see android TheftAdminReceiver / IntruderCaptureService. Every call
 // is a no-op on the web, where the page only manages settings.
-const NekNative = registerPlugin("NekNative");
+import NekNative from "@/lib/neknative";
 
 export const isNativeApp = () => {
   try { return Capacitor.isNativePlatform(); } catch (_) { return false; }
