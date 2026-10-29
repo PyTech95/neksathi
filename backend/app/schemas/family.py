@@ -34,6 +34,7 @@ class StatusIn(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     battery: Optional[int] = Field(default=None, ge=0, le=100)
+    speed_kmh: Optional[float] = Field(default=None, ge=0, le=400)
 
 
 class AlertRulesIn(BaseModel):

@@ -245,6 +245,13 @@ async def push_user_location(payload: UserLocationIn, user: dict = Depends(curre
                   "accuracy": payload.accuracy, "speed_kmh": payload.speed_kmh, "recorded_at": now_utc()}},
         upsert=True,
     )
+    # Overspeed → family alert (same helper the Family status endpoint uses).
+    if payload.speed_kmh is not None:
+        try:
+            from app.routers.family import _maybe_overspeed_family_alert
+            await _maybe_overspeed_family_alert(user, payload.speed_kmh)
+        except Exception:
+            pass
     transitions = await _evaluate_geofences(user, payload.latitude, payload.longitude)
     return {"ok": True, "transitions": transitions}
 

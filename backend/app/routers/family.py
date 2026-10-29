@@ -129,6 +129,11 @@ async def get_family(user: dict = Depends(current_user)):
         loc = await db.user_locations.find_one({"user_id": m["user_id"]})
         # Guardian sees members' location/last-seen only when the member shares it.
         show_loc = m.get("share_location", True) or m["user_id"] == user["id"]
+        # The member's vehicle (number + speed limit) — shown ONLY if they have
+        # one registered; if several, the most recently added (their "active" one).
+        veh = await db.vehicles.find_one({"owner_id": m["user_id"]}, sort=[("created_at", -1)])
+        speed = (loc or {}).get("speed_kmh") if (loc and show_loc) else None
+        limit = veh.get("speed_limit_kmh") if veh else None
         members.append({
             "member_id": m["id"], "user_id": m["user_id"], "name": m.get("name"), "role": m.get("role"),
             "is_me": m["user_id"] == user["id"],
@@ -137,6 +142,10 @@ async def get_family(user: dict = Depends(current_user)):
             "longitude": (loc or {}).get("longitude") if (loc and show_loc) else None,
             "battery": (loc or {}).get("battery") if (loc and show_loc) else None,
             "last_seen": (loc or {}).get("recorded_at") if (loc and show_loc) else None,
+            "speed_kmh": speed,
+            "vehicle_number": (veh.get("number_plate") if veh else None),
+            "speed_limit_kmh": limit,
+            "overspeed": bool(speed is not None and limit is not None and speed > limit),
         })
     return {"in_family": True, "id": fam["id"], "name": fam["name"], "is_guardian": is_guardian,
             "invite_code": fam["invite_code"] if is_guardian else None,
@@ -185,15 +194,57 @@ async def push_status(payload: StatusIn, user: dict = Depends(current_user)):
     upd = {"user_id": user["id"], "recorded_at": now_utc()}
     if payload.battery is not None:
         upd["battery"] = payload.battery
+    if payload.speed_kmh is not None:
+        upd["speed_kmh"] = payload.speed_kmh
     transitions = []
     if payload.latitude is not None and payload.longitude is not None:
         upd["latitude"] = payload.latitude
         upd["longitude"] = payload.longitude
     await db.user_locations.update_one({"user_id": user["id"]}, {"$set": upd}, upsert=True)
     await _maybe_low_battery_alert(user, payload.battery)
+    if payload.speed_kmh is not None:
+        await _maybe_overspeed_family_alert(user, payload.speed_kmh)
     if payload.latitude is not None and payload.longitude is not None:
         transitions = await _evaluate_geofences(user, payload.latitude, payload.longitude)
     return {"ok": True, "transitions": transitions}
+
+
+async def _maybe_overspeed_family_alert(user: dict, speed_kmh: Optional[float]):
+    """Push the whole family circle when a member's speed crosses their vehicle's
+    registered limit. Throttled: one alert per over-limit drive, re-armed once
+    they drop back under the limit."""
+    if speed_kmh is None:
+        return
+    veh = await db.vehicles.find_one({"owner_id": user["id"]}, sort=[("created_at", -1)])
+    if not veh:
+        return
+    limit = veh.get("speed_limit_kmh")
+    if not limit:
+        return
+    prior = await db.user_locations.find_one({"user_id": user["id"]})
+    was = bool((prior or {}).get("overspeed_notified"))
+    if speed_kmh <= limit:
+        if was:
+            await db.user_locations.update_one({"user_id": user["id"]}, {"$set": {"overspeed_notified": False}})
+        return
+    if was:
+        return  # already alerted for this over-limit stretch
+    fm = await db.family_members.find_one({"user_id": user["id"]})
+    if not fm:
+        return
+    fam_ids = [m["user_id"] async for m in db.family_members.find({"family_id": fm["family_id"]})
+               if m.get("user_id") and m["user_id"] != user["id"]]
+    await db.user_locations.update_one({"user_id": user["id"]}, {"$set": {"overspeed_notified": True}})
+    if not fam_ids:
+        return
+    who = user.get("name") or "A family member"
+    try:
+        await send_push(recipients=fam_ids, data={
+            "type": "overspeed", "title": "⚡ Over the speed limit",
+            "message": f"{who} is driving {veh['number_plate']} at {speed_kmh:.0f} km/h (limit {limit}).",
+            "action_url": "/family"}, idempotency_key=f"ovr-{user['id']}-{int(speed_kmh)}")
+    except Exception:
+        pass
 
 
 async def _maybe_low_battery_alert(user: dict, battery: Optional[int]):

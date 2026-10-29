@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { loadLeaflet } from "@/lib/leaflet";
 import SosActions from "@/components/SosActions";
-import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, BellRing, ChevronDown, UserPlus, Camera, Lock } from "lucide-react";
+import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, BellRing, ChevronDown, UserPlus, Camera, Lock, Gauge } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
 
@@ -63,8 +63,11 @@ export default function Family() {
   const [openMember, setOpenMember] = useState(null);
   const mapEl = useRef(null); const mapObj = useRef(null); const layer = useRef(null);
 
-  const load = async () => {
-    setLoading(true);
+  // `background` refreshes keep the cached view on screen (no spinner, no
+  // flicker) and just update it in place — used by the live poller below so
+  // members' speed/battery/location stay current without the page blinking.
+  const load = async (background = false) => {
+    if (!background) setLoading(true);
     try {
       const d = (await api.get("/family")).data;
       setData(d);
@@ -77,18 +80,23 @@ export default function Family() {
         try { setIntruders((await api.get("/family/intruder-alerts")).data.items || []); } catch (_) {}
         try { setDigest((await api.get("/family/digest")).data); } catch (_) {}
       }
-    } finally { setLoading(false); }
+    } catch (_) { /* keep showing the last good data */ }
+    finally { if (!background) setLoading(false); }
   };
   useEffect(() => { load(); }, []);
 
-  // Poll active SOS every 15s so the guardian's map pin stays live.
+  // Live refresh every 20s in the background (members' speed/battery/location +
+  // SOS pins) — cached view stays put, so no reload flicker.
   useEffect(() => {
     if (!data?.in_family) return;
-    const t = setInterval(async () => {
-      try { setActiveSos((await api.get("/family/active-sos")).data.items || []); } catch (_) {}
-    }, 15000);
-    return () => clearInterval(t);
-  }, [data?.in_family]);
+    const t = setInterval(() => {
+      load(true);
+      api.get("/family/active-sos").then((r) => setActiveSos(r.data.items || [])).catch(() => {});
+    }, 20000);
+    const onVis = () => { if (document.visibilityState === "visible") load(true); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
+  }, [data?.in_family]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveRules = async (patch) => {
     const next = { ...rules, ...patch };
@@ -128,6 +136,12 @@ export default function Family() {
       if (!mapObj.current) {
         mapObj.current = L.map(mapEl.current, { zoomControl: true }).setView([center.latitude, center.longitude], 12);
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }).addTo(mapObj.current);
+        // The map often mounts before its container has a measured size, which
+        // leaves it grey/black until a resize. Recompute size on the next frames.
+        setTimeout(() => { try { mapObj.current && mapObj.current.invalidateSize(); } catch (_) {} }, 100);
+        setTimeout(() => { try { mapObj.current && mapObj.current.invalidateSize(); } catch (_) {} }, 600);
+      } else {
+        try { mapObj.current.invalidateSize(); } catch (_) {}
       }
       if (layer.current) layer.current.remove();
       layer.current = L.layerGroup().addTo(mapObj.current);
@@ -153,7 +167,11 @@ export default function Family() {
   const shareStatus = async () => {
     let batt = null;
     try { if (navigator.getBattery) { const b = await navigator.getBattery(); batt = Math.round(b.level * 100); } } catch (_) {}
-    navigator.geolocation.getCurrentPosition(async (p) => { await api.post("/me/status", { latitude: p.coords.latitude, longitude: p.coords.longitude, battery: batt }); load(); }, () => {}, { enableHighAccuracy: true, timeout: 8000 });
+    navigator.geolocation.getCurrentPosition(async (p) => {
+      const spd = p.coords.speed != null && p.coords.speed >= 0 ? p.coords.speed * 3.6 : null; // m/s -> km/h
+      await api.post("/me/status", { latitude: p.coords.latitude, longitude: p.coords.longitude, battery: batt, speed_kmh: spd });
+      load(true);   // background refresh — no spinner, no flicker
+    }, () => {}, { enableHighAccuracy: true, timeout: 8000 });
   };
 
   // Share location by DEFAULT while in a family: as long as "Share location" is
@@ -278,25 +296,56 @@ export default function Family() {
           <div style={{ display: "grid", gap: 10 }}>
             {data.members.map((m) => (
               <div key={m.member_id} data-testid={`member-${m.member_id}`} className="glass" style={{ padding: 14, borderRadius: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg,#b3122f,#e92546)", display: "grid", placeItems: "center", fontWeight: 800, color: "#fff" }}>{m.name?.[0]?.toUpperCase() || "?"}</span>
-                    <div>
-                      <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>{m.name} {m.role === "guardian" && <Crown size={14} style={{ color: "#f5a524" }} />}{m.is_me && <span className="muted" style={{ fontSize: 12 }}>(you)</span>}</div>
-                      <div className="muted" style={{ fontSize: 12.5, display: "flex", gap: 12, flexWrap: "wrap" }}>
-                        {m.battery != null && <span><BatteryMedium size={12} style={{ verticalAlign: "-2px" }} /> {m.battery}%</span>}
-                        {m.last_seen && <span><Clock size={12} style={{ verticalAlign: "-2px" }} /> {new Date(m.last_seen).toLocaleTimeString()}</span>}
-                        {m.latitude == null && <span>No location shared</span>}
-                      </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg,#b3122f,#e92546)", display: "grid", placeItems: "center", fontWeight: 800, color: "#fff", flexShrink: 0 }}>{m.name?.[0]?.toUpperCase() || "?"}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>{m.name} {m.role === "guardian" && <Crown size={14} style={{ color: "#f5a524" }} />}{m.is_me && <span className="muted" style={{ fontSize: 12 }}>(you)</span>}</div>
+                    {m.latitude == null && <div className="muted" style={{ fontSize: 12.5 }}>No location shared</div>}
+                  </div>
+                </div>
+
+                {/* Detail box — one row per fact. Speed/battery/last-seen/location
+                    show for everyone; vehicle number + speed limit only when the
+                    member has a vehicle registered (no empty placeholders). */}
+                <div style={{ marginTop: 10, display: "grid", gap: 6, fontSize: 13 }} data-testid={`member-detail-${m.member_id}`}>
+                  {m.speed_kmh != null && (
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span className="muted"><Gauge size={13} style={{ verticalAlign: "-2px" }} /> Speed</span>
+                      <span style={{ fontWeight: 700, color: m.overspeed ? "#ff3b5c" : "inherit" }} data-testid={`member-speed-${m.member_id}`}>{Math.round(m.speed_kmh)} km/h{m.overspeed ? " · over limit!" : ""}</span>
                     </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    {data.is_guardian && !m.is_me && <button className="btn btn-ghost btn-sm" onClick={() => requestCheckIn(m.member_id)} data-testid={`member-checkin-${m.member_id}`}><HeartHandshake size={14} /> Check in</button>}
-                    {data.is_guardian && !m.is_me && <button className="btn btn-ghost btn-sm" onClick={() => nudgeMember(m.member_id)} data-testid={`member-nudge-${m.member_id}`} title="Ring their phone loudly"><BellRing size={14} /> Nudge</button>}
-                    {m.latitude != null && <a className="btn btn-ghost btn-sm" href={`https://maps.google.com/?q=${m.latitude},${m.longitude}`} target="_blank" rel="noreferrer" data-testid={`member-map-${m.member_id}`}><MapPin size={14} /></a>}
-                    {(data.is_guardian || m.is_me) && <button className="btn btn-ghost btn-sm" onClick={() => setOpenMember(openMember === m.member_id ? null : m.member_id)} data-testid={`member-activity-btn-${m.member_id}`}><Activity size={14} /> Activity</button>}
-                    {data.is_guardian && m.role !== "guardian" && <button className="btn btn-ghost btn-sm" onClick={() => removeMember(m.member_id)} data-testid={`member-remove-${m.member_id}`}><UserMinus size={14} /></button>}
-                  </div>
+                  )}
+                  {m.vehicle_number && (
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span className="muted"><Smartphone size={13} style={{ verticalAlign: "-2px" }} /> Vehicle</span>
+                      <span style={{ fontWeight: 700 }} data-testid={`member-vehicle-${m.member_id}`}>{m.vehicle_number}{m.speed_limit_kmh ? ` · limit ${m.speed_limit_kmh}` : ""}</span>
+                    </div>
+                  )}
+                  {m.battery != null && (
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span className="muted"><BatteryMedium size={13} style={{ verticalAlign: "-2px" }} /> Battery</span>
+                      <span style={{ fontWeight: 700, color: m.battery <= 15 ? "#ff3b5c" : "inherit" }}>{m.battery}%</span>
+                    </div>
+                  )}
+                  {m.last_seen && (
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span className="muted"><Clock size={13} style={{ verticalAlign: "-2px" }} /> Last seen</span>
+                      <span>{new Date(m.last_seen).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {m.latitude != null && (
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                      <span className="muted"><MapPin size={13} style={{ verticalAlign: "-2px" }} /> Location</span>
+                      <a className="btn btn-ghost btn-sm" href={`https://maps.google.com/?q=${m.latitude},${m.longitude}`} target="_blank" rel="noreferrer" data-testid={`member-map-${m.member_id}`} style={{ padding: "2px 10px" }}>Open map</a>
+                    </div>
+                  )}
+                </div>
+
+                {/* Actions wrap so none are clipped on narrow phones. */}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+                  {data.is_guardian && !m.is_me && <button className="btn btn-ghost btn-sm" onClick={() => requestCheckIn(m.member_id)} data-testid={`member-checkin-${m.member_id}`}><HeartHandshake size={14} /> Check in</button>}
+                  {data.is_guardian && !m.is_me && <button className="btn btn-ghost btn-sm" onClick={() => nudgeMember(m.member_id)} data-testid={`member-nudge-${m.member_id}`} title="Ring their phone loudly"><BellRing size={14} /> Nudge</button>}
+                  {(data.is_guardian || m.is_me) && <button className="btn btn-ghost btn-sm" onClick={() => setOpenMember(openMember === m.member_id ? null : m.member_id)} data-testid={`member-activity-btn-${m.member_id}`}><Activity size={14} /> Activity</button>}
+                  {data.is_guardian && m.role !== "guardian" && <button className="btn btn-ghost btn-sm" onClick={() => removeMember(m.member_id)} data-testid={`member-remove-${m.member_id}`}><UserMinus size={14} /> Remove</button>}
                 </div>
                 {openMember === m.member_id && <MemberActivity memberId={m.member_id} />}
               </div>
