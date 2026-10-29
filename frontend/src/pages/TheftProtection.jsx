@@ -136,8 +136,8 @@ function useSiren() {
 function PhotoThumb({ eventId, onOpen }) {
   const [src, setSrc] = useState(null);
   useEffect(() => { let m = true; api.get(`/intruder-events/${eventId}/photo`).then((r) => m && setSrc(r.data.photo_base64)).catch(() => {}); return () => { m = false; }; }, [eventId]);
-  if (!src) return <div style={{ width: 88, height: 88, borderRadius: 10, background: "rgba(255,255,255,.05)", display: "grid", placeItems: "center" }}><Camera size={20} className="muted" /></div>;
-  return <img src={src} alt="intruder" onClick={() => onOpen(src)} data-testid={`intruder-photo-${eventId}`} style={{ width: 88, height: 88, objectFit: "cover", borderRadius: 10, cursor: "pointer" }} />;
+  if (!src) return <div style={{ width: 112, height: 112, borderRadius: 12, background: "#0c0c14", display: "grid", placeItems: "center", border: "1px solid var(--panel-brd)", flexShrink: 0 }}><Camera size={22} className="muted" /></div>;
+  return <img src={src} alt="intruder" onClick={() => onOpen(src)} data-testid={`intruder-photo-${eventId}`} style={{ width: 112, height: 112, aspectRatio: "1 / 1", objectFit: "cover", borderRadius: 12, cursor: "pointer", background: "#0c0c14", border: "1px solid var(--panel-brd)", flexShrink: 0 }} />;
 }
 
 export default function TheftProtection() {
@@ -248,7 +248,7 @@ export default function TheftProtection() {
         <div style={{ display: "grid", gap: 10 }}>
           {events.map((ev) => (
             <div key={ev.id} data-testid={`intruder-row-${ev.id}`} className="glass" style={{ padding: 14, borderRadius: 12, display: "flex", gap: 14, alignItems: "center" }}>
-              {ev.has_photo ? <PhotoThumb eventId={ev.id} onOpen={setLightbox} /> : <div style={{ width: 88, height: 88, borderRadius: 10, background: "rgba(255,255,255,.05)", display: "grid", placeItems: "center" }}><Camera size={20} className="muted" /></div>}
+              {ev.has_photo ? <PhotoThumb eventId={ev.id} onOpen={setLightbox} /> : <div style={{ width: 112, height: 112, borderRadius: 12, background: "#0c0c14", border: "1px solid var(--panel-brd)", display: "grid", placeItems: "center", flexShrink: 0 }}><Camera size={20} className="muted" /></div>}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
                   <AlertTriangle size={15} style={{ color: "#ff3b5c" }} /> {ev.attempt_count} failed attempt{ev.attempt_count === 1 ? "" : "s"} · {ev.device_name}

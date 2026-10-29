@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { loadLeaflet } from "@/lib/leaflet";
+import { getPosition, locationHint, openLocationSettings } from "@/lib/native";
 import SosActions from "@/components/SosActions";
-import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, BellRing, ChevronDown, UserPlus, Camera, Lock, Gauge } from "lucide-react";
+import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, BellRing, ChevronDown, UserPlus, Camera, Lock, Gauge, X } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
 
@@ -61,6 +62,8 @@ export default function Family() {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [openMember, setOpenMember] = useState(null);
+  const [locPrompt, setLocPrompt] = useState(null);  // {message, canOpenSettings} when location is off
+  const [photoBox, setPhotoBox] = useState(null);     // enlarged intruder photo
   const mapEl = useRef(null); const mapObj = useRef(null); const layer = useRef(null);
 
   // `background` refreshes keep the cached view on screen (no spinner, no
@@ -164,14 +167,19 @@ export default function Family() {
   const removeMember = async (id) => { if (!window.confirm("Remove this member?")) return; await api.delete(`/family/members/${id}`); load(); };
   const copyCode = () => { navigator.clipboard.writeText(data.invite_code); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   const setSharing = async (key, val) => { await api.put("/family/my-sharing", { share_location: key === "loc" ? val : me.share_location, share_activity: key === "act" ? val : me.share_activity }); load(); };
-  const shareStatus = async () => {
+  // `manual` = user tapped "Share my status": show a clear prompt if location is
+  // off. The 60s auto-refresh runs silently (no nagging popup).
+  const shareStatus = async (manual = false) => {
     let batt = null;
     try { if (navigator.getBattery) { const b = await navigator.getBattery(); batt = Math.round(b.level * 100); } } catch (_) {}
-    navigator.geolocation.getCurrentPosition(async (p) => {
-      const spd = p.coords.speed != null && p.coords.speed >= 0 ? p.coords.speed * 3.6 : null; // m/s -> km/h
-      await api.post("/me/status", { latitude: p.coords.latitude, longitude: p.coords.longitude, battery: batt, speed_kmh: spd });
+    try {
+      const pos = await getPosition({ timeout: 8000, enableHighAccuracy: true });
+      await api.post("/me/status", { latitude: pos.latitude, longitude: pos.longitude, battery: batt, speed_kmh: pos.speed_kmh ?? null });
+      setLocPrompt(null);
       load(true);   // background refresh — no spinner, no flicker
-    }, () => {}, { enableHighAccuracy: true, timeout: 8000 });
+    } catch (e) {
+      if (manual) setLocPrompt(locationHint(e));   // only prompt on an explicit tap
+    }
   };
 
   // Share location by DEFAULT while in a family: as long as "Share location" is
@@ -221,10 +229,20 @@ export default function Family() {
               {data.is_guardian && data.invite_code && (
                 <button className="btn btn-ghost btn-sm" onClick={copyCode} data-testid="family-invite-copy">{copied ? <><CheckCircle2 size={14} /> Copied</> : <><Copy size={14} /> Invite code: {data.invite_code}</>}</button>
               )}
-              <button className="btn btn-ghost btn-sm" onClick={shareStatus} data-testid="family-share-status"><LocateFixed size={14} /> Share my status</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => shareStatus(true)} data-testid="family-share-status"><LocateFixed size={14} /> Share my status</button>
               <button className="btn btn-danger btn-sm" onClick={leave} data-testid="family-leave-btn"><LogOut size={14} /> Leave</button>
             </div>
           </div>
+
+          {locPrompt && (
+            <div data-testid="location-prompt" className="glass" style={{ padding: "12px 16px", borderRadius: 12, margin: "0 0 14px", border: "1px solid rgba(245,165,36,.5)", background: "rgba(245,165,36,.1)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <LocateFixed size={18} style={{ color: "#f5a524", flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 13.5, minWidth: 180 }}>{locPrompt.message}</span>
+              {locPrompt.canOpenSettings && <button className="btn btn-primary btn-sm" data-testid="location-open-settings" onClick={() => openLocationSettings()}>Open location settings</button>}
+              <button className="btn btn-ghost btn-sm" data-testid="location-retry" onClick={() => shareStatus(true)}>Try again</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setLocPrompt(null)} aria-label="Dismiss"><X size={14} /></button>
+            </div>
+          )}
 
           {data.is_guardian && (
             <div className="glass" style={{ padding: 16, borderRadius: 14, marginBottom: 16 }} data-testid="family-add-phone-card">
@@ -361,8 +379,8 @@ export default function Family() {
               {intruders.map((ev) => (
                 <div key={ev.id} data-testid={`family-intruder-${ev.id}`} className="glass" style={{ padding: 12, borderRadius: 14 }}>
                   {ev.photo_base64 ? (
-                    <img src={ev.photo_base64.startsWith("data:") ? ev.photo_base64 : `data:image/jpeg;base64,${ev.photo_base64}`} alt="intruder" style={{ width: "100%", height: 160, objectFit: "cover", borderRadius: 10 }} />
-                  ) : <div style={{ height: 160, borderRadius: 10, background: "rgba(255,255,255,.05)", display: "grid", placeItems: "center", flexDirection: "column", gap: 6 }} className="muted"><Camera size={22} /><span style={{ fontSize: 12 }}>No photo captured</span></div>}
+                    <img src={ev.photo_base64.startsWith("data:") ? ev.photo_base64 : `data:image/jpeg;base64,${ev.photo_base64}`} alt="intruder" data-testid={`family-intruder-photo-${ev.id}`} onClick={() => setPhotoBox(ev.photo_base64.startsWith("data:") ? ev.photo_base64 : `data:image/jpeg;base64,${ev.photo_base64}`)} style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", borderRadius: 12, cursor: "pointer", background: "#0c0c14", border: "1px solid var(--panel-brd)" }} />
+                  ) : <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 12, background: "#0c0c14", border: "1px solid var(--panel-brd)", display: "grid", placeItems: "center", gap: 6 }} className="muted"><Camera size={22} /><span style={{ fontSize: 12 }}>No photo captured</span></div>}
                   <div style={{ fontWeight: 700, marginTop: 10, fontSize: 13.5, display: "flex", alignItems: "center", gap: 6 }}><ShieldAlert size={14} style={{ color: "#ff3b5c" }} /> {ev.attempt_count} attempts {ev.triggered_lock && <Lock size={12} style={{ color: "#ff3b5c" }} />}</div>
                   <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}><Smartphone size={12} style={{ verticalAlign: "-2px" }} /> {ev.owner_name}{ev.is_me ? " (you)" : ""} · {ev.device_name}</div>
                   <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>{ev.created_at ? new Date(ev.created_at).toLocaleString() : ""}</div>
@@ -371,6 +389,12 @@ export default function Family() {
                   ) : <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>No location sent</div>}
                 </div>
               ))}
+            </div>
+          )}
+
+          {photoBox && (
+            <div data-testid="family-intruder-lightbox" onClick={() => setPhotoBox(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.88)", display: "grid", placeItems: "center", zIndex: 4500, padding: 20 }}>
+              <img src={photoBox} alt="intruder" style={{ maxWidth: "92%", maxHeight: "86%", borderRadius: 12, objectFit: "contain" }} />
             </div>
           )}
 

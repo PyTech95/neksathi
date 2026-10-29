@@ -7,20 +7,66 @@ import { Camera, CameraResultType, CameraSource, CameraDirection } from "@capaci
 
 export const isNative = Capacitor.isNativePlatform();
 
-// Returns { latitude, longitude, accuracy } or throws.
+// A location error carries a `reason` so callers can show the right prompt:
+//   "permission" = the app wasn't allowed location
+//   "off"        = device GPS / location services are turned off
+//   "timeout"    = on, but no fix in time
+//   "unsupported"= no geolocation at all
+function locErr(reason, message) { const e = new Error(message || reason); e.reason = reason; return e; }
+
+// Returns { latitude, longitude, accuracy, speed_kmh } or throws a tagged error.
 export async function getPosition({ timeout = 8000, enableHighAccuracy = true } = {}) {
   if (isNative) {
-    const perm = await Geolocation.checkPermissions();
+    let perm = await Geolocation.checkPermissions();
     if (perm.location !== "granted") {
-      const req = await Geolocation.requestPermissions();
-      if (req.location !== "granted") throw new Error("Location permission denied");
+      try { perm = await Geolocation.requestPermissions(); } catch (_) {}
+      if (perm.location !== "granted") throw locErr("permission", "Location permission is off for Nek Sathi.");
     }
-    const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy, timeout });
-    return { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
+    try {
+      const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy, timeout });
+      const sp = pos.coords.speed; return { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, speed_kmh: sp != null && sp >= 0 ? sp * 3.6 : null };
+    } catch (e) {
+      // Capacitor reports "location unavailable"/"disabled" when GPS is off.
+      const msg = String(e && e.message || e).toLowerCase();
+      if (msg.includes("disabled") || msg.includes("unavailable") || msg.includes("location services")) throw locErr("off", "Your phone's location is turned off.");
+      throw locErr("timeout", "Couldn't get your location. Try again.");
+    }
   }
-  const pos = await new Promise((res, rej) =>
-    navigator.geolocation.getCurrentPosition(res, rej, { timeout, enableHighAccuracy }));
-  return { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
+  if (!navigator.geolocation) throw locErr("unsupported", "This device has no location.");
+  return await new Promise((res, rej) => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { const sp = pos.coords.speed; res({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, speed_kmh: sp != null && sp >= 0 ? sp * 3.6 : null }); },
+      (err) => {
+        // 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT
+        if (err && err.code === 1) rej(locErr("permission", "Location permission is blocked in your browser."));
+        else if (err && err.code === 3) rej(locErr("timeout", "Couldn't get your location. Try again."));
+        else rej(locErr("off", "Your location is turned off."));
+      },
+      { timeout, enableHighAccuracy });
+  });
+}
+
+// User-facing text + whether we can deep-link to settings (native only).
+export function locationHint(err) {
+  const reason = (err && err.reason) || "off";
+  const map = {
+    off: "Your location is turned off. Please turn on Location to share with your family.",
+    permission: "Nek Sathi needs location permission. Please allow it, then try again.",
+    timeout: "Couldn't get your location just now. Please try again in a moment.",
+    unsupported: "This device can't share location.",
+  };
+  return { reason, message: map[reason] || map.off, canOpenSettings: isNative && (reason === "off" || reason === "permission") };
+}
+
+// Deep-link to the device's location settings (native only; no-op on web).
+export async function openLocationSettings() {
+  if (!isNative) return false;
+  try {
+    const { registerPlugin } = await import("@capacitor/core");
+    const NekNative = registerPlugin("NekNative");
+    await NekNative.openLocationSettings();
+    return true;
+  } catch (_) { return false; }
 }
 
 // Captures a front-camera selfie and returns a JPEG data URL, or null on failure/denial.

@@ -182,6 +182,27 @@ public class NekNativePlugin extends Plugin {
         getTheftStatus(call);
     }
 
+    // Opens the device's Location settings so the user can turn GPS back on
+    // (used when the app finds location is off while sharing status / SOS).
+    @PluginMethod
+    public void openLocationSettings(PluginCall call) {
+        try {
+            Intent i = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+        } catch (Exception e) {
+            try {
+                Intent i2 = new Intent(Settings.ACTION_SETTINGS);
+                i2.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(i2);
+            } catch (Exception e2) {
+                call.reject("could not open location settings");
+                return;
+            }
+        }
+        call.resolve();
+    }
+
     // "Display over other apps" — lets Android start our capture service / call
     // screen from the background (needed on Android 10+).
     @PluginMethod
