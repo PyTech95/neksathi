@@ -36,6 +36,16 @@
             android:turnScreenOn="true"
             android:theme="@style/AppTheme.NoActionBar" />
 
+        <activity
+            android:name=".SosAlertActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/AppTheme.NoActionBar" />
+
         <!-- One-time "Call setup" permissions screen -->
         <activity
             android:name=".CallSetupActivity"

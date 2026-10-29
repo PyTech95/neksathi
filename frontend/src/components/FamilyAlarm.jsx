@@ -128,14 +128,10 @@ export default function FamilyAlarm() {
             <button className="btn btn-ghost btn-sm" onClick={() => dismissSos(s.id)} data-testid={`global-sos-dismiss-${s.id}`} title="Hide on this phone (SOS stays active for the family)" aria-label="Dismiss" style={{ padding: "4px 8px" }}><X size={16} /></button>
           </div>
           <SosActions sos={s} testPrefix={`global-sos-${s.id}`} />
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {alarm.on
-              ? <button className="btn btn-ghost btn-sm" onClick={alarm.stop} data-testid="global-sos-silence"><VolumeX size={14} /> Silence</button>
-              : !muted && <button className="btn btn-ghost btn-sm" onClick={alarm.start} data-testid="global-sos-ring"><Bell size={14} /> Ring again</button>}
-            <button className="btn btn-ghost btn-sm" onClick={toggleMute} data-testid="global-sos-mute" title={muted ? "Alerts are muted — tap to unmute" : "Mute all SOS sounds"}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+            <button className="btn btn-ghost btn-sm" onClick={toggleMute} data-testid="global-sos-mute" title={muted ? "Muted — tap to unmute the siren" : "Mute the siren"}>
               {muted ? <><Bell size={14} /> Unmute</> : <><VolumeX size={14} /> Mute</>}
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => nav("/family")} data-testid={`global-sos-view-${s.id}`}>Family page</button>
             {s.can_resolve !== false && (
               <button className="btn btn-primary btn-sm" onClick={() => resolveSos(s.id)} data-testid={`global-sos-resolve-${s.id}`}><CheckCircle2 size={14} /> Mark resolved</button>
             )}

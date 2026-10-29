@@ -30,14 +30,27 @@ public class CallApi {
         } catch (Exception e) { /* ignore */ }
     }
 
+    // Fire-and-forget POST {api}/family/sos/{sosId}/resolve — marks a family SOS
+    // handled from the native lock-screen alert (the server then clears it for the
+    // whole circle and silences their sirens via a sos_cancel push).
+    public static void resolveSos(Context ctx, final String sosId) {
+        if (sosId == null || sosId.isEmpty()) return;
+        post(ctx, "/family/sos/" + sosId + "/resolve");
+    }
+
     // Fire-and-forget POST {api}/me/calls/{callId}/reject with the bearer token.
     public static void reject(Context ctx, final String callId) {
         if (callId == null || callId.isEmpty()) return;
+        post(ctx, "/me/calls/" + callId + "/reject");
+    }
+
+    // Shared fire-and-forget authenticated POST {api}{path} with an empty JSON body.
+    private static void post(Context ctx, final String path) {
         SharedPreferences sp = ctx.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         final String api = sp.getString("api", "");
         final String token = sp.getString("token", "");
         if (api.isEmpty() || token.isEmpty()) return;
-        final String url = api + "/me/calls/" + callId + "/reject";
+        final String url = api + path;
         new Thread(new Runnable() {
             @Override public void run() {
                 HttpURLConnection c = null;
@@ -55,7 +68,7 @@ public class CallApi {
                     os.close();
                     c.getResponseCode(); // send the request
                 } catch (Exception e) {
-                    Log.w(TAG, "reject failed: " + e);
+                    Log.w(TAG, "POST " + path + " failed: " + e);
                 } finally {
                     if (c != null) {
                         try { c.disconnect(); } catch (Exception ignored) {}

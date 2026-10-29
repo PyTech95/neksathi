@@ -9,7 +9,6 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.PowerManager;
 
 import androidx.core.app.NotificationCompat;
 
@@ -45,7 +44,7 @@ public class CallMessagingService extends MessagingService {
             // the in-app FamilyAlarm handles the siren instead (so we don't
             // double-ring); here we only cover the locked / app-closed case.
             if (!MainActivity.isForeground) {
-                showSosAlert(data.get("title"), data.get("message"));
+                showSosAlert(data);
             }
         } else if ("sos_cancel".equals(type)) {
             // Someone marked the SOS handled ("I'm safe" / "Mark resolved") →
@@ -65,44 +64,48 @@ public class CallMessagingService extends MessagingService {
     // (or MainActivity.onResume) can never stop an unrelated incoming-call ring.
     private static volatile boolean sosActive = false;
 
-    // Loud SOS alert for the lock screen / app-closed case: wake the screen, play
-    // a looping siren + vibration, and post a high-priority, CATEGORY_ALARM
-    // notification that opens the Family page. It keeps ringing until the SOS is
-    // marked handled (a "sos_cancel" push -> stopSos), the user opens the app
+    // Loud SOS alert for the lock screen / app-closed case: play a distinct siren
+    // (SirenPlayer) and raise the full-screen SosAlertActivity directly over the
+    // lock screen, where the member can Call Police / Ambulance, See location, Mute
+    // or Mark resolved. It keeps ringing until an action is taken, the SOS is marked
+    // handled (a "sos_cancel" push -> stopSos), the app is opened
     // (MainActivity.onResume -> stopSos), or the 3-minute safety cap.
-    private void showSosAlert(String title, String message) {
+    private void showSosAlert(Map<String, String> data) {
         createSosChannel();
         sosActive = true;
+        SirenPlayer.start(this);   // distinct looping siren + vibration (alarm stream)
 
-        // Light up the screen so the lock-screen alert is actually seen
-        // (auto-released after 10s; FLAG_KEEP_SCREEN_ON is not needed here).
-        try {
-            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-            if (pm != null) {
-                PowerManager.WakeLock wl = pm.newWakeLock(
-                        PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP
-                                | PowerManager.ON_AFTER_RELEASE, "neksathi:sos");
-                wl.acquire(10000);
-            }
-        } catch (Exception ignored) {}
+        String who = data.get("sender_name");
+        if (who == null || who.isEmpty()) who = data.get("title");
+        String msg = data.get("message");
+        String sosId = data.get("sos_id");
+        String loc = data.get("location");   // "lat,lng" or ""
+        String lat = "", lng = "";
+        if (loc != null && loc.contains(",")) {
+            String[] p = loc.split(",", 2);
+            lat = p[0].trim();
+            lng = p.length > 1 ? p[1].trim() : "";
+        }
 
-        RingPlayer.start(this);   // looping loud alert + vibration
+        // Full-screen SOS screen (its own activity, so opening the app / answering a
+        // call never collides with it). Fired both via startActivity (screen on) and
+        // as a full-screen-intent notification (screen off / locked).
+        Intent act = new Intent(this, SosAlertActivity.class);
+        act.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        act.putExtra(SosAlertActivity.EXTRA_SOS_ID, sosId == null ? "" : sosId);
+        act.putExtra(SosAlertActivity.EXTRA_WHO, who == null ? "" : who);
+        act.putExtra(SosAlertActivity.EXTRA_MSG, msg == null ? "" : msg);
+        act.putExtra(SosAlertActivity.EXTRA_LAT, lat);
+        act.putExtra(SosAlertActivity.EXTRA_LNG, lng);
+        act.putExtra(SosAlertActivity.EXTRA_POLICE, emptyTo(data.get("police_number"), "112"));
+        act.putExtra(SosAlertActivity.EXTRA_AMBULANCE, emptyTo(data.get("ambulance_number"), "108"));
 
         int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) piFlags |= PendingIntent.FLAG_IMMUTABLE;
+        PendingIntent fsPI = PendingIntent.getActivity(this, 8, act, piFlags);
 
-        // Tapping opens the app on the Family page. We deliberately do NOT auto-
-        // launch an activity / use a full-screen intent here: launching
-        // MainActivity would fire its onResume -> stopSos and silence the siren
-        // instantly. The wake-lock + heads-up notification + loud siren are what
-        // raise the alert over the lock screen.
-        Intent open = new Intent(this, MainActivity.class);
-        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        open.putExtra("sos_open", true);
-        PendingIntent openPI = PendingIntent.getActivity(this, 7, open, piFlags);
-
-        String t = (title == null || title.isEmpty()) ? "🆘 Family SOS" : title;
-        String m = (message == null || message.isEmpty()) ? "A family member needs help — tap to see their location" : message;
+        String t = (data.get("title") == null || data.get("title").isEmpty()) ? "🆘 Family SOS" : data.get("title");
+        String m = (msg == null || msg.isEmpty()) ? "A family member needs help — tap to respond" : msg;
 
         NotificationCompat.Builder b = new NotificationCompat.Builder(this, SOS_CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
@@ -113,10 +116,12 @@ public class CallMessagingService extends MessagingService {
                 .setOngoing(true)
                 .setAutoCancel(false)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setContentIntent(openPI);
+                .setFullScreenIntent(fsPI, true)
+                .setContentIntent(fsPI);
 
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null) nm.notify(SOS_NOTIF_ID, b.build());
+        try { startActivity(act); } catch (Exception e) { /* full-screen intent covers the locked case */ }
 
         // Safety cap — stop even if the "resolved" push never arrives.
         final Context appCtx = getApplicationContext();
@@ -125,14 +130,23 @@ public class CallMessagingService extends MessagingService {
         }, SOS_MAX_MS);
     }
 
-    // Stop the SOS siren + clear its notification. Guarded by sosActive so it is
-    // a no-op (and never touches an incoming-call ring) when no SOS is ringing.
+    private static String emptyTo(String v, String dflt) { return (v == null || v.isEmpty()) ? dflt : v; }
+
+    // Stop the SOS siren, clear its notification, and close the SOS screen if it is
+    // showing. Guarded by sosActive so it is a no-op (and never touches an incoming-
+    // call ring) when no SOS is ringing.
     public static void stopSos(Context ctx) {
         if (!sosActive) return;
         sosActive = false;
-        RingPlayer.stop();
+        SirenPlayer.stop();
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null) nm.cancel(SOS_NOTIF_ID);
+        final SosAlertActivity showing = SosAlertActivity.current;
+        if (showing != null) {
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override public void run() { try { showing.finish(); } catch (Exception ignored) {} }
+            });
+        }
     }
 
     private void createSosChannel() {

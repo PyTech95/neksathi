@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#230A10"
+    android:gravity="center_horizontal"
+    android:padding="24dp">
+
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🆘 NEK SATHI SOS"
+        android:textColor="#FF3B5C"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="18dp" />
+
+    <TextView
+        android:id="@+id/sos_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="A family member raised an SOS"
+        android:textColor="#FFFFFF"
+        android:textSize="25sp"
+        android:textStyle="bold"
+        android:gravity="center" />
+
+    <TextView
+        android:id="@+id/sos_sub"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Needs urgent help — respond now"
+        android:textColor="#F0A9B6"
+        android:textSize="16sp"
+        android:gravity="center"
+        android:layout_marginTop="10dp" />
+
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <Button
+        android:id="@+id/btn_police"
+        android:layout_width="match_parent"
+        android:layout_height="58dp"
+        android:text="Call Police"
+        android:textColor="#FFFFFF"
+        android:textAllCaps="false"
+        android:textStyle="bold"
+        android:textSize="17sp"
+        android:layout_marginBottom="10dp"
+        android:backgroundTint="#2563EB" />
+
+    <Button
+        android:id="@+id/btn_ambulance"
+        android:layout_width="match_parent"
+        android:layout_height="58dp"
+        android:text="Call Ambulance"
+        android:textColor="#FFFFFF"
+        android:textAllCaps="false"
+        android:textStyle="bold"
+        android:textSize="17sp"
+        android:layout_marginBottom="10dp"
+        android:backgroundTint="#DC2626" />
+
+    <Button
+        android:id="@+id/btn_location"
+        android:layout_width="match_parent"
+        android:layout_height="58dp"
+        android:text="See location"
+        android:textColor="#FFFFFF"
+        android:textAllCaps="false"
+        android:textStyle="bold"
+        android:textSize="17sp"
+        android:backgroundTint="#059669" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="18dp"
+        android:layout_marginBottom="16dp">
+
+        <Button
+            android:id="@+id/btn_mute"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="10dp"
+            android:text="Mute"
+            android:textColor="#FFFFFF"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            android:backgroundTint="#3F3F46" />
+
+        <Button
+            android:id="@+id/btn_resolve"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:text="Mark resolved"
+            android:textColor="#FFFFFF"
+            android:textAllCaps="false"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:backgroundTint="#16A34A" />
+    </LinearLayout>
+</LinearLayout>
