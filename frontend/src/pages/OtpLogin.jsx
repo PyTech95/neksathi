@@ -10,9 +10,8 @@ export default function OtpLogin() {
   const loc = useLocation();
   const next = new URLSearchParams(loc.search).get("next");
   const [step, setStep] = useState(1);
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState("");   // exactly 10 digits; +91 is fixed in the UI
   const [code, setCode] = useState("");
-  const [name, setName] = useState("");
   const [devCode, setDevCode] = useState(null);
   const [channel, setChannel] = useState(null);
   const [err, setErr] = useState("");
@@ -25,8 +24,11 @@ export default function OtpLogin() {
     return () => clearTimeout(t);
   }, [resendIn]);
 
+  // India only for now: +91 is fixed in the UI and the user types exactly 10
+  // digits. We send +91XXXXXXXXXX to the backend.
+  const full = "+91" + phone;
   const send = useCallback(async () => {
-    const r = await api.post("/auth/otp/request", { phone: phone.trim() });
+    const r = await api.post("/auth/otp/request", { phone: "+91" + phone });
     setDevCode(r.data.dev_code);
     setChannel(r.data.channel);
     setResendIn(30);
@@ -35,6 +37,7 @@ export default function OtpLogin() {
 
   const requestOtp = async (e) => {
     e.preventDefault();
+    if (phone.length !== 10 || !"6789".includes(phone[0])) { setErr("Enter a valid 10-digit mobile number."); return; }
     setErr(""); setBusy(true);
     try {
       await send();
@@ -54,9 +57,11 @@ export default function OtpLogin() {
     e.preventDefault();
     setErr(""); setBusy(true);
     try {
-      const r = await api.post("/auth/otp/verify", { phone: phone.trim(), code: code.trim(), name: name || null });
+      const r = await api.post("/auth/otp/verify", { phone: "+91" + phone, code: code.trim() });
       loginWithToken(r.data.access_token, r.data.user);
-      nav(next || "/dashboard");
+      // First-time user → Profile page to complete name / email (optional).
+      if (r.data.is_new) nav("/settings?complete=1");
+      else nav(next || "/dashboard");
     } catch (e) { setErr(e?.response?.data?.detail || "Invalid code"); }
     finally { setBusy(false); }
   };
@@ -71,7 +76,12 @@ export default function OtpLogin() {
 
           {step === 1 && (
             <form onSubmit={requestOtp}>
-              <div className="field"><label>Mobile number</label><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} required data-testid="otp-phone" placeholder="+91 98765 43210" /></div>
+              <div className="field"><label>Mobile number</label>
+                <div style={{ display: "flex", alignItems: "stretch", gap: 0 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", padding: "0 12px", background: "rgba(255,255,255,.06)", border: "1px solid var(--panel-brd)", borderRight: "none", borderRadius: "10px 0 0 10px", fontWeight: 700 }}>+91</span>
+                  <input className="input" style={{ borderRadius: "0 10px 10px 0" }} value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} required data-testid="otp-phone" placeholder="98765 43210" inputMode="numeric" maxLength={10} />
+                </div>
+              </div>
               {err && <p style={{ color: "var(--danger)", fontSize: 14, marginBottom: 12 }} data-testid="otp-error">{err}</p>}
               <button className="btn btn-primary btn-block" disabled={busy} data-testid="otp-request-btn"><ArrowRight size={17} /> {busy ? "Sending…" : "Send OTP"}</button>
             </form>
@@ -87,11 +97,10 @@ export default function OtpLogin() {
               ) : (
                 <div className="glass" style={{ padding: "10px 12px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8, borderColor: "rgba(52,211,153,.35)" }} data-testid="otp-channel-note">
                   <MessageCircle size={16} style={{ color: "#25d366" }} />
-                  <span style={{ fontSize: 13 }}>{channel === "whatsapp" ? "We sent a 6-digit code to your WhatsApp on " : "We sent a 6-digit code to "}<b style={{ color: "#fff" }}>{phone.trim()}</b>.</span>
+                  <span style={{ fontSize: 13 }}>{channel === "whatsapp" ? "We sent a 6-digit code to your WhatsApp on " : "We sent a 6-digit code to "}<b style={{ color: "#fff" }}>{full}</b>.</span>
                 </div>
               )}
-              <div className="field"><label>Name (new users)</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} data-testid="otp-name" placeholder="Your name" /></div>
-              <div className="field"><label>Enter 6-digit code</label><input className="input" value={code} onChange={(e) => setCode(e.target.value)} required data-testid="otp-code" placeholder="••••••" inputMode="numeric" /></div>
+              <div className="field"><label>Enter 6-digit code</label><input className="input" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} required data-testid="otp-code" placeholder="••••••" inputMode="numeric" maxLength={6} /></div>
               {err && <p style={{ color: "var(--danger)", fontSize: 14, marginBottom: 12 }} data-testid="otp-verify-error">{err}</p>}
               <button className="btn btn-primary btn-block" disabled={busy} data-testid="otp-verify-btn"><ShieldCheck size={17} /> {busy ? "Verifying…" : "Verify & continue"}</button>
               <button type="button" className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={resend} disabled={resendIn > 0 || busy} data-testid="otp-resend-btn">

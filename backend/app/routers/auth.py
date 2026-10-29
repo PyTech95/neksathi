@@ -312,9 +312,24 @@ async def reset_password(request: Request, payload: ResetPasswordIn):
     return {"ok": True}
 
 
+def _valid_in_phone(raw: str) -> bool:
+    """A valid Indian mobile: exactly 10 digits (optionally with +91 / 91 / 0
+    prefix). Rejects anything shorter or longer so junk numbers can't register."""
+    d = "".join(ch for ch in (raw or "") if ch.isdigit())
+    if len(d) == 10:
+        return d[0] in "6789"
+    if len(d) == 11 and d.startswith("0"):
+        return d[1] in "6789"
+    if len(d) == 12 and d.startswith("91"):
+        return d[2] in "6789"
+    return False
+
+
 @router.post("/auth/otp/request")
 @rate_limit("5/minute")
 async def otp_request(request: Request, payload: OtpRequestIn):
+    if not _valid_in_phone(payload.phone):
+        raise HTTPException(status_code=400, detail="Enter a valid 10-digit mobile number.")
     phone = _norm_phone(payload.phone)
     demo = await _otp_provider_mock()   # admin Demo toggle forces on-screen codes
     # WhatsApp OTP: we generate + store the code locally and deliver it over
@@ -352,6 +367,8 @@ async def otp_request(request: Request, payload: OtpRequestIn):
 @router.post("/auth/otp/verify", response_model=TokenOut)
 @rate_limit("10/minute")
 async def otp_verify(request: Request, payload: OtpVerifyIn):
+    if not _valid_in_phone(payload.phone):
+        raise HTTPException(status_code=400, detail="Enter a valid 10-digit mobile number.")
     phone = _norm_phone(payload.phone)
     demo = await _otp_provider_mock()
     ok = False
@@ -385,13 +402,17 @@ async def otp_verify(request: Request, payload: OtpVerifyIn):
     # their past data — no duplicate empty account. Fall back to legacy raw-phone
     # match for any pre-migration doc that still lacks phone_norm.
     user = await db.users.find_one({"phone_norm": phone}) or await db.users.find_one({"phone": phone})
+    is_new = user is None
     if not user:
-        digits = "".join(ch for ch in phone if ch.isdigit()) or new_id()[:10]
+        # Store the number in +91XXXXXXXXXX form; keep phone_norm (digits) as the
+        # match key. NO synthetic email — a first-time user has no email until
+        # they add a real one on the Profile page (email stays unset).
+        digits = "".join(ch for ch in phone if ch.isdigit())
+        last10 = digits[-10:] if len(digits) >= 10 else digits
         user = {
             "id": new_id(),
-            "email": f"{digits}@phone.neksaathi.app",
-            "name": (payload.name or "Nek Sathi User").strip(),
-            "phone": phone, "phone_norm": phone, "phone_verified": True,
+            "name": "Nek Sathi User",
+            "phone": "+91" + last10, "phone_norm": phone, "phone_verified": True,
             "password_hash": "", "is_admin": False,
             "suspended": False, "auth": "otp", "created_at": now_utc(),
         }
@@ -404,7 +425,7 @@ async def otp_verify(request: Request, payload: OtpVerifyIn):
     if user.get("suspended"):
         raise HTTPException(status_code=403, detail="Account suspended")
     token = create_access_token(user["id"])
-    return TokenOut(access_token=token, user=to_user_out(user))
+    return TokenOut(access_token=token, user=to_user_out(user), is_new=is_new)
 
 
 @router.post("/auth/phone/verify/request")

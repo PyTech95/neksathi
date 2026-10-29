@@ -87,13 +87,23 @@ def _prefs(u: Optional[dict]) -> dict:
     return base
 
 
+def display_phone(p: Optional[str]) -> Optional[str]:
+    """Canonical/stored phone -> '+91XXXXXXXXXX' for display."""
+    d = "".join(ch for ch in (p or "") if ch.isdigit())
+    if len(d) == 12 and d.startswith("91"):
+        return "+" + d
+    if len(d) == 10:
+        return "+91" + d
+    return ("+" + d) if d else (p or None)
+
+
 def to_user_out(u: dict) -> UserOut:
     return UserOut(
         id=u["id"],
-        email=u["email"],
+        email=(u.get("email") or None),
         name=u["name"],
         email_verified=bool(u.get("email_verified", False)),
-        phone=u["phone"],
+        phone=(display_phone(u.get("phone")) or u.get("phone") or ""),
         phone_verified=bool(u.get("phone_verified", False)),
         is_admin=bool(u.get("is_admin", False)),
         is_dealer=bool(u.get("is_dealer", False)),

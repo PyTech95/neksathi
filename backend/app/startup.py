@@ -34,7 +34,22 @@ async def _seed_blackspots() -> None:
 
 
 async def on_startup():
-    await db.users.create_index("email", unique=True)
+    # Restore admin-saved telco (MSG91) credentials into the process env so live
+    # OTP/SMS/WhatsApp keep working after a restart without re-entering them.
+    try:
+        from app.routers.admin.telco import _MSG91_ENV
+        tc = await db.system_config.find_one({"id": "telco"})
+        if tc:
+            for field, env_key in _MSG91_ENV.items():
+                val = tc.get(field)
+                if isinstance(val, str) and val.strip() and not os.environ.get(env_key):
+                    os.environ[env_key] = val.strip()
+    except Exception:
+        pass
+    # Email is unique only when present: OTP users may have no email, and many
+    # such docs must coexist (a plain unique index would reject the 2nd one).
+    await db.users.create_index("email", unique=True,
+                                partialFilterExpression={"email": {"$type": "string"}})
     await db.vehicles.create_index("owner_id")
     await db.vehicles.create_index("qr_id", unique=True)
     await db.contacts.create_index("vehicle_id")

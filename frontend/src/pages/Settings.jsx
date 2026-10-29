@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { RINGTONES, makeRingtone } from "@/lib/rtc";
@@ -294,9 +294,26 @@ export default function Settings() {
     } finally { setEvBusy(false); }
   };
 
+  // "Complete your profile" banner: shown to a first-time user (?complete=1 after
+  // OTP signup) and whenever the profile is still incomplete (default name, no
+  // verified email). Filling it is optional — the user may ignore it and use the
+  // app; the banner simply stays until name + email are done.
+  const [sp] = useSearchParams();
+  const nameIncomplete = !user?.name || user.name.trim() === "" || user.name.trim() === "Nek Sathi User";
+  const emailIncomplete = !user?.email || !user?.email_verified;
+  const showComplete = sp.get("complete") === "1" || nameIncomplete || emailIncomplete;
+
   return (
     <div className="page" data-testid="settings-page">
       <div className="container-nk" style={{ maxWidth: 640 }}>
+        {showComplete && (
+          <div data-testid="complete-profile-banner" className="glass" style={{ padding: "12px 16px", borderRadius: 14, marginBottom: 16, border: "1px solid rgba(245,165,36,.5)", background: "rgba(245,165,36,.1)", display: "flex", alignItems: "center", gap: 10 }}>
+            <UserCog size={18} style={{ color: "#f5a524", flexShrink: 0 }} />
+            <div style={{ fontSize: 13.5 }}>
+              <b>Complete your profile</b> — {nameIncomplete && "add your name"}{nameIncomplete && emailIncomplete && ", "}{emailIncomplete && "add & verify your email"}. It helps your family recognise you. You can do this anytime.
+            </div>
+          </div>
+        )}
         <span className="chip"><UserCog size={13} /> Account</span>
         <h1 style={{ fontSize: 34, marginTop: 12, marginBottom: 20 }}>Profile & <span className="neon">preferences</span></h1>
 

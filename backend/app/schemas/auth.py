@@ -28,7 +28,7 @@ class NotifyPrefs(BaseModel):
 
 class UserOut(BaseModel):
     id: str
-    email: EmailStr
+    email: Optional[EmailStr] = None
     name: str
     email_verified: bool = False
     phone: str
@@ -47,6 +47,9 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+    # True only when this OTP login just created the account, so the app can
+    # take a brand-new user to their Profile page to fill name / email.
+    is_new: bool = False
 
 
 class ProfileUpdate(BaseModel):
