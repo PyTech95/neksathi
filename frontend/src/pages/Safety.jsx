@@ -60,7 +60,7 @@ function useSiren() {
   return { on, toggle: () => (on ? stop() : start()) };
 }
 
-function Sos({ contactsCount, onSent }) {
+function Sos({ recipientCount, inFamily, onSent }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [arming, setArming] = useState(false);
@@ -95,7 +95,8 @@ function Sos({ contactsCount, onSent }) {
 
   const beginArm = () => {
     if (arming) return;
-    if (contactsCount === 0) { setResult({ error: "Add at least one emergency contact first." }); return; }
+    if (!inFamily) { setResult({ error: "Join or create a family circle first — your SOS goes to your family." }); return; }
+    if (recipientCount === 0) { setResult({ error: "Choose who receives your SOS below (SOS recipients) first." }); return; }
     firedRef.current = false;
     setArming(true); setCount(3);
     let c = 3;
@@ -552,6 +553,48 @@ function AudioRecorder() {
   );
 }
 
+// Who in the family circle gets this user's SOS. SOS is sent ONLY to the ticked
+// members; if none are ticked, the SOS button won't fire. Lives on the Safety
+// page so the panic button and its recipients sit together.
+function SosRecipients({ data, onChange }) {
+  const [sel, setSel] = useState(() => new Set((data.items || []).filter((m) => m.selected).map((m) => m.user_id)));
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { setSel(new Set((data.items || []).filter((m) => m.selected).map((m) => m.user_id))); }, [data]);
+  if (!data.in_family) {
+    return (
+      <div className="glass" style={{ padding: 18, borderRadius: 18, marginTop: 18, border: "1px solid rgba(245,165,36,.4)" }} data-testid="sos-recipients-panel">
+        <h2 style={{ margin: "0 0 6px", fontSize: 18, display: "flex", alignItems: "center", gap: 8 }}><ShieldAlert size={17} style={{ color: "#f5a524" }} /> SOS recipients</h2>
+        <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>Your SOS goes to your family. Create or join a <b>family circle</b> first, then choose who should receive your SOS here.</p>
+      </div>
+    );
+  }
+  const toggle = (id) => { const n = new Set(sel); n.has(id) ? n.delete(id) : n.add(id); setSel(n); setSaved(false); };
+  const save = async () => {
+    setBusy(true);
+    try { await api.put("/me/sos-recipients", { user_ids: [...sel] }); setSaved(true); onChange && onChange(); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="glass" style={{ padding: 18, borderRadius: 18, marginTop: 18, border: sel.size ? "1px solid rgba(52,211,153,.35)" : "1px solid rgba(255,59,92,.45)" }} data-testid="sos-recipients-panel">
+      <h2 style={{ margin: "0 0 4px", fontSize: 18, display: "flex", alignItems: "center", gap: 8 }}><ShieldAlert size={17} style={{ color: "#ff3b5c" }} /> SOS recipients</h2>
+      <p className="muted" style={{ margin: "0 0 12px", fontSize: 13 }}>Tick the family members who should get your SOS (lock-screen alert + WhatsApp/SMS). {sel.size === 0 && <b style={{ color: "#ff7591" }}>Pick at least one — SOS won't send otherwise.</b>}</p>
+      <div style={{ display: "grid", gap: 8 }}>
+        {(data.items || []).map((m) => (
+          <label key={m.user_id} data-testid={`sos-rec-${m.user_id}`} onClick={() => toggle(m.user_id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, cursor: "pointer", background: sel.has(m.user_id) ? "rgba(52,211,153,.1)" : "rgba(255,255,255,.04)", border: `1px solid ${sel.has(m.user_id) ? "rgba(52,211,153,.4)" : "var(--panel-brd)"}` }}>
+            <span style={{ width: 22, height: 22, borderRadius: 6, display: "grid", placeItems: "center", background: sel.has(m.user_id) ? "linear-gradient(100deg,#059669,#34d399)" : "transparent", border: sel.has(m.user_id) ? "none" : "1px solid var(--panel-brd)" }}>{sel.has(m.user_id) && <CheckCircle2 size={14} color="#fff" />}</span>
+            <span style={{ flex: 1, fontWeight: 600 }}>{m.name}{m.is_guardian ? " 👑" : ""}</span>
+            <span className="muted" style={{ fontSize: 12 }}>{m.relation || "family"}</span>
+          </label>
+        ))}
+      </div>
+      <button className="btn btn-primary btn-sm" onClick={save} disabled={busy} data-testid="sos-rec-save" style={{ marginTop: 12 }}>
+        {busy ? <Loader2 className="spin" size={14} /> : <CheckCircle2 size={14} />} {saved ? "Saved" : "Save recipients"}
+      </button>
+    </div>
+  );
+}
+
 export default function Safety() {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -561,16 +604,22 @@ export default function Safety() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState([]);
+  const [sosRec, setSosRec] = useState({ in_family: false, items: [] });
   const siren = useSiren();
 
   const load = async () => {
     setLoading(true);
     try {
-      const [c, h] = await Promise.all([api.get("/me/emergency-contacts"), api.get("/me/sos-events")]);
-      setContacts(c.data); setHistory(h.data);
+      const [c, h, sr] = await Promise.all([
+        api.get("/me/emergency-contacts"),
+        api.get("/me/sos-events"),
+        api.get("/me/sos-recipients").catch(() => ({ data: { in_family: false, items: [] } })),
+      ]);
+      setContacts(c.data); setHistory(h.data); setSosRec(sr.data || { in_family: false, items: [] });
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+  const recipientCount = (sosRec.items || []).filter((m) => m.selected).length;
 
   const openAdd = () => { setEditing(null); setForm({ name: "", phone: "", relation: "", is_primary: false }); setErr(""); setShow(true); };
   const openEdit = (c) => { setEditing(c.id); setForm({ name: c.name, phone: c.phone, relation: c.relation || "", is_primary: c.is_primary }); setErr(""); setShow(true); };
@@ -599,7 +648,7 @@ export default function Safety() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 18, alignItems: "start" }} className="safety-grid">
-        <Sos contactsCount={contacts.length} onSent={load} />
+        <Sos recipientCount={recipientCount} inFamily={sosRec.in_family} onSent={load} />
 
         {/* Siren */}
         <div className="glass" style={{ padding: 24, borderRadius: 20, textAlign: "center" }} data-testid="siren-panel">
@@ -624,6 +673,9 @@ export default function Safety() {
           </div>
         </div>
       </div>
+
+      {/* SOS recipients — who in the family circle receives this user's SOS */}
+      <SosRecipients data={sosRec} onChange={load} />
 
       {/* Emergency contacts */}
       <div className="glass" style={{ padding: 22, borderRadius: 18, marginTop: 18 }} data-testid="contacts-panel">

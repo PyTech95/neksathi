@@ -61,12 +61,64 @@ async def delete_emergency_contact(contact_id: str, user: dict = Depends(current
     return {"deleted": True}
 
 
+@router.get("/me/sos-recipients")
+async def get_sos_recipients(user: dict = Depends(current_user)):
+    """The user's family-circle members with a `selected` flag — these are who an
+    SOS goes to. SOS is sent only to selected members; none selected = no SOS."""
+    fam = await db.family_members.find_one({"user_id": user["id"]})
+    if not fam:
+        return {"in_family": False, "items": []}
+    chosen = set(user.get("sos_recipient_ids") or [])
+    items = []
+    async for m in db.family_members.find({"family_id": fam["family_id"]}):
+        if m.get("user_id") and m["user_id"] != user["id"]:
+            items.append({"user_id": m["user_id"], "name": m.get("name") or "Family",
+                          "relation": m.get("relation"), "is_guardian": bool(m.get("is_guardian")),
+                          "selected": m["user_id"] in chosen})
+    return {"in_family": True, "items": items}
+
+
+class SosRecipientsIn(BaseModel):
+    user_ids: List[str] = Field(default_factory=list)
+
+
+@router.put("/me/sos-recipients")
+async def set_sos_recipients(payload: SosRecipientsIn, user: dict = Depends(current_user)):
+    """Save which family members receive this user's SOS. Only ids that are
+    actually in the user's circle are kept."""
+    fam = await db.family_members.find_one({"user_id": user["id"]})
+    valid = set()
+    if fam:
+        async for m in db.family_members.find({"family_id": fam["family_id"]}):
+            if m.get("user_id") and m["user_id"] != user["id"]:
+                valid.add(m["user_id"])
+    ids = [u for u in dict.fromkeys(payload.user_ids) if u in valid]
+    await db.users.update_one({"id": user["id"]}, {"$set": {"sos_recipient_ids": ids}})
+    return {"ok": True, "user_ids": ids}
+
+
 @router.post("/me/sos", response_model=SOSEventOut)
 @rate_limit("6/minute")
 async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depends(current_user)):
+    # Recipients = the family-circle members the user chose (sos_recipient_ids).
+    # SOS always goes to family, never to a separate "emergency contact" list, and
+    # if the user has selected nobody it is NOT sent (explicit product rule).
+    fam = await db.family_members.find_one({"user_id": user["id"]})
+    circle = {}
+    if fam:
+        async for m in db.family_members.find({"family_id": fam["family_id"]}):
+            if m.get("user_id") and m["user_id"] != user["id"]:
+                circle[m["user_id"]] = m
+    chosen = [uid for uid in (user.get("sos_recipient_ids") or []) if uid in circle]
+    if not chosen:
+        raise HTTPException(status_code=400,
+            detail="Choose at least one family member to receive your SOS (Safety > SOS recipients).")
+    # The chosen members get BOTH a lock-screen push (app) and WhatsApp/SMS (phone).
     contacts = []
-    async for c in db.emergency_contacts.find({"user_id": user["id"]}):
-        contacts.append(clean(c))
+    for uid in chosen:
+        m = circle[uid]
+        if m.get("phone"):
+            contacts.append({"name": m.get("name") or "Family", "phone": m["phone"]})
     loc_link = ""
     if payload.latitude is not None and payload.longitude is not None:
         loc_link = f" Location: https://maps.google.com/?q={payload.latitude},{payload.longitude}"
@@ -113,19 +165,14 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
     # must learn about an SOS even when their app is closed. Tapping opens the
     # Family page with the member's live location and Navigate.
     try:
-        fm = await db.family_members.find_one({"user_id": user["id"]})
-        if fm:
-            fam_ids = [m["user_id"] async for m in db.family_members.find({"family_id": fm["family_id"]})
-                       if m.get("user_id") and m["user_id"] != user["id"]]
-            if fam_ids:
-                loc_q = (f"{payload.latitude},{payload.longitude}"
-                         if payload.latitude is not None and payload.longitude is not None else "")
-                await send_push(recipients=fam_ids, data={
-                    "title": f"🆘 {who} raised an SOS" + (" (quick SOS)" if source != "app" else ""),
-                    "message": (f"{payload.message} — " if payload.message else "") + "tap to see their location, call police or ambulance",
-                    "type": "sos", "sos_id": doc["id"], "action_url": "/family",
-                    "sender_name": who, "location": loc_q, "source": source,
-                }, idempotency_key="sos-" + doc["id"])
+        loc_q = (f"{payload.latitude},{payload.longitude}"
+                 if payload.latitude is not None and payload.longitude is not None else "")
+        await send_push(recipients=chosen, data={
+            "title": f"🆘 {who} raised an SOS" + (" (quick SOS)" if source != "app" else ""),
+            "message": (f"{payload.message} — " if payload.message else "") + "tap to see their location, call police or ambulance",
+            "type": "sos", "sos_id": doc["id"], "action_url": "/family",
+            "sender_name": who, "location": loc_q, "source": source,
+        }, idempotency_key="sos-" + doc["id"])
     except Exception as _e:
         log.warning("sos family push failed: %s", _e)
     if payload.photo_base64:

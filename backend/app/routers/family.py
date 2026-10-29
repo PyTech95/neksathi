@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, 
 from app.db import db
 from app.ratelimit import rate_limit
 from app.schemas import ActivityIn, AlertRulesIn, CheckInIn, CheckInRespondIn, FamilyAddByPhoneIn, FamilyCreateIn, FamilyJoinIn, NudgeIn, SharingIn, StatusIn, ZoneMuteIn
-from app.security import current_user
+from app.security import current_user, canon_phone
 from app.services.background import _build_family_digest, _digest_text, _send_family_digest
 from app.services.fcm import send_push
 from app.services.geo import _evaluate_geofences, _ist_now
@@ -68,14 +68,15 @@ async def family_add_by_phone(payload: FamilyAddByPhoneIn, user: dict = Depends(
         raise HTTPException(status_code=400, detail="This family circle is full.")
     raw = payload.phone.strip()
     digits = "".join(ch for ch in raw if ch.isdigit())
-    candidates = [c for c in {raw, digits, digits[-10:] if len(digits) >= 10 else ""} if c]
-    target = None
-    for c in candidates:
-        target = await db.users.find_one({"phone": c})
-        if not target:
-            target = await db.users.find_one({"phone": {"$regex": c + "$"}})
-        if target:
-            break
+    norm = canon_phone(raw)                       # canonical key, e.g. 919812345678
+    last10 = digits[-10:] if len(digits) >= 10 else digits
+    # Match on the canonical key first (robust to +91 / 0 / spaces), then on a
+    # digits-suffix regex. re.escape keeps a leading '+' from breaking the regex.
+    import re as _re
+    target = (await db.users.find_one({"phone_norm": norm})
+              or await db.users.find_one({"phone": raw})
+              or (last10 and await db.users.find_one({"phone": {"$regex": _re.escape(last10) + "$"}}))
+              or None)
     if not target:
         raise HTTPException(status_code=404, detail="No Nek Sathi account uses this number yet. Ask them to install the app and sign up with this number, or share your invite code — then they can join.")
     if await db.family_members.find_one({"user_id": target["id"]}):
