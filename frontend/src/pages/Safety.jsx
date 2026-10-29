@@ -5,6 +5,61 @@ import { loadLeaflet } from "@/lib/leaflet";
 import { getPosition, captureSelfie, startSosTracking, stopSosTracking } from "@/lib/native";
 import { Link } from "react-router-dom";
 import SosActions from "@/components/SosActions";
+import { API } from "@/lib/api";
+import { setCallAuth } from "@/lib/callsetup";
+import { isNativeApp, volumeSosStatus, setVolumeSos, testVolumeSos } from "@/lib/volumesos";
+
+// App-only card: opt-in "SOS by volume button". Volume-up x3 within 5s on the
+// lock screen (or app closed) sends an SOS with location to the chosen family
+// members. Sender's phone: a short vibration only. This card switches it on/off,
+// shows what's missing, and can fire a test SOS.
+function VolumeSosCard({ recipientCount, onSent }) {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const refresh = async () => setSt(await volumeSosStatus());
+  useEffect(() => {
+    try { setCallAuth(API, localStorage.getItem("nk_token")); } catch (_) {}
+    refresh();
+    const onVis = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+  if (!st || !st.supported) return null;
+  const toggle = async () => { setBusy("toggle"); setSt(await setVolumeSos(!st.enabled)); setBusy(""); };
+  const test = async () => {
+    setBusy("test"); setMsg("Sending a test SOS to your family (your phone only vibrates)…");
+    await testVolumeSos();
+    setTimeout(async () => { await refresh(); setBusy(""); setMsg("Test sent — check a family member's phone, then mark it “I'm safe” below."); onSent && onSent(); }, 6000);
+  };
+  const alive = st.enabled && st.running;
+  return (
+    <div className="glass" style={{ padding: 18, borderRadius: 18, marginTop: 18, borderColor: alive ? "rgba(52,211,153,.4)" : "rgba(255,255,255,.08)" }} data-testid="volume-sos-card">
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <Volume2 size={22} style={{ color: alive ? "#34d399" : undefined }} className={alive ? "" : "neon"} />
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontWeight: 800, fontSize: 15 }}>SOS by volume button {alive ? <span style={{ color: "#34d399", fontSize: 12.5, marginLeft: 6 }}>● Active</span> : <span className="muted" style={{ fontSize: 12.5, marginLeft: 6 }}>Off</span>}</div>
+          <div className="muted" style={{ fontSize: 12.5 }}>Press <b>volume-up 3 times within 5 seconds</b> — even on the lock screen — to send an SOS with your location to your family. Your phone only vibrates briefly; no sound, no popup.</div>
+        </div>
+        <button className={`btn btn-sm ${st.enabled ? "btn-ghost" : "btn-primary"}`} onClick={toggle} disabled={!!busy} data-testid="volume-sos-toggle">{busy === "toggle" ? <Loader2 className="spin" size={14} /> : st.enabled ? "Turn off" : "Turn on"}</button>
+      </div>
+      {st.enabled && (
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <button className="btn btn-ghost btn-sm" onClick={test} disabled={!!busy || !st.auth || recipientCount === 0} data-testid="volume-sos-test">{busy === "test" ? <Loader2 className="spin" size={14} /> : <Siren size={14} />} Send a test SOS</button>
+          {!st.auth && <span className="muted" style={{ fontSize: 12 }}>Sign in again on this phone to enable.</span>}
+          {st.auth && recipientCount === 0 && <span className="muted" style={{ fontSize: 12 }}>Pick SOS recipients below first.</span>}
+          {st.pending && <span className="muted" style={{ fontSize: 12 }}>1 SOS waiting for network…</span>}
+          {msg && <span className="muted" style={{ fontSize: 12 }} data-testid="volume-sos-msg">{msg}</span>}
+        </div>
+      )}
+      {st.enabled && (
+        <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>
+          A small silent "SOS protection on" notification stays in the tray — Android needs it to keep listening. Xiaomi / Vivo / Oppo / Realme: also set <b>Autostart</b> ON and battery to <b>No restrictions</b> for Nek Sathi.
+        </div>
+      )}
+    </div>
+  );
+}
 
 const HELPLINES = [
   { num: "112", label: "All-in-one Emergency", icon: <ShieldAlert size={18} />, tone: "#ff3b5c" },
@@ -647,7 +702,9 @@ export default function Safety() {
         <p className="muted" style={{ marginTop: 6 }}>Your personal panic button, trusted contacts, siren and helplines — all in one place.</p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 18, alignItems: "start" }} className="safety-grid">
+      {isNativeApp() && <VolumeSosCard recipientCount={recipientCount} onSent={load} />}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 18, alignItems: "start", marginTop: isNativeApp() ? 18 : 0 }} className="safety-grid">
         <Sos recipientCount={recipientCount} inFamily={sosRec.in_family} onSent={load} />
 
         {/* Siren */}

@@ -49,6 +49,14 @@ if (!gradle.includes('firebase-messaging')) {
   fs.writeFileSync(gradlePath, gradle);
   console.log('  app/build.gradle: added firebase-messaging');
 }
+// androidx.media = MediaSessionCompat + VolumeProviderCompat for volume-button SOS.
+gradle = fs.readFileSync(gradlePath, 'utf8');
+if (!gradle.includes('androidx.media:media')) {
+  gradle = gradle.replace(/dependencies\s*\{/, (m) => m +
+    "\n    implementation 'androidx.media:media:1.6.0'");
+  fs.writeFileSync(gradlePath, gradle);
+  console.log('  app/build.gradle: added androidx.media');
+}
 if (!gradle.includes('com.google.gms.google-services')) {
   console.log('  NOTE: app/build.gradle has no google-services plugin line; Capacitor adds it when google-services.json exists (try { apply plugin: ... }).');
 }

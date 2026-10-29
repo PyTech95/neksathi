@@ -57,7 +57,7 @@ public class IntruderCaptureService extends Service {
     private static final String CHANNEL_ID = "theft_protection";
     private static final int NOTIF_ID = 42431;
     private static final long CAMERA_TIMEOUT_MS = 9000;
-    private static final long AE_WARMUP_MS = 1100;
+    private static final long AE_WARMUP_MS = 1800;
 
     private HandlerThread thread;
     private Handler handler;
@@ -171,6 +171,18 @@ public class IntruderCaptureService extends Service {
         Integer so = chosen.get(CameraCharacteristics.SENSOR_ORIENTATION);
         final int orientation = so == null ? 0 : so;
 
+        // About -1 EV so a face close to the front camera doesn't blow out to white.
+        int ev = 0;
+        try {
+            android.util.Range<Integer> evRange = chosen.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE);
+            android.util.Rational evStep = chosen.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP);
+            if (evRange != null && evStep != null && evStep.floatValue() > 0) {
+                ev = (int) Math.round(-1.0 / evStep.floatValue());
+                ev = Math.max(evRange.getLower(), Math.min(evRange.getUpper(), ev));
+            }
+        } catch (Exception ignored) {}
+        final int aeComp = ev;
+
         reader = ImageReader.newInstance(size.getWidth(), size.getHeight(), ImageFormat.JPEG, 2);
         reader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
             @Override public void onImageAvailable(ImageReader r) {
@@ -206,8 +218,12 @@ public class IntruderCaptureService extends Service {
                                 b.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
                                 b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
                                 b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+                                b.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO);
+                                // A face right in front of the front camera tends to blow out
+                                // to white; pull exposure down ~1 EV so the intruder is visible.
+                                if (aeComp != 0) b.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, aeComp);
                                 b.set(CaptureRequest.JPEG_ORIENTATION, orientation);
-                                b.set(CaptureRequest.JPEG_QUALITY, (byte) 80);
+                                b.set(CaptureRequest.JPEG_QUALITY, (byte) 85);
                                 sessionStart = System.currentTimeMillis();
                                 // Repeating JPEG frames: the first ones warm up exposure,
                                 // the listener keeps the first frame after AE_WARMUP_MS.

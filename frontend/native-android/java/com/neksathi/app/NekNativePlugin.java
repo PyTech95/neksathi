@@ -219,6 +219,50 @@ public class NekNativePlugin extends Plugin {
         call.resolve();
     }
 
+    // ---------------------------------------------------------- volume SOS --
+
+    // Turn the opt-in "volume-up x3 = SOS" protection on or off for this phone.
+    @PluginMethod
+    public void setVolumeSos(PluginCall call) {
+        try {
+            boolean on = call.getBoolean("enabled", Boolean.TRUE);
+            VolumeSosService.setEnabled(getContext(), on);
+        } catch (Exception e) { /* ignore */ }
+        getVolumeSosStatus(call);
+    }
+
+    @PluginMethod
+    public void getVolumeSosStatus(PluginCall call) {
+        JSObject o = new JSObject();
+        try {
+            Context ctx = getContext();
+            boolean enabled = VolumeSosService.isEnabled(ctx);
+            SharedPreferences auth = ctx.getSharedPreferences(CallApi.PREFS, Context.MODE_PRIVATE);
+            boolean hasAuth = !auth.getString("token", "").isEmpty() && !auth.getString("api", "").isEmpty();
+            boolean location = IntruderCaptureService.hasLocationPermission(ctx);
+            boolean pending = ctx.getSharedPreferences(VolumeSosService.PREFS, Context.MODE_PRIVATE).getBoolean("pending", false);
+            if (enabled) SosHelper.flushPending(ctx);
+            o.put("supported", true);
+            o.put("enabled", enabled);
+            o.put("running", enabled);
+            o.put("auth", hasAuth);
+            o.put("location", location);
+            o.put("pending", pending);
+        } catch (Exception e) {
+            o.put("supported", false);
+            o.put("error", String.valueOf(e));
+        }
+        call.resolve(o);
+    }
+
+    // Fire the SOS pipeline once (vibration + location + POST /me/sos) so the
+    // user can confirm their family receives it, without pressing the keys.
+    @PluginMethod
+    public void testVolumeSos(PluginCall call) {
+        try { SosHelper.fire(getContext()); } catch (Exception e) { /* ignore */ }
+        call.resolve();
+    }
+
     // Runs the whole capture pipeline once (photo + location + upload) so the
     // user can verify it from the app without locking the phone.
     @PluginMethod
