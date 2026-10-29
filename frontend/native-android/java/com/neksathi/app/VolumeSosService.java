@@ -25,7 +25,12 @@ import androidx.core.app.NotificationCompat;
 // this service starts and stops.
 public class VolumeSosService extends Service {
     public static final String PREFS = "nek_volsos";
-    private static final String CHANNEL_ID = "sos_protection";
+    // v2: a channel's importance is fixed once the phone first creates it, so an
+    // earlier build that made "sos_protection" at a higher importance would keep
+    // popping this from the top. A new id lets the phone apply IMPORTANCE_MIN
+    // (silent, collapsed at the very bottom of the shade) — same fix used for
+    // the "nek_alerts_v2" alert channel.
+    private static final String CHANNEL_ID = "sos_protection_v2";
     private static final int NOTIF_ID = 42441;
 
     private VolumeKeyWatcher watcher;
@@ -69,10 +74,14 @@ public class VolumeSosService extends Service {
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm != null && nm.getNotificationChannel(CHANNEL_ID) == null) {
             NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "SOS protection", NotificationManager.IMPORTANCE_MIN);
-            ch.setDescription("Shown while volume-button SOS is switched on");
+            ch.setDescription("A quiet status line shown while volume-button SOS is switched on");
             ch.setShowBadge(false);
             ch.setSound(null, null);
+            ch.enableVibration(false);
+            ch.enableLights(false);
             nm.createNotificationChannel(ch);
+            // Clean up the old higher-importance channel so only the quiet one remains.
+            try { nm.deleteNotificationChannel("sos_protection"); } catch (Exception ignored) {}
         }
         Intent open = new Intent(this, MainActivity.class);
         open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -81,10 +90,12 @@ public class VolumeSosService extends Service {
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, piFlags);
         Notification n = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle("Nek Sathi SOS protection on")
-                .setContentText("Press volume-up 3 times to send an SOS to your family")
+                .setContentTitle("Nek Sathi")
+                .setContentText("Volume SOS is on")
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setShowWhen(false)
                 .setOngoing(true)
                 .setSilent(true)
                 .setContentIntent(pi)

@@ -172,7 +172,7 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
             "message": (f"{payload.message} — " if payload.message else "") + "tap to see their location, call police or ambulance",
             "type": "sos", "sos_id": doc["id"], "action_url": "/family",
             "sender_name": who, "location": loc_q, "source": source,
-        }, idempotency_key="sos-" + doc["id"])
+        }, idempotency_key="sos-" + doc["id"], data_only=True)
     except Exception as _e:
         log.warning("sos family push failed: %s", _e)
     if payload.photo_base64:
@@ -180,13 +180,40 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
     return SOSEventOut(**{k: v for k, v in clean(doc).items() if k != "photo_base64"})
 
 
+async def _family_circle_ids(member_id: str) -> list[str]:
+    """Every OTHER user in member_id's family circle (the phones that may be
+    ringing for this member's SOS). Empty if they have no family."""
+    fam = await db.family_members.find_one({"user_id": member_id})
+    if not fam:
+        return []
+    ids = []
+    async for m in db.family_members.find({"family_id": fam["family_id"]}):
+        if m.get("user_id") and m["user_id"] != member_id:
+            ids.append(m["user_id"])
+    return ids
+
+
+async def _stop_family_sirens(sender_id: str, sos_id: str):
+    """Tell the family's phones to stop the SOS siren (data-only push handled by
+    the native CallMessagingService -> stopSos). Best-effort."""
+    try:
+        ids = await _family_circle_ids(sender_id)
+        if ids:
+            await send_push(recipients=ids, data={"type": "sos_cancel", "sos_id": sos_id},
+                            idempotency_key="soscancel-" + sos_id, data_only=True)
+    except Exception as _e:
+        log.warning("sos_cancel push failed: %s", _e)
+
+
 @router.post("/me/sos-events/{event_id}/ack")
 async def acknowledge_sos(event_id: str, user: dict = Depends(current_user)):
-    """Owner marks an SOS as handled ("I'm safe") — cancels auto-escalation."""
+    """Owner marks an SOS as handled ("I'm safe") — cancels auto-escalation and
+    silences the siren on the family's phones."""
     r = await db.sos_events.update_one({"id": event_id, "user_id": user["id"]},
                                        {"$set": {"acknowledged": True, "acknowledged_at": now_utc()}})
     if not r.matched_count:
         raise HTTPException(status_code=404, detail="SOS event not found")
+    await _stop_family_sirens(user["id"], event_id)
     return {"acknowledged": True}
 
 

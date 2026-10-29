@@ -199,6 +199,10 @@ public class MainActivity extends BridgeActivity {
         // clear the native ringing notification + ringtone. This is what stops the
         // "Answer" popup lingering (or re-appearing) after the call is picked up.
         CallMessagingService.cancelCall(this);
+        // Likewise stop the native SOS siren — the in-app FamilyAlarm now owns the
+        // alert (it keeps ringing in-app until the SOS is marked handled), so we
+        // never double-ring once the app is on screen.
+        CallMessagingService.stopSos(this);
     }
 
     @Override

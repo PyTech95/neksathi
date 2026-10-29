@@ -507,6 +507,12 @@ async def family_resolve_sos(sos_id: str, user: dict = Depends(current_user)):
     if not allowed:
         raise HTTPException(status_code=403, detail="Only the member or their family can mark this SOS handled.")
     await db.sos_events.update_one({"id": sos_id}, {"$set": {"acknowledged": True, "acknowledged_at": now_utc(), "acknowledged_by": user["id"]}})
+    # Silence the siren on every family phone ringing for this SOS.
+    try:
+        from app.routers.safety import _stop_family_sirens
+        await _stop_family_sirens(s["user_id"], sos_id)
+    except Exception:
+        pass
     return {"ok": True, "acknowledged": True}
 
 

@@ -43,17 +43,69 @@ class SosHelper {
             }
         } catch (Exception ignored) {}
 
-        final Location loc = lastKnownLocation(ctx);
-        new Thread(new Runnable() {
+        // Ask for a FRESH location (last-known is often null); fall back to
+        // last-known and send within a few seconds either way, so the SOS is
+        // never delayed waiting for GPS.
+        freshLocation(ctx, 6000, new LocCb() {
+            @Override public void onLocation(final Location loc) {
+                new Thread(new Runnable() {
+                    @Override public void run() {
+                        boolean ok = post(ctx, loc);
+                        if (!ok) {
+                            ctx.getApplicationContext().getSharedPreferences(VolumeSosService.PREFS, Context.MODE_PRIVATE)
+                                    .edit().putBoolean("pending", true).apply();
+                        }
+                    }
+                }).start();
+            }
+        });
+    }
+
+    interface LocCb { void onLocation(Location loc); }
+
+    // Request a single fresh fix from GPS + network, seeded with last-known.
+    // Calls back exactly once with the best location (or last-known / null) when
+    // a fix arrives or after timeoutMs, whichever comes first.
+    @SuppressWarnings({"MissingPermission"})
+    static void freshLocation(Context ctx, long timeoutMs, final LocCb cb) {
+        if (!hasLoc(ctx)) { cb.onLocation(null); return; }
+        final LocationManager lm = (LocationManager) ctx.getSystemService(Context.LOCATION_SERVICE);
+        if (lm == null) { cb.onLocation(lastKnownLocation(ctx)); return; }
+        final Location[] best = { lastKnownLocation(ctx) };
+        final boolean[] done = { false };
+        final Handler h = new Handler(Looper.getMainLooper());
+        final android.location.LocationListener[] listeners = new android.location.LocationListener[1];
+        final Runnable finish = new Runnable() {
             @Override public void run() {
-                boolean ok = post(ctx, loc);
-                if (!ok) {
-                    // Keep it and let the app flush it when it next opens.
-                    ctx.getApplicationContext().getSharedPreferences(VolumeSosService.PREFS, Context.MODE_PRIVATE)
-                            .edit().putBoolean("pending", true).apply();
+                synchronized (done) {
+                    if (done[0]) return;
+                    done[0] = true;
+                }
+                try { if (listeners[0] != null) lm.removeUpdates(listeners[0]); } catch (Exception ignored) {}
+                cb.onLocation(best[0]);
+            }
+        };
+        android.location.LocationListener l = new android.location.LocationListener() {
+            @Override public void onLocationChanged(Location location) {
+                if (location != null) {
+                    best[0] = location;
+                    h.post(finish);   // got a fresh fix -> send now
                 }
             }
-        }).start();
+            @Override public void onStatusChanged(String p, int s, android.os.Bundle e) {}
+            @Override public void onProviderEnabled(String p) {}
+            @Override public void onProviderDisabled(String p) {}
+        };
+        listeners[0] = l;
+        try {
+            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER))
+                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, l, Looper.getMainLooper());
+            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER))
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, l, Looper.getMainLooper());
+        } catch (Exception e) {
+            Log.w(TAG, "requestLocationUpdates failed: " + e);
+        }
+        h.postDelayed(finish, timeoutMs);   // don't wait forever
     }
 
     // Re-send an SOS that couldn't go out at the time (no network on the phone).

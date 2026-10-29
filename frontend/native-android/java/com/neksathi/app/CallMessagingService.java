@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 
 import androidx.core.app.NotificationCompat;
 
@@ -38,8 +39,116 @@ public class CallMessagingService extends MessagingService {
             // Simul-ring: someone else in the family picked up → stop ringing
             // here and close the native call screen if it is showing.
             cancelCall(this);
+        } else if ("sos".equals(type)) {
+            // A family member raised an SOS → sound a loud siren on THIS phone's
+            // lock screen (not just a quiet notification). When the app is open
+            // the in-app FamilyAlarm handles the siren instead (so we don't
+            // double-ring); here we only cover the locked / app-closed case.
+            if (!MainActivity.isForeground) {
+                showSosAlert(data.get("title"), data.get("message"));
+            }
+        } else if ("sos_cancel".equals(type)) {
+            // Someone marked the SOS handled ("I'm safe" / "Mark resolved") →
+            // stop the siren on every family phone that is ringing for it.
+            stopSos(this);
         } else {
             super.onMessageReceived(remoteMessage);
+        }
+    }
+
+    public static final String SOS_CHANNEL_ID = "sos_siren";
+    public static final int SOS_NOTIF_ID = 42425;
+    // Safety cap so a siren never runs forever if the "resolved" push is missed
+    // (poor network). Normal stop is the sos_cancel push or the app opening.
+    private static final long SOS_MAX_MS = 180000;   // 3 minutes
+    // True only while an SOS siren is actually ringing — so a stray sos_cancel
+    // (or MainActivity.onResume) can never stop an unrelated incoming-call ring.
+    private static volatile boolean sosActive = false;
+
+    // Loud SOS alert for the lock screen / app-closed case: wake the screen, play
+    // a looping siren + vibration, and post a high-priority, CATEGORY_ALARM
+    // notification that opens the Family page. It keeps ringing until the SOS is
+    // marked handled (a "sos_cancel" push -> stopSos), the user opens the app
+    // (MainActivity.onResume -> stopSos), or the 3-minute safety cap.
+    private void showSosAlert(String title, String message) {
+        createSosChannel();
+        sosActive = true;
+
+        // Light up the screen so the lock-screen alert is actually seen
+        // (auto-released after 10s; FLAG_KEEP_SCREEN_ON is not needed here).
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                PowerManager.WakeLock wl = pm.newWakeLock(
+                        PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                                | PowerManager.ON_AFTER_RELEASE, "neksathi:sos");
+                wl.acquire(10000);
+            }
+        } catch (Exception ignored) {}
+
+        RingPlayer.start(this);   // looping loud alert + vibration
+
+        int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) piFlags |= PendingIntent.FLAG_IMMUTABLE;
+
+        // Tapping opens the app on the Family page. We deliberately do NOT auto-
+        // launch an activity / use a full-screen intent here: launching
+        // MainActivity would fire its onResume -> stopSos and silence the siren
+        // instantly. The wake-lock + heads-up notification + loud siren are what
+        // raise the alert over the lock screen.
+        Intent open = new Intent(this, MainActivity.class);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        open.putExtra("sos_open", true);
+        PendingIntent openPI = PendingIntent.getActivity(this, 7, open, piFlags);
+
+        String t = (title == null || title.isEmpty()) ? "🆘 Family SOS" : title;
+        String m = (message == null || message.isEmpty()) ? "A family member needs help — tap to see their location" : message;
+
+        NotificationCompat.Builder b = new NotificationCompat.Builder(this, SOS_CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(t)
+                .setContentText(m)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setContentIntent(openPI);
+
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) nm.notify(SOS_NOTIF_ID, b.build());
+
+        // Safety cap — stop even if the "resolved" push never arrives.
+        final Context appCtx = getApplicationContext();
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override public void run() { stopSos(appCtx); }
+        }, SOS_MAX_MS);
+    }
+
+    // Stop the SOS siren + clear its notification. Guarded by sosActive so it is
+    // a no-op (and never touches an incoming-call ring) when no SOS is ringing.
+    public static void stopSos(Context ctx) {
+        if (!sosActive) return;
+        sosActive = false;
+        RingPlayer.stop();
+        NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) nm.cancel(SOS_NOTIF_ID);
+    }
+
+    private void createSosChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            if (nm.getNotificationChannel(SOS_CHANNEL_ID) == null) {
+                NotificationChannel ch = new NotificationChannel(
+                        SOS_CHANNEL_ID, "Family SOS siren", NotificationManager.IMPORTANCE_HIGH);
+                ch.setDescription("Loud siren when a family member raises an SOS");
+                ch.enableVibration(true);
+                ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+                ch.setSound(null, null);   // the siren is the looping RingPlayer
+                ch.setBypassDnd(true);
+                nm.createNotificationChannel(ch);
+            }
         }
     }
 
