@@ -242,7 +242,7 @@ export default function Family() {
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <ShieldAlert size={22} style={{ color: "#ff3b5c", flexShrink: 0 }} />
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14.5, fontWeight: 800, color: "#ff3b5c" }}>🆘 {s.is_me ? "Your SOS is active" : `${s.member_name} has an active SOS`}{s.source === "volume_button" ? " (volume button)" : ""}{s.escalated ? " · escalated" : ""}</div>
+                      <div style={{ fontSize: 14.5, fontWeight: 800, color: "#ff3b5c" }}>🆘 {s.is_me ? "Your SOS is active" : `${s.member_name} has an active SOS`}{s.source && s.source !== "app" ? " (quick SOS)" : ""}{s.escalated ? " · escalated" : ""}</div>
                       <div className="muted" style={{ fontSize: 12.5 }}>{new Date(s.created_at).toLocaleString()}{s.message ? ` · "${s.message}"` : ""}</div>
                     </div>
                     {s.latitude != null && <a className="btn btn-danger btn-sm" href={`https://maps.google.com/?q=${s.latitude},${s.longitude}`} target="_blank" rel="noreferrer" data-testid={`active-sos-nav-${s.id}`}><MapPin size={14} /> Navigate</a>}

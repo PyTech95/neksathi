@@ -95,7 +95,11 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
             log.warning("sos sms failed: %s", _e)
     # No push to the sender's own phone: the person in trouble must not get a
     # sound/popup (a volume-button SOS gives only a short vibration natively).
-    source = "volume_button" if (payload.source or "").lower() == "volume_button" else "app"
+    # "app" = SOS button inside the app; anything else is a one-tap SOS from
+    # outside the app (Quick Settings tile / lock screen) sent by native code.
+    source = (payload.source or "app").lower().strip()
+    if source not in ("app", "quick_tile", "volume_button", "notification"):
+        source = "app"
     doc = {
         "id": new_id(), "user_id": user["id"],
         "latitude": payload.latitude, "longitude": payload.longitude,
@@ -117,7 +121,7 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
                 loc_q = (f"{payload.latitude},{payload.longitude}"
                          if payload.latitude is not None and payload.longitude is not None else "")
                 await send_push(recipients=fam_ids, data={
-                    "title": f"🆘 {who} raised an SOS" + (" (volume button)" if source == "volume_button" else ""),
+                    "title": f"🆘 {who} raised an SOS" + (" (quick SOS)" if source != "app" else ""),
                     "message": (f"{payload.message} — " if payload.message else "") + "tap to see their location, call police or ambulance",
                     "type": "sos", "sos_id": doc["id"], "action_url": "/family",
                     "sender_name": who, "location": loc_q, "source": source,

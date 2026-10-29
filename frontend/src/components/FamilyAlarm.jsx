@@ -122,7 +122,7 @@ export default function FamilyAlarm() {
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
             <ShieldAlert size={24} style={{ color: "#ff3b5c", animation: "alarmRing .9s infinite", flexShrink: 0, marginTop: 2 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 800, color: "#ff3b5c", fontSize: 15 }}>🆘 {s.member_name} raised an SOS{s.source === "volume_button" ? " (volume button)" : ""}</div>
+              <div style={{ fontWeight: 800, color: "#ff3b5c", fontSize: 15 }}>🆘 {s.member_name} raised an SOS{s.source && s.source !== "app" ? " (quick SOS)" : ""}</div>
               <div style={{ fontSize: 12.5, opacity: .85 }}>{new Date(s.created_at).toLocaleTimeString()}{s.escalated ? " · escalated" : ""}{s.message ? ` · "${s.message}"` : ""}</div>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={() => dismissSos(s.id)} data-testid={`global-sos-dismiss-${s.id}`} title="Hide on this phone (SOS stays active for the family)" aria-label="Dismiss" style={{ padding: "4px 8px" }}><X size={16} /></button>
