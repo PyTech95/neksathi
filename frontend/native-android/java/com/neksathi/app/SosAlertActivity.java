@@ -1,6 +1,7 @@
 package com.neksathi.app;
 
 import android.app.Activity;
+import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
@@ -97,27 +98,55 @@ public class SosAlertActivity extends Activity {
 
     // Any action silences the siren (the member has acknowledged); dialing an
     // emergency number / opening the map then prompts the PIN as Android requires.
-    private void dial(String num) {
+    // Over the lock screen a new activity (dialer / maps) is blocked until the
+    // keyguard is dismissed, so we ASK for the PIN first and launch on success —
+    // otherwise the tap looks dead.
+    private void dial(final String num) {
         SirenPlayer.stop();
-        try {
-            startActivity(new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + num))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        } catch (Exception ignored) {}
+        afterUnlock(new Runnable() {
+            @Override public void run() {
+                try {
+                    startActivity(new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + num))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (Exception ignored) {}
+            }
+        });
     }
 
     private void openMap() {
         SirenPlayer.stop();
+        afterUnlock(new Runnable() {
+            @Override public void run() {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW,
+                            Uri.parse("geo:" + lat + "," + lng + "?q=" + lat + "," + lng + "(SOS)"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (Exception e) {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW,
+                                Uri.parse("https://maps.google.com/?q=" + lat + "," + lng))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    } catch (Exception ignored) {}
+                }
+            }
+        });
+    }
+
+    // Dismiss the lock screen (shows the PIN/pattern prompt) and then run the
+    // action. If the phone is already unlocked, or on old Android, run it directly.
+    private void afterUnlock(final Runnable action) {
         try {
-            startActivity(new Intent(Intent.ACTION_VIEW,
-                    Uri.parse("geo:" + lat + "," + lng + "?q=" + lat + "," + lng + "(SOS)"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        } catch (Exception e) {
-            try {
-                startActivity(new Intent(Intent.ACTION_VIEW,
-                        Uri.parse("https://maps.google.com/?q=" + lat + "," + lng))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            } catch (Exception ignored) {}
-        }
+            KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+            if (km != null && km.isKeyguardLocked() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                km.requestDismissKeyguard(this, new KeyguardManager.KeyguardDismissCallback() {
+                    @Override public void onDismissSucceeded() { runOnUiThread(action); }
+                    @Override public void onDismissError() { runOnUiThread(action); }
+                    @Override public void onDismissCancelled() { /* user backed out */ }
+                });
+                return;
+            }
+        } catch (Exception ignored) {}
+        action.run();
     }
 
     private void resolveAndClose() {
