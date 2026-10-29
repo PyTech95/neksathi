@@ -8,12 +8,13 @@ import httpx
 import os
 import uuid
 from typing import List, Literal, Optional
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from app.config import log
 from app.db import db
 from app.ratelimit import rate_limit
 from app.schemas import AudioEvidenceIn, AudioEvidenceOut, EmergencyContactIn, EmergencyContactOut, LinkCheckIn, LiveShareOut, LiveShareStartIn, SOSEventOut, SOSTriggerIn, UserLocationIn
-from app.security import _prefs, current_user
+from app.security import _prefs, current_user, require_admin
 from app.services.fcm import send_push
 from app.services.gdrive import _gdrive_autobackup
 from app.services.geo import _evaluate_geofences, _haversine_km
@@ -92,24 +93,16 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
                 channels.add("sms")
         except Exception as _e:
             log.warning("sos sms failed: %s", _e)
-    # Push the user's own devices (and any family accounts sharing) as a record.
-    try:
-        if prefs.get("push"):
-            await send_push(recipients=[user["id"]], data={
-                "title": "🆘 SOS activated",
-                "message": f"Alert sent to {notified} emergency contact(s).",
-                "action_url": "/safety",
-            })
-            channels.add("push")
-    except Exception as _e:
-        log.warning("sos push failed: %s", _e)
+    # No push to the sender's own phone: the person in trouble must not get a
+    # sound/popup (a volume-button SOS gives only a short vibration natively).
+    source = "volume_button" if (payload.source or "").lower() == "volume_button" else "app"
     doc = {
         "id": new_id(), "user_id": user["id"],
         "latitude": payload.latitude, "longitude": payload.longitude,
         "message": payload.message, "notified": notified,
         "channels": sorted(channels), "created_at": now_utc(),
         "photo_base64": payload.photo_base64, "has_photo": bool(payload.photo_base64),
-        "acknowledged": False, "escalated": False,
+        "acknowledged": False, "escalated": False, "source": source,
     }
     await db.sos_events.insert_one(dict(doc))
     # Wake the family circle on their LOCK SCREEN (high-priority push) — they
@@ -121,10 +114,13 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
             fam_ids = [m["user_id"] async for m in db.family_members.find({"family_id": fm["family_id"]})
                        if m.get("user_id") and m["user_id"] != user["id"]]
             if fam_ids:
+                loc_q = (f"{payload.latitude},{payload.longitude}"
+                         if payload.latitude is not None and payload.longitude is not None else "")
                 await send_push(recipients=fam_ids, data={
-                    "title": f"🆘 {who} raised an SOS",
-                    "message": (f"{payload.message} — " if payload.message else "") + "tap to see their live location",
+                    "title": f"🆘 {who} raised an SOS" + (" (volume button)" if source == "volume_button" else ""),
+                    "message": (f"{payload.message} — " if payload.message else "") + "tap to see their location, call police or ambulance",
                     "type": "sos", "sos_id": doc["id"], "action_url": "/family",
+                    "sender_name": who, "location": loc_q, "source": source,
                 }, idempotency_key="sos-" + doc["id"])
     except Exception as _e:
         log.warning("sos family push failed: %s", _e)
@@ -447,3 +443,42 @@ async def nearby_police(request: Request, lat: float, lng: float, radius: int = 
     result = stations[:20]
     await db.police_cache.update_one({"key": cache_key}, {"$set": {"key": cache_key, "stations": result, "checked_at": now_utc()}}, upsert=True)
     return {"count": len(result), "stations": result, "cached": False}
+
+
+# ---- Emergency numbers (shown as Call Police / Call Ambulance on an SOS) -----
+# Defaults are India's unified numbers; the admin can change them without a
+# deploy (stored in system_config, id "emergency_numbers").
+DEFAULT_EMERGENCY_NUMBERS = {
+    "police": os.environ.get("POLICE_NUMBER", "112").strip() or "112",
+    "ambulance": os.environ.get("AMBULANCE_NUMBER", "108").strip() or "108",
+}
+
+
+async def get_emergency_numbers() -> dict:
+    doc = await db.system_config.find_one({"id": "emergency_numbers"}) or {}
+    return {
+        "police": (doc.get("police") or DEFAULT_EMERGENCY_NUMBERS["police"]),
+        "ambulance": (doc.get("ambulance") or DEFAULT_EMERGENCY_NUMBERS["ambulance"]),
+    }
+
+
+@router.get("/public/emergency-numbers")
+async def public_emergency_numbers():
+    return await get_emergency_numbers()
+
+
+class EmergencyNumbersIn(BaseModel):
+    police: str = Field(min_length=2, max_length=20)
+    ambulance: str = Field(min_length=2, max_length=20)
+
+
+@router.put("/admin/emergency-numbers")
+async def set_emergency_numbers(payload: EmergencyNumbersIn, user: dict = Depends(require_admin)):
+    clean_p = "".join(ch for ch in payload.police if ch.isdigit() or ch == "+")
+    clean_a = "".join(ch for ch in payload.ambulance if ch.isdigit() or ch == "+")
+    if len(clean_p) < 2 or len(clean_a) < 2:
+        raise HTTPException(status_code=400, detail="Enter valid phone numbers.")
+    await db.system_config.update_one({"id": "emergency_numbers"},
+                                      {"$set": {"id": "emergency_numbers", "police": clean_p, "ambulance": clean_a,
+                                                "updated_at": now_utc(), "updated_by": user["id"]}}, upsert=True)
+    return await get_emergency_numbers()

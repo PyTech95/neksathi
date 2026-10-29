@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ShieldAlert, BellRing, VolumeX, Bell, MapPin, CheckCircle2 } from "lucide-react";
+import { ShieldAlert, BellRing, VolumeX, Bell, CheckCircle2, X } from "lucide-react";
 import api from "@/lib/api";
+import SosActions from "@/components/SosActions";
+
+// SOS ids this phone dismissed with ✕: popup + siren hidden here only; the SOS
+// stays active for everyone else until someone marks it resolved.
+const DISMISS_KEY = "nk_sos_dismissed";
+function loadDismissed() { try { return new Set(JSON.parse(localStorage.getItem(DISMISS_KEY) || "[]")); } catch (_) { return new Set(); } }
+function saveDismissed(set) { try { localStorage.setItem(DISMISS_KEY, JSON.stringify([...set].slice(-50))); } catch (_) {} }
 
 function useAlarm() {
   const ctxRef = useRef(null);
@@ -38,6 +45,7 @@ export default function FamilyAlarm() {
   const [sos, setSos] = useState([]);
   const [nudge, setNudge] = useState({ active: false });
   const [muted, setMuted] = useState(() => localStorage.getItem("sosMuted") === "1");
+  const [dismissed, setDismissed] = useState(loadDismissed);
   const alarm = useAlarm();
   const seen = useRef(null);
   const nudgeRef = useRef(false);
@@ -49,7 +57,9 @@ export default function FamilyAlarm() {
     let cancelled = false;
     const tick = async () => {
       try {
-        const items = (await api.get("/family/active-sos")).data.items || [];
+        // The sender's own SOS never rings or pops up on their phone (is_me);
+        // SOS dismissed with ✕ on this phone stay hidden here.
+        const items = ((await api.get("/family/active-sos")).data.items || []).filter((s) => !s.is_me && !dismissed.has(s.id));
         if (cancelled) return;
         setSos(items);
         const ids = new Set(items.map((s) => s.id));
@@ -73,7 +83,7 @@ export default function FamilyAlarm() {
     tick();
     const t = setInterval(tick, 8000);
     return () => { cancelled = true; clearInterval(t); };
-  }, [muted]);
+  }, [muted, dismissed]);
 
   // Mute = no sound for any SOS until unmuted. Unmuting while an SOS is active
   // starts the siren again right away.
@@ -85,6 +95,11 @@ export default function FamilyAlarm() {
   const resolveSos = async (id) => {
     try { await api.post(`/family/sos/${id}/resolve`); } catch (_) {}
     setSos((cur) => { const next = cur.filter((s) => s.id !== id); if (!next.length) alarm.stop(); return next; });
+  };
+  // ✕ on the popup: hide it (and stop the siren) on THIS phone only.
+  const dismissSos = (id) => {
+    const next = new Set(dismissed); next.add(id); saveDismissed(next); setDismissed(next);
+    setSos((cur) => { const rest = cur.filter((s) => s.id !== id); if (!rest.length) alarm.stop(); return rest; });
   };
   const dismissNudge = async () => { alarm.stop(); nudgeRef.current = false; setNudge({ active: false }); try { await api.post("/family/nudge/clear"); } catch (_) {} };
 
@@ -103,21 +118,26 @@ export default function FamilyAlarm() {
   return (
     <div data-testid="global-family-alarm" style={{ position: "fixed", top: 74, left: "50%", transform: "translateX(-50%)", zIndex: 4000, width: "min(560px, 92vw)", display: "grid", gap: 10, pointerEvents: "none" }}>
       {visibleSos.map((s) => (
-        <div key={s.id} data-testid={`global-sos-${s.id}`} className="glass" style={{ pointerEvents: "auto", padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(255,59,92,.7)", background: "rgba(35,10,16,.96)", boxShadow: "0 12px 40px rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <ShieldAlert size={22} style={{ color: "#ff3b5c", animation: "alarmRing .9s infinite" }} />
-            <div><div style={{ fontWeight: 800, color: "#ff3b5c", fontSize: 14 }}>🆘 {s.member_name} raised an SOS</div><div style={{ fontSize: 12, opacity: .8 }}>{new Date(s.created_at).toLocaleTimeString()}{s.escalated ? " · escalated" : ""}</div></div>
+        <div key={s.id} data-testid={`global-sos-${s.id}`} className="glass" style={{ pointerEvents: "auto", padding: "14px 16px", borderRadius: 16, border: "1px solid rgba(255,59,92,.7)", background: "rgba(35,10,16,.97)", boxShadow: "0 12px 40px rgba(0,0,0,.55)", display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <ShieldAlert size={24} style={{ color: "#ff3b5c", animation: "alarmRing .9s infinite", flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 800, color: "#ff3b5c", fontSize: 15 }}>🆘 {s.member_name} raised an SOS{s.source === "volume_button" ? " (volume button)" : ""}</div>
+              <div style={{ fontSize: 12.5, opacity: .85 }}>{new Date(s.created_at).toLocaleTimeString()}{s.escalated ? " · escalated" : ""}{s.message ? ` · "${s.message}"` : ""}</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => dismissSos(s.id)} data-testid={`global-sos-dismiss-${s.id}`} title="Hide on this phone (SOS stays active for the family)" aria-label="Dismiss" style={{ padding: "4px 8px" }}><X size={16} /></button>
           </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button className="btn btn-danger btn-sm" onClick={() => nav("/family")} data-testid={`global-sos-view-${s.id}`}><MapPin size={14} /> View</button>
+          <SosActions sos={s} testPrefix={`global-sos-${s.id}`} />
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
             {alarm.on
               ? <button className="btn btn-ghost btn-sm" onClick={alarm.stop} data-testid="global-sos-silence"><VolumeX size={14} /> Silence</button>
               : !muted && <button className="btn btn-ghost btn-sm" onClick={alarm.start} data-testid="global-sos-ring"><Bell size={14} /> Ring again</button>}
             <button className="btn btn-ghost btn-sm" onClick={toggleMute} data-testid="global-sos-mute" title={muted ? "Alerts are muted — tap to unmute" : "Mute all SOS sounds"}>
               {muted ? <><Bell size={14} /> Unmute</> : <><VolumeX size={14} /> Mute</>}
             </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => nav("/family")} data-testid={`global-sos-view-${s.id}`}>Family page</button>
             {s.can_resolve !== false && (
-              <button className="btn btn-ghost btn-sm" onClick={() => resolveSos(s.id)} data-testid={`global-sos-resolve-${s.id}`} style={{ color: "#34d399" }}><CheckCircle2 size={14} /> Handled</button>
+              <button className="btn btn-primary btn-sm" onClick={() => resolveSos(s.id)} data-testid={`global-sos-resolve-${s.id}`}><CheckCircle2 size={14} /> Mark resolved</button>
             )}
           </div>
         </div>

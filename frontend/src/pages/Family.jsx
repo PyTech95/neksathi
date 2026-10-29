@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import { loadLeaflet } from "@/lib/leaflet";
+import SosActions from "@/components/SosActions";
 import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, BellRing, ChevronDown, UserPlus, Camera, Lock } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
@@ -134,7 +135,7 @@ export default function Family() {
       sosPts.forEach((s) => L.circleMarker([s.latitude, s.longitude], { radius: 12, color: "#ff3b5c", fillColor: "#ff3b5c", fillOpacity: 0.6, weight: 3 }).addTo(layer.current).bindPopup(`<b>🆘 ${s.member_name}</b><br/>SOS active`).openPopup());
       const all = [...pts.map((m) => [m.latitude, m.longitude]), ...sosPts.map((s) => [s.latitude, s.longitude])];
       if (all.length > 1) mapObj.current.fitBounds(all, { padding: [40, 40] });
-    });
+    }).catch(() => { /* map CDN unreachable: the list and buttons still work */ });
   }, [data, activeSos]);
 
   const create = async () => { setBusy(true); setErr(""); try { await api.post("/family", { name }); await load(); } catch (e) { setErr(e?.response?.data?.detail || "Could not create."); } finally { setBusy(false); } };
@@ -237,20 +238,22 @@ export default function Family() {
           {activeSos.length > 0 && (
             <div className="glass" style={{ padding: 16, borderRadius: 14, marginBottom: 16, borderColor: "rgba(255,59,92,.6)", background: "rgba(255,59,92,.08)" }} data-testid="active-sos-banner">
               {activeSos.map((s) => (
-                <div key={s.id} data-testid={`active-sos-${s.id}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", padding: "4px 0" }}>
+                <div key={s.id} data-testid={`active-sos-${s.id}`} style={{ display: "grid", gap: 10, padding: "6px 0" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <ShieldAlert size={22} style={{ color: "#ff3b5c" }} />
-                    <div>
-                      <div style={{ fontSize: 14.5, fontWeight: 800, color: "#ff3b5c" }}>🆘 {s.member_name} has an active SOS{s.escalated ? " · escalated" : ""}</div>
+                    <ShieldAlert size={22} style={{ color: "#ff3b5c", flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 800, color: "#ff3b5c" }}>🆘 {s.is_me ? "Your SOS is active" : `${s.member_name} has an active SOS`}{s.source === "volume_button" ? " (volume button)" : ""}{s.escalated ? " · escalated" : ""}</div>
                       <div className="muted" style={{ fontSize: 12.5 }}>{new Date(s.created_at).toLocaleString()}{s.message ? ` · "${s.message}"` : ""}</div>
                     </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {s.latitude != null && <a className="btn btn-danger btn-sm" href={`https://maps.google.com/?q=${s.latitude},${s.longitude}`} target="_blank" rel="noreferrer" data-testid={`active-sos-nav-${s.id}`}><MapPin size={14} /> Navigate</a>}
+                  </div>
+                  {/* Police / Ambulance / Location — one per line, same on every phone */}
+                  <SosActions sos={s} compact testPrefix={`active-sos-${s.id}`} />
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     {s.can_resolve !== false && (
-                      <button className="btn btn-ghost btn-sm" data-testid={`active-sos-resolve-${s.id}`} style={{ color: "#34d399" }}
+                      <button className="btn btn-primary btn-sm" data-testid={`active-sos-resolve-${s.id}`}
                         onClick={async () => { try { await api.post(`/family/sos/${s.id}/resolve`); } catch (_) {} setActiveSos((cur) => cur.filter((x) => x.id !== s.id)); }}>
-                        <CheckCircle2 size={14} /> Mark handled
+                        <CheckCircle2 size={14} /> {s.is_me ? "I'm safe" : "Mark resolved"}
                       </button>
                     )}
                   </div>

@@ -414,42 +414,46 @@ async def family_active_sos(user: dict = Depends(current_user)):
     fam = await _my_family(user["id"])
     if not fam:
         return {"items": []}
-    is_guardian = fam["guardian_id"] == user["id"]
+    # Every member of the circle sees every member's active SOS (not only the
+    # guardian): an SOS is for the whole family. The sender's own SOS is flagged
+    # is_me so their phone stays silent (no siren / popup, just "I'm safe").
     names, ids = {}, []
     async for m in db.family_members.find({"family_id": fam["id"]}):
         names[m["user_id"]] = m.get("name")
-        if is_guardian or m["user_id"] == user["id"]:
+        if m.get("user_id"):
             ids.append(m["user_id"])
     since = now_utc() - timedelta(hours=2)
     items = []
     async for s in db.sos_events.find({"user_id": {"$in": ids}, "acknowledged": {"$ne": True},
                                        "created_at": {"$gte": since}}).sort("created_at", -1):
         items.append({"id": s["id"], "member_name": names.get(s["user_id"]) or "Member",
-                      "member_user_id": s["user_id"],
+                      "member_user_id": s["user_id"], "is_me": s["user_id"] == user["id"],
                       "latitude": s.get("latitude"), "longitude": s.get("longitude"),
                       "message": s.get("message"), "escalated": bool(s.get("escalated")),
+                      "source": s.get("source") or "app",
                       # explicit UTC so phones show local time, not the raw UTC clock
                       "created_at": _aware(s.get("created_at")),
-                      "can_resolve": is_guardian or s["user_id"] == user["id"]})
+                      # any member of the circle may mark it handled
+                      "can_resolve": True})
     return {"items": items}
 
 
 @router.post("/family/sos/{sos_id}/resolve")
 async def family_resolve_sos(sos_id: str, user: dict = Depends(current_user)):
-    """Mark a member's SOS handled. Allowed for the member themselves or the
-    guardian of their circle — so an alert never stays stuck for 2 hours just
-    because the member closed the app before tapping "I'm safe"."""
+    """Mark a member's SOS handled. Allowed for the member themselves or ANY
+    member of their family circle — so an alert never stays stuck for 2 hours
+    just because the member closed the app before tapping "I'm safe"."""
     s = await db.sos_events.find_one({"id": sos_id})
     if not s:
         raise HTTPException(status_code=404, detail="SOS not found.")
     allowed = s["user_id"] == user["id"]
     if not allowed:
         fam = await _my_family(user["id"])
-        if fam and fam["guardian_id"] == user["id"]:
+        if fam:
             m = await db.family_members.find_one({"family_id": fam["id"], "user_id": s["user_id"]})
             allowed = m is not None
     if not allowed:
-        raise HTTPException(status_code=403, detail="Only the member or their guardian can mark this SOS handled.")
+        raise HTTPException(status_code=403, detail="Only the member or their family can mark this SOS handled.")
     await db.sos_events.update_one({"id": sos_id}, {"$set": {"acknowledged": True, "acknowledged_at": now_utc(), "acknowledged_by": user["id"]}})
     return {"ok": True, "acknowledged": True}
 

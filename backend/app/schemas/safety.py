@@ -26,6 +26,9 @@ class SOSTriggerIn(BaseModel):
     longitude: Optional[float] = None
     message: Optional[str] = Field(default=None, max_length=280)
     photo_base64: Optional[str] = None
+    # "app" = SOS button in the app (may carry a photo); "volume_button" = the
+    # native volume-up x3 trigger from the lock screen (location only).
+    source: Optional[str] = Field(default="app", max_length=20)
 
 
 class SOSEventOut(BaseModel):
@@ -38,6 +41,7 @@ class SOSEventOut(BaseModel):
     has_photo: bool = False
     acknowledged: bool = False
     escalated: bool = False
+    source: Optional[str] = "app"
     created_at: datetime
 
 
