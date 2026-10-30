@@ -2,6 +2,7 @@ package com.neksathi.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -10,6 +11,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.Settings;
 
 import androidx.core.app.ActivityCompat;
@@ -260,6 +262,98 @@ public class NekNativePlugin extends Plugin {
     @PluginMethod
     public void testVolumeSos(PluginCall call) {
         try { SosHelper.fire(getContext()); } catch (Exception e) { /* ignore */ }
+        call.resolve();
+    }
+
+    // ------------------------------------------ SOS lock-screen display help --
+
+    // What's still missing for the full-screen SOS alert to pop over the lock
+    // screen (vs. only a notification + siren): the Android-14 full-screen-intent
+    // permission and a battery-optimization exemption. The web shows a helper card.
+    @PluginMethod
+    public void getSosDisplayStatus(PluginCall call) {
+        JSObject o = new JSObject();
+        try {
+            Context ctx = getContext();
+            boolean fsi = true;   // pre-Android-14 it is granted by default
+            if (Build.VERSION.SDK_INT >= 34) {
+                NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+                fsi = nm != null && nm.canUseFullScreenIntent();
+            }
+            boolean battOk = true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+                battOk = pm != null && pm.isIgnoringBatteryOptimizations(ctx.getPackageName());
+            }
+            o.put("supported", true);
+            o.put("sdk", Build.VERSION.SDK_INT);
+            o.put("manufacturer", Build.MANUFACTURER);
+            o.put("full_screen_intent", fsi);
+            o.put("battery_unrestricted", battOk);
+        } catch (Exception e) {
+            o.put("supported", false);
+            o.put("error", String.valueOf(e));
+        }
+        call.resolve(o);
+    }
+
+    // Android 14+: the "Full-screen notifications" permission screen for this app;
+    // older: the app's notification settings.
+    @PluginMethod
+    public void openFullScreenIntentSettings(PluginCall call) {
+        try {
+            Intent i;
+            if (Build.VERSION.SDK_INT >= 34) {
+                i = new Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENT",
+                        Uri.parse("package:" + getContext().getPackageName()));
+            } else {
+                i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+            }
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+        } catch (Exception e) {
+            openAppInfoSettings(call);
+            return;
+        }
+        call.resolve();
+    }
+
+    // The app's system details page — where the OEM "show on lock screen",
+    // "display pop-up in background" and autostart toggles live (names vary).
+    @PluginMethod
+    public void openAppInfoSettings(PluginCall call) {
+        try {
+            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getContext().getPackageName()));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+        } catch (Exception e) {
+            call.reject("could not open app settings");
+            return;
+        }
+        call.resolve();
+    }
+
+    // Ask Android to exempt Nek Sathi from battery optimization (so the lock-screen
+    // alert / background work isn't killed).
+    @PluginMethod
+    public void requestIgnoreBatteryOptimizations(PluginCall call) {
+        try {
+            Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:" + getContext().getPackageName()));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+        } catch (Exception e) {
+            try {
+                Intent i2 = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                i2.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(i2);
+            } catch (Exception e2) {
+                call.reject("could not open battery settings");
+                return;
+            }
+        }
         call.resolve();
     }
 

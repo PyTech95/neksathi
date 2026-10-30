@@ -1,5 +1,7 @@
 import "@/App.css";
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { getThemePref, resolveTheme, applyTheme } from "@/lib/theme";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import TopNav from "@/components/TopNav";
 import Landing from "@/pages/Landing";
@@ -75,6 +77,31 @@ import Transactions from "@/pages/Transactions";
 import Referral from "@/pages/Referral";
 import { Capacitor } from "@capacitor/core";
 
+// Applies the user's theme (Light / Dark / System default) in the app, and keeps
+// the marketing website dark. Re-applies on route change, on the "nk-theme-change"
+// event (fired when the setting changes), and on OS theme change when on System.
+function ThemeManager() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const isApp = Capacitor.isNativePlatform() || !isWebsitePath(pathname);
+    const apply = () => applyTheme(isApp ? resolveTheme(getThemePref()) : "dark");
+    apply();
+    const onChange = () => apply();
+    window.addEventListener("nk-theme-change", onChange);
+    let mq, onMq;
+    try {
+      mq = window.matchMedia("(prefers-color-scheme: dark)");
+      onMq = () => { if (isApp && getThemePref() === "system") apply(); };
+      mq.addEventListener ? mq.addEventListener("change", onMq) : mq.addListener(onMq);
+    } catch (_) {}
+    return () => {
+      window.removeEventListener("nk-theme-change", onChange);
+      try { if (mq) (mq.removeEventListener ? mq.removeEventListener("change", onMq) : mq.removeListener(onMq)); } catch (_) {}
+    };
+  }, [pathname]);
+  return null;
+}
+
 function Navigation() {
   const { pathname } = useLocation();
   const { user } = useAuth();
@@ -128,6 +155,7 @@ function Shell() {
     <>
       <BrowserRouter>
         <WebsiteEffects />
+        <ThemeManager />
         <Navigation />
         <Routes>
           <Route path="/" element={<Home />} />

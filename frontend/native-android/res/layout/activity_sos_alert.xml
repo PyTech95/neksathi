@@ -41,6 +41,15 @@
         android:gravity="center"
         android:layout_marginTop="10dp" />
 
+    <ImageView
+        android:id="@+id/sos_photo"
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        android:layout_marginTop="14dp"
+        android:scaleType="centerCrop"
+        android:visibility="gone"
+        android:contentDescription="SOS capture" />
+
     <View
         android:layout_width="0dp"
         android:layout_height="0dp"

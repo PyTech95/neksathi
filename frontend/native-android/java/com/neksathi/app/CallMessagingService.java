@@ -99,6 +99,7 @@ public class CallMessagingService extends MessagingService {
         act.putExtra(SosAlertActivity.EXTRA_LNG, lng);
         act.putExtra(SosAlertActivity.EXTRA_POLICE, emptyTo(data.get("police_number"), "112"));
         act.putExtra(SosAlertActivity.EXTRA_AMBULANCE, emptyTo(data.get("ambulance_number"), "108"));
+        act.putExtra(SosAlertActivity.EXTRA_HAS_PHOTO, "1".equals(data.get("has_photo")));
 
         int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) piFlags |= PendingIntent.FLAG_IMMUTABLE;

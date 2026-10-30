@@ -483,6 +483,9 @@ async def family_active_sos(user: dict = Depends(current_user)):
                       "latitude": s.get("latitude"), "longitude": s.get("longitude"),
                       "message": s.get("message"), "escalated": bool(s.get("escalated")),
                       "source": s.get("source") or "app",
+                      # whether the sender's phone captured a photo with this SOS
+                      # (fetched on demand via GET /family/sos/{id}/photo)
+                      "has_photo": bool(s.get("photo_base64")),
                       # explicit UTC so phones show local time, not the raw UTC clock
                       "created_at": _aware(s.get("created_at")),
                       # any member of the circle may mark it handled
@@ -514,6 +517,24 @@ async def family_resolve_sos(sos_id: str, user: dict = Depends(current_user)):
     except Exception:
         pass
     return {"ok": True, "acknowledged": True}
+
+
+@router.get("/family/sos/{sos_id}/photo")
+async def family_sos_photo(sos_id: str, user: dict = Depends(current_user)):
+    """The selfie captured with a member's SOS, for the family to see who/where.
+    Allowed for the member themselves or any member of their family circle."""
+    s = await db.sos_events.find_one({"id": sos_id})
+    if not s or not s.get("photo_base64"):
+        raise HTTPException(status_code=404, detail="No photo for this SOS.")
+    if s["user_id"] != user["id"]:
+        fam = await _my_family(user["id"])
+        ok = False
+        if fam:
+            m = await db.family_members.find_one({"family_id": fam["id"], "user_id": s["user_id"]})
+            ok = m is not None
+        if not ok:
+            raise HTTPException(status_code=403, detail="Not allowed to view this SOS photo.")
+    return {"photo_base64": s["photo_base64"]}
 
 
 @router.post("/family/nudge")

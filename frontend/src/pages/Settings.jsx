@@ -6,7 +6,8 @@ import { RINGTONES, makeRingtone } from "@/lib/rtc";
 import BottomSheet from "@/components/BottomSheet";
 import Modal from "@/components/Modal";
 import { openCallSetup, isNativeApp } from "@/lib/callsetup";
-import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink, Phone, Play, Square, Upload, ChevronDown, Check, LogOut, Receipt, ChevronRight, Gift } from "lucide-react";
+import { getThemePref, setThemePref } from "@/lib/theme";
+import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink, Phone, Play, Square, Upload, ChevronDown, Check, LogOut, Receipt, ChevronRight, Gift, Sun, Moon, Monitor } from "lucide-react";
 
 const DEFAULT_PREFS = { whatsapp: true, email: true, push: true, incident_alerts: true, speed_alerts: true, marketing: false, ringtone: "classic" };
 
@@ -116,6 +117,8 @@ export default function Settings() {
   const [notice, setNotice] = useState("");
   const [err, setErr] = useState("");
   const fileRef = useRef(null);
+  const [theme, setTheme] = useState(getThemePref());   // "light" | "dark" | "system"
+  const chooseTheme = (v) => { setTheme(v); setThemePref(v); };   // applies instantly (ThemeManager)
 
   // ---- Mobile number verification (OTP) ----
   const [pvOpen, setPvOpen] = useState(false);
@@ -514,6 +517,42 @@ export default function Settings() {
           {err && <p style={{ color: "var(--danger)", fontSize: 13, marginTop: 14 }} data-testid="settings-error">{err}</p>}
           <button className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16 }} data-testid="save-settings">{busy ? <Loader2 size={16} className="spin" /> : <Save size={16} />} {busy ? "Saving…" : "Save changes"}</button>
         </form>
+
+        <div className="glass card-pad" style={{ padding: 26, marginBottom: 18 }} data-testid="appearance-card">
+          <h2 style={{ fontSize: 20, marginBottom: 6 }}><Sun size={18} style={{ verticalAlign: "-3px" }} /> Appearance</h2>
+          <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>Choose how Nek Sathi looks on this device.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+            {[
+              { id: "light", label: "Light", Icon: Sun },
+              { id: "dark", label: "Dark", Icon: Moon },
+              { id: "system", label: "System", Icon: Monitor },
+            ].map(({ id, label, Icon }) => {
+              const on = theme === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => chooseTheme(id)}
+                  data-testid={`theme-${id}`}
+                  aria-pressed={on}
+                  className="glass"
+                  style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                    padding: "16px 8px", cursor: "pointer", borderRadius: 14,
+                    border: on ? "2px solid var(--accent)" : "1px solid var(--panel-brd)",
+                    background: on ? "rgba(233,37,70,.12)" : "var(--panel)",
+                    color: "var(--text)", fontWeight: 700, fontSize: 13.5,
+                  }}
+                >
+                  <Icon size={22} style={{ color: on ? "var(--accent)" : "var(--muted)" }} />
+                  {label}
+                  {on && <Check size={14} style={{ color: "var(--accent)" }} />}
+                </button>
+              );
+            })}
+          </div>
+          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>System follows your phone's light/dark setting. Default is Light.</p>
+        </div>
 
         <GoogleDriveCard />
 

@@ -5,15 +5,27 @@ import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Base64;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
+
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 // Native full-screen FAMILY SOS alert, shown directly over the lock screen when a
 // family member raises an SOS and this phone's app is closed / in the background
@@ -32,6 +44,7 @@ public class SosAlertActivity extends Activity {
     public static final String EXTRA_LNG = "lng";
     public static final String EXTRA_POLICE = "police";
     public static final String EXTRA_AMBULANCE = "ambulance";
+    public static final String EXTRA_HAS_PHOTO = "has_photo";
 
     // The instance on screen, so a "resolved" push can close it from anywhere
     // (see CallMessagingService.stopSos).
@@ -87,6 +100,11 @@ public class SosAlertActivity extends Activity {
         if (mute != null) mute.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { SirenPlayer.stop(); } });
         Button resolve = (Button) findViewById(R.id.btn_resolve);
         if (resolve != null) resolve.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { resolveAndClose(); } });
+
+        // Show the selfie the sender's phone captured with the SOS, if any.
+        if (in.getBooleanExtra(EXTRA_HAS_PHOTO, false) && sosId != null && !sosId.isEmpty()) {
+            loadPhoto(sosId);
+        }
 
         // Safety net: never leave the siren blaring forever on the lock screen.
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
@@ -153,6 +171,51 @@ public class SosAlertActivity extends Activity {
         CallApi.resolveSos(this, sosId);   // tells the server; it clears for everyone
         CallMessagingService.stopSos(this);
         finish();
+    }
+
+    // Fetch the SOS selfie (GET {api}/family/sos/{id}/photo, bearer auth) on a
+    // background thread, decode it, and show it in the alert. Best-effort.
+    private void loadPhoto(final String id) {
+        new Thread(new Runnable() {
+            @Override public void run() {
+                HttpURLConnection c = null;
+                try {
+                    SharedPreferences sp = getApplicationContext().getSharedPreferences(CallApi.PREFS, Context.MODE_PRIVATE);
+                    String api = sp.getString("api", "");
+                    String token = sp.getString("token", "");
+                    if (api.isEmpty() || token.isEmpty()) return;
+                    c = (HttpURLConnection) new URL(api + "/family/sos/" + id + "/photo").openConnection();
+                    c.setRequestMethod("GET");
+                    c.setConnectTimeout(10000);
+                    c.setReadTimeout(15000);
+                    c.setRequestProperty("Authorization", "Bearer " + token);
+                    if (c.getResponseCode() < 200 || c.getResponseCode() >= 300) return;
+                    BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream(), "UTF-8"));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                    br.close();
+                    String dataUrl = new JSONObject(sb.toString()).optString("photo_base64", "");
+                    if (dataUrl.isEmpty()) return;
+                    int comma = dataUrl.indexOf(',');
+                    String b64 = comma >= 0 ? dataUrl.substring(comma + 1) : dataUrl;
+                    byte[] bytes = Base64.decode(b64, Base64.DEFAULT);
+                    BitmapFactory.Options o = new BitmapFactory.Options();
+                    o.inSampleSize = 2;   // downsample — avoid OOM on large selfies
+                    final Bitmap bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.length, o);
+                    if (bmp == null) return;
+                    runOnUiThread(new Runnable() {
+                        @Override public void run() {
+                            ImageView iv = (ImageView) findViewById(R.id.sos_photo);
+                            if (iv != null) { iv.setImageBitmap(bmp); iv.setVisibility(View.VISIBLE); }
+                        }
+                    });
+                } catch (Exception ignored) {
+                } finally {
+                    if (c != null) try { c.disconnect(); } catch (Exception ignored) {}
+                }
+            }
+        }).start();
     }
 
     @Override protected void onDestroy() { if (current == this) current = null; super.onDestroy(); }

@@ -3,6 +3,10 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@/index.css";
 import App from "@/App";
+import { applySavedTheme } from "@/lib/theme";
+
+// Paint the saved theme (default Light) before first render to avoid a flash.
+applySavedTheme();
 
 const queryClient = new QueryClient({
   defaultOptions: {

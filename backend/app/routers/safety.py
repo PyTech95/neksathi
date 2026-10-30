@@ -172,6 +172,7 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
             "message": (f"{payload.message} — " if payload.message else "") + "tap to see their location, call police or ambulance",
             "type": "sos", "sos_id": doc["id"], "action_url": "/family",
             "sender_name": who, "location": loc_q, "source": source,
+            "has_photo": "1" if payload.photo_base64 else "",
         }, idempotency_key="sos-" + doc["id"], data_only=True)
     except Exception as _e:
         log.warning("sos family push failed: %s", _e)

@@ -8,6 +8,7 @@ import SosActions from "@/components/SosActions";
 import { API } from "@/lib/api";
 import { setCallAuth } from "@/lib/callsetup";
 import { isNativeApp, volumeSosStatus, setVolumeSos, testVolumeSos } from "@/lib/volumesos";
+import SosDisplayCard from "@/components/SosDisplayCard";
 
 // App-only card: opt-in "SOS by volume button". Volume-up x3 within 5s on the
 // lock screen (or app closed) sends an SOS with location to the chosen family
@@ -703,6 +704,7 @@ export default function Safety() {
       </div>
 
       {isNativeApp() && <VolumeSosCard recipientCount={recipientCount} onSent={load} />}
+      {isNativeApp() && <SosDisplayCard />}
 
       <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 18, alignItems: "start", marginTop: isNativeApp() ? 18 : 0 }} className="safety-grid">
         <Sos recipientCount={recipientCount} inFamily={sosRec.in_family} onSent={load} />

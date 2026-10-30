@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { ShieldAlert, BellRing, VolumeX, Bell, CheckCircle2, X } from "lucide-react";
 import api from "@/lib/api";
 import SosActions from "@/components/SosActions";
+import SosPhoto from "@/components/SosPhoto";
 
 // SOS ids this phone dismissed with ✕: popup + siren hidden here only; the SOS
 // stays active for everyone else until someone marks it resolved.
@@ -127,6 +128,7 @@ export default function FamilyAlarm() {
             </div>
             <button className="btn btn-ghost btn-sm" onClick={() => dismissSos(s.id)} data-testid={`global-sos-dismiss-${s.id}`} title="Hide on this phone (SOS stays active for the family)" aria-label="Dismiss" style={{ padding: "4px 8px" }}><X size={16} /></button>
           </div>
+          {s.has_photo && <SosPhoto sosId={s.id} testPrefix={`global-sos-${s.id}`} />}
           <SosActions sos={s} testPrefix={`global-sos-${s.id}`} />
           <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
             <button className="btn btn-ghost btn-sm" onClick={toggleMute} data-testid="global-sos-mute" title={muted ? "Muted — tap to unmute the siren" : "Mute the siren"}>

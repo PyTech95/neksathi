@@ -3,6 +3,7 @@ import api from "@/lib/api";
 import { loadLeaflet } from "@/lib/leaflet";
 import { getPosition, locationHint, openLocationSettings } from "@/lib/native";
 import SosActions from "@/components/SosActions";
+import SosPhoto from "@/components/SosPhoto";
 import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, BellRing, ChevronDown, UserPlus, Camera, Lock, Gauge, X } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
@@ -283,6 +284,7 @@ export default function Family() {
                     </div>
                     {s.latitude != null && <a className="btn btn-danger btn-sm" href={`https://maps.google.com/?q=${s.latitude},${s.longitude}`} target="_blank" rel="noreferrer" data-testid={`active-sos-nav-${s.id}`}><MapPin size={14} /> Navigate</a>}
                   </div>
+                  {!s.is_me && s.has_photo && <SosPhoto sosId={s.id} testPrefix={`active-sos-${s.id}`} />}
                   {/* Police / Ambulance / Location — one per line, same on every phone */}
                   <SosActions sos={s} compact testPrefix={`active-sos-${s.id}`} />
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
