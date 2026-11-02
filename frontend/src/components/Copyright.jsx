@@ -19,7 +19,7 @@ export default function Copyright({ style }) {
     >
       © {year} Nek Sathi. All rights reserved.
       <br />
-      A product of NSTU India Pvt. Ltd.
+      Powered by NSTU India Pvt. Ltd.
     </div>
   );
 }
