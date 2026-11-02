@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import Copyright from "@/components/Copyright";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -112,6 +113,7 @@ export default function OtpLogin() {
 
           <p className="center muted" style={{ marginTop: 18, fontSize: 14 }}>Prefer email? <Link to="/login" className="neon" style={{ fontWeight: 700 }}>Password login</Link></p>
         </div>
+        <Copyright />
       </div>
     </div>
   );

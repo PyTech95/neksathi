@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import Copyright from "@/components/Copyright";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -585,6 +586,7 @@ export default function Settings() {
             </button>
           </div>
         </div>
+        <Copyright />
       </div>
     </div>
   );

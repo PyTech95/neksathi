@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Copyright from "@/components/Copyright";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
@@ -64,6 +65,7 @@ export default function Register() {
             Already have an account? <Link to="/login" className="neon" style={{ fontWeight: 700 }}>Log in</Link>
           </p>
         </div>
+        <Copyright />
       </div>
     </div>
   );

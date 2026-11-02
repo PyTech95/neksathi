@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Copyright from "@/components/Copyright";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { LogIn, Smartphone } from "lucide-react";
@@ -57,6 +58,7 @@ export default function Login() {
             No account? <Link to="/register" className="neon" style={{ fontWeight: 700 }}>Create one</Link>
           </p>
         </div>
+        <Copyright />
       </div>
     </div>
   );
