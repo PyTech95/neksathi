@@ -22,14 +22,14 @@ def _otp_live() -> bool:
 async def _otp_provider_mock() -> bool:
     """True when the admin has switched the OTP gateway to DEMO.
 
-    Demo is selected when the saved telco provider is anything other than
-    ``msg91``. In demo we always issue an on-screen code even if gateway keys
-    happen to be present — this is what the admin's Demo↔Live toggle controls.
-    When no config is saved we default to msg91 (live-capable) so ENV-only
-    deployments keep working.
+    Demo is selected when the saved telco provider is anything other than a
+    live-capable gateway (``msg91`` or ``alots``). In demo we always issue an
+    on-screen code even if gateway keys happen to be present — this is what the
+    admin's Demo↔Live toggle controls. When no config is saved we default to
+    msg91 (live-capable) so ENV-only deployments keep working.
     """
     doc = await db.system_config.find_one({"id": "telco"})
-    return bool(doc) and doc.get("provider", "msg91") != "msg91"
+    return bool(doc) and doc.get("provider", "msg91") not in ("msg91", "alots")
 
 
 def _norm_phone(p: str) -> str:
@@ -51,6 +51,14 @@ async def _issue_phone_otp(phone_norm: str) -> dict:
         return {"channel": "whatsapp", "dev_code": None, "live": True}
     if not demo and _otp_live():
         await comms.send_otp(phone_norm)
+        return {"channel": "sms", "dev_code": None, "live": True}
+    if not demo and comms.alots_live():
+        code = f"{_random.randint(0, 999999):06d}"
+        await db.phone_verify_otps.update_one(
+            {"phone": phone_norm},
+            {"$set": {"phone": phone_norm, "code": code, "expires_at": now_utc() + timedelta(minutes=OTP_TTL_MIN), "created_at": now_utc()}},
+            upsert=True)
+        await comms.send_otp_sms_alots(phone_norm, code)
         return {"channel": "sms", "dev_code": None, "live": True}
     code = f"{_random.randint(0, 999999):06d}"
     await db.phone_verify_otps.update_one(

@@ -85,6 +85,91 @@ async def resend_otp(phone: str, retrytype: str = "text") -> dict:
     return {"live": True, "status": "sent"}
 
 
+# ----------------------------------------------------- alots.in SMS OTP (HTTP)
+# A simple HTTP SMS panel (…/sms-panel/api/http/index.php). Unlike MSG91 it has
+# no server-side OTP, so we generate + store the code ourselves, deliver it as a
+# DLT-approved transactional SMS, and verify locally (same as the WhatsApp-OTP
+# and mock paths). Env (all four required for the channel to go live):
+#   ALOTS_USERNAME         - panel username
+#   ALOTS_API_KEY          - panel api key
+#   ALOTS_SENDER           - 6-char DLT sender id (e.g. NEKSAT)
+#   ALOTS_OTP_TEMPLATE_ID  - DLT template id registered for the OTP message
+# Optional:
+#   ALOTS_BASE_URL         - panel base (default https://www.alots.in/sms-panel)
+#   ALOTS_ROUTE            - route name (default TRANS)
+#   ALOTS_OTP_NAME         - name used for the {#alp#} variable (default "User")
+ALOTS_DEFAULT_BASE = "https://www.alots.in/sms-panel"
+
+
+def alots_live() -> bool:
+    return bool(os.environ.get("ALOTS_USERNAME") and os.environ.get("ALOTS_API_KEY")
+                and os.environ.get("ALOTS_OTP_TEMPLATE_ID") and os.environ.get("ALOTS_SENDER"))
+
+
+def alots_mobile(phone: str | None) -> str:
+    """alots expects a bare 10-digit Indian number (the sample uses no country code)."""
+    if not phone:
+        return ""
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if len(digits) > 10 and digits.startswith("91"):
+        digits = digits[-10:]
+    return digits
+
+
+def alots_otp_message(code: str, name: str | None = None) -> str:
+    """Build the exact DLT-approved OTP body. The fixed text MUST match the
+    registered template; only {#alp#} (name) and {#num#} (code) vary."""
+    nm = (name or os.environ.get("ALOTS_OTP_NAME") or "User").strip() or "User"
+    return (f"Dear {nm}, Your Nek Sathi code is {code}.\n"
+            "Keep it private. Never share it.\n"
+            "www.neksathi.in")
+
+
+def _alots_failed(r: "httpx.Response") -> bool:
+    """Best-effort failure detection. HTTP SMS panels vary; treat an explicit
+    error marker as failure and otherwise accept a 200 (the raw body is logged
+    so the exact response shape can be tuned later)."""
+    try:
+        data = r.json()
+    except Exception:
+        return False
+    if isinstance(data, list):
+        data = data[0] if data else {}
+    if not isinstance(data, dict):
+        return False
+    code = str(data.get("ErrorCode", data.get("errorcode", data.get("error_code", "")))).strip()
+    status = str(data.get("Status", data.get("status", ""))).strip().lower()
+    if code and code not in ("000", "0"):
+        return True
+    if status in ("error", "failed", "failure", "invalid"):
+        return True
+    return False
+
+
+async def send_otp_sms_alots(phone: str, code: str, name: str | None = None) -> dict:
+    """Deliver a locally-generated OTP `code` over alots.in. Raises on failure so
+    the caller can surface an error and clear the stored code."""
+    base = (os.environ.get("ALOTS_BASE_URL") or ALOTS_DEFAULT_BASE).rstrip("/")
+    params = {
+        "username": os.environ["ALOTS_USERNAME"],
+        "apikey": os.environ["ALOTS_API_KEY"],
+        "apirequest": "Text",
+        "sender": os.environ["ALOTS_SENDER"],
+        "mobile": alots_mobile(phone),
+        "message": alots_otp_message(code, name),
+        "route": os.environ.get("ALOTS_ROUTE", "TRANS"),
+        "TemplateID": os.environ["ALOTS_OTP_TEMPLATE_ID"],
+        "format": "JSON",
+    }
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+        r = await c.get(f"{base}/api/http/index.php", params=params)
+    raw = r.text[:300]
+    log.info("[ALOTS OTP] mobile=%s http=%s resp=%s", params["mobile"], r.status_code, raw)
+    if r.status_code != 200 or _alots_failed(r):
+        raise RuntimeError(f"alots SMS OTP failed: {raw}")
+    return {"live": True, "status": "sent"}
+
+
 # --------------------------------------------------------------------------- SMS
 def sms_live() -> bool:
     return bool(_authkey() and os.environ.get("MSG91_SMS_FLOW_ID"))

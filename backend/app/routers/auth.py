@@ -353,6 +353,21 @@ async def otp_request(request: Request, payload: OtpRequestIn):
             return {"ok": True, "channel": "sms", "dev_code": None, "live": True}
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Could not send OTP: {e}")
+    # alots.in SMS OTP: generate + store the code locally, deliver it as a DLT SMS
+    # and verify locally (the verify endpoint's local path handles it).
+    if not demo and comms.alots_live():
+        code = f"{_random.randint(0, 999999):06d}"
+        await db.otp_codes.update_one(
+            {"phone": phone},
+            {"$set": {"phone": phone, "code": code, "expires_at": now_utc() + timedelta(minutes=OTP_TTL_MIN), "created_at": now_utc()}},
+            upsert=True,
+        )
+        try:  # pragma: no cover - live path
+            await comms.send_otp_sms_alots(phone, code)
+            return {"ok": True, "channel": "sms", "dev_code": None, "live": True}
+        except Exception as e:
+            await db.otp_codes.delete_one({"phone": phone})
+            raise HTTPException(status_code=400, detail=f"Could not send OTP: {e}")
     # DEV / MOCK fallback
     code = f"{_random.randint(0, 999999):06d}"
     await db.otp_codes.update_one(
