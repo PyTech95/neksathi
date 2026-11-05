@@ -20,14 +20,16 @@ def _otp_live() -> bool:
 
 
 async def _otp_provider_mock() -> bool:
-    """True when the admin has switched the OTP gateway to DEMO.
+    """True when OTPs should be issued on-screen (DEMO) instead of really sent.
 
-    Demo is selected when the saved telco provider is anything other than a
-    live-capable gateway (``msg91`` or ``alots``). In demo we always issue an
-    on-screen code even if gateway keys happen to be present — this is what the
-    admin's Demo↔Live toggle controls. When no config is saved we default to
-    msg91 (live-capable) so ENV-only deployments keep working.
+    ENV gateway keys take priority (as the admin panel states): when the ALOTS
+    SMS gateway is configured via env we are never in demo, whatever the saved
+    Demo/Live toggle says. Otherwise the admin toggle controls it — demo when the
+    saved provider is not a live-capable gateway (``msg91``/``alots``); with no
+    config saved we default to msg91 (live-capable) so ENV-only deploys work.
     """
+    if comms.alots_live():
+        return False
     doc = await db.system_config.find_one({"id": "telco"})
     return bool(doc) and doc.get("provider", "msg91") not in ("msg91", "alots")
 

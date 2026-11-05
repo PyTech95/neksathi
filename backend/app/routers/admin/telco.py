@@ -37,8 +37,11 @@ async def get_telco_config(_: dict = Depends(require_admin)):
     for k in _MSG91_ENV:
         val = doc.get(k)
         out[k] = _mask_secret(val) if k in ("msg91_authkey",) else val
-    # Live-status snapshot so admins can see what's actually active.
-    out["live"] = {"otp": comms.otp_live(), "sms": comms.sms_live(), "whatsapp": comms.whatsapp_live(), "whatsapp_otp": comms.whatsapp_otp_live(), "voice": comms.voice_live()}
+    # Live-status snapshot so admins can see what's actually active. SMS-OTP is
+    # live when either MSG91 OTP or the ALOTS gateway is configured via env.
+    out["live"] = {"otp": comms.otp_live() or comms.alots_live(), "sms": comms.sms_live(),
+                   "whatsapp": comms.whatsapp_live(), "whatsapp_otp": comms.whatsapp_otp_live(),
+                   "voice": comms.voice_live(), "alots": comms.alots_live()}
     return out
 
 
