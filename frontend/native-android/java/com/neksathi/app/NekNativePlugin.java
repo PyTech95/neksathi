@@ -285,11 +285,20 @@ public class NekNativePlugin extends Plugin {
                 PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
                 battOk = pm != null && pm.isIgnoringBatteryOptimizations(ctx.getPackageName());
             }
+            // Android 13+: if notifications are blocked the SOS alert can't show at
+            // all (no heads-up, no full-screen). Surface it so the helper card can
+            // prompt the user to turn notifications on.
+            boolean notifOk = true;
+            try {
+                NotificationManager nm2 = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+                notifOk = nm2 == null || nm2.areNotificationsEnabled();
+            } catch (Exception ignored) {}
             o.put("supported", true);
             o.put("sdk", Build.VERSION.SDK_INT);
             o.put("manufacturer", Build.MANUFACTURER);
             o.put("full_screen_intent", fsi);
             o.put("battery_unrestricted", battOk);
+            o.put("notifications_enabled", notifOk);
         } catch (Exception e) {
             o.put("supported", false);
             o.put("error", String.valueOf(e));

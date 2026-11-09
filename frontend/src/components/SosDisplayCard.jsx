@@ -21,7 +21,8 @@ export default function SosDisplayCard() {
 
   const fsiOk = st.full_screen_intent !== false;
   const battOk = st.battery_unrestricted !== false;
-  const allOk = fsiOk && battOk;
+  const notifOk = st.notifications_enabled !== false;
+  const allOk = fsiOk && battOk && notifOk;
   const oem = (st.manufacturer || "").toLowerCase();
   const isPushyOem = ["xiaomi", "redmi", "poco", "oppo", "vivo", "realme", "oneplus", "iqoo"].some((m) => oem.includes(m));
 
@@ -54,6 +55,15 @@ export default function SosDisplayCard() {
       </p>
 
       <div style={{ display: "grid", gap: 10 }}>
+        {!notifOk && (
+          <Row
+            testid="sos-notif-row"
+            done={false}
+            label="Turn on notifications"
+            hint="Notifications are off — the SOS alert can't show at all. Enable them for Nek Sathi."
+            onClick={openAppInfo}
+          />
+        )}
         {st.sdk >= 34 && (
           <Row
             testid="sos-fsi-row"
