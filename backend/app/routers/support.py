@@ -24,6 +24,46 @@ async def contact_submit(request: Request, payload: ContactFormIn):
     return {"ok": True, "id": doc["id"]}
 
 
+# ------------------------------------------------------------ Partner registration (pt 9-web)
+from pydantic import BaseModel as _BaseModel, Field as _Field
+from app.services.fcm import send_push as _send_push
+
+
+class PartnerLeadIn(_BaseModel):
+    name: str = _Field(min_length=1, max_length=80)
+    company: Optional[str] = _Field(default=None, max_length=120)
+    phone: str = _Field(min_length=6, max_length=20)
+    email: Optional[str] = _Field(default=None, max_length=254)
+    partner_type: Optional[str] = _Field(default=None, max_length=40)
+    city: Optional[str] = _Field(default=None, max_length=80)
+    message: Optional[str] = _Field(default=None, max_length=2000)
+
+
+async def _save_partner_lead(payload: "PartnerLeadIn") -> dict:
+    """Store a website Partner registration and notify admins (push). Factored
+    out of the rate-limited route so it is unit-testable."""
+    doc = {"id": new_id(), "created_at": now_utc(), "status": "new", **payload.model_dump()}
+    await db.partner_leads.insert_one(dict(doc))
+    try:
+        admin_ids = [a["id"] async for a in db.users.find({"is_admin": True})]
+        if admin_ids:
+            label = payload.name + (f" ({payload.company})" if payload.company else "")
+            await _send_push(recipients=admin_ids, data={
+                "type": "partner_lead", "title": "🤝 New partner enquiry",
+                "message": f"{label} — {payload.phone}",
+                "action_url": "/admin/partners"}, idempotency_key="partner-" + doc["id"])
+    except Exception:
+        pass
+    return doc
+
+
+@router.post("/partner-leads")
+@rate_limit("5/hour")
+async def partner_lead_submit(request: Request, payload: PartnerLeadIn):
+    doc = await _save_partner_lead(payload)
+    return {"ok": True, "id": doc["id"]}
+
+
 @router.get("/faqs")
 async def list_faqs(category: Optional[str] = None):
     filt: dict = {"active": True}

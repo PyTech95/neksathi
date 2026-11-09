@@ -59,7 +59,7 @@ import AdminOrgs from "@/pages/AdminOrgs";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import DeleteAccount from "./pages/DeleteAccount";
 import { SiteHeader, WebsiteEffects, isWebsitePath, SolutionsPage, SolutionPage,
-  AboutPage, HowItWorksPage, HelpPage, DownloadPage, LegalPage } from "./website/Website";
+  AboutPage, HowItWorksPage, HelpPage, DownloadPage, LegalPage, PartnerPage } from "./website/Website";
 import LiveAlarm from "./components/LiveAlarm";
 import FamilyAlarm from "./components/FamilyAlarm";
 import IncomingCall from "./components/IncomingCall";
@@ -171,6 +171,7 @@ function Shell() {
           <Route path="/register" element={<Register />} />
           <Route path="/scan/:qrId" element={<PublicScan />} />
           <Route path="/contact" element={<WebOnly><Contact /></WebOnly>} />
+          <Route path="/partner" element={<WebOnly><PartnerPage /></WebOnly>} />
           <Route path="/for/:persona" element={<WebOnly><PersonaLanding /></WebOnly>} />
           <Route path="/t/:qrId" element={<PublicTag />} />
           <Route path="/c/:qrId" element={<PublicCard />} />
