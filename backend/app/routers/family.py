@@ -210,9 +210,10 @@ async def push_status(payload: StatusIn, user: dict = Depends(current_user)):
 
 
 async def _maybe_overspeed_family_alert(user: dict, speed_kmh: Optional[float]):
-    """Push the whole family circle when a member's speed crosses their vehicle's
-    registered limit. Throttled: one alert per over-limit drive, re-armed once
-    they drop back under the limit."""
+    """On a real over-limit event, alert BOTH the driver/owner (on their own
+    phone) and — when they're in a family circle — the rest of the circle.
+    Throttled: one alert per over-limit stretch, re-armed once they drop back
+    under the limit (pt 13)."""
     if speed_kmh is None:
         return
     veh = await db.vehicles.find_one({"owner_id": user["id"]}, sort=[("created_at", -1)])
@@ -229,19 +230,32 @@ async def _maybe_overspeed_family_alert(user: dict, speed_kmh: Optional[float]):
         return
     if was:
         return  # already alerted for this over-limit stretch
+    # Arm the throttle first so concurrent pings can't double-fire.
+    await db.user_locations.update_one({"user_id": user["id"]}, {"$set": {"overspeed_notified": True}})
+    plate = veh.get("number_plate") or "your vehicle"
+
+    # (pt 13) Signal the driver/owner on their OWN phone — even if not in a family.
+    try:
+        await send_push(recipients=[user["id"]], data={
+            "type": "overspeed_self", "title": "⚡ Slow down",
+            "message": f"You're driving {plate} at {speed_kmh:.0f} km/h — over your {limit} km/h limit.",
+            "action_url": "/family"}, idempotency_key=f"ovrself-{user['id']}-{int(speed_kmh)}")
+    except Exception:
+        pass
+
+    # (pt 13) Notify the rest of the family circle (driver excluded).
     fm = await db.family_members.find_one({"user_id": user["id"]})
     if not fm:
         return
     fam_ids = [m["user_id"] async for m in db.family_members.find({"family_id": fm["family_id"]})
                if m.get("user_id") and m["user_id"] != user["id"]]
-    await db.user_locations.update_one({"user_id": user["id"]}, {"$set": {"overspeed_notified": True}})
     if not fam_ids:
         return
     who = user.get("name") or "A family member"
     try:
         await send_push(recipients=fam_ids, data={
             "type": "overspeed", "title": "⚡ Over the speed limit",
-            "message": f"{who} is driving {veh['number_plate']} at {speed_kmh:.0f} km/h (limit {limit}).",
+            "message": f"{who} is driving {plate} at {speed_kmh:.0f} km/h (limit {limit}).",
             "action_url": "/family"}, idempotency_key=f"ovr-{user['id']}-{int(speed_kmh)}")
     except Exception:
         pass

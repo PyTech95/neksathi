@@ -178,8 +178,10 @@ export default function Family() {
       await api.post("/me/status", { latitude: pos.latitude, longitude: pos.longitude, battery: batt, speed_kmh: pos.speed_kmh ?? null });
       setLocPrompt(null);
       load(true);   // background refresh — no spinner, no flicker
+      return pos.speed_kmh ?? null;
     } catch (e) {
       if (manual) setLocPrompt(locationHint(e));   // only prompt on an explicit tap
+      return null;
     }
   };
 
@@ -189,9 +191,19 @@ export default function Family() {
   const _myShareLoc = !!data?.in_family && !!(data.members || []).find((m) => m.is_me)?.share_location;
   useEffect(() => {
     if (!_myShareLoc) return;
-    shareStatus();
-    const t = setInterval(shareStatus, 60000);
-    return () => clearInterval(t);
+    let stop = false;
+    let timer;
+    // Adaptive cadence: refresh every 15s while MOVING (so live speed stays
+    // fresh) and back off to 45s when parked — keeps speed live without draining
+    // the battery when stationary.
+    const tick = async () => {
+      const spd = await shareStatus();
+      if (stop) return;
+      const next = spd != null && spd >= 5 ? 15000 : 45000;
+      timer = setTimeout(tick, next);
+    };
+    tick();
+    return () => { stop = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_myShareLoc]);
 

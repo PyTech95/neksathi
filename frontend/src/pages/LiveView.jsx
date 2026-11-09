@@ -72,6 +72,12 @@ export default function LiveView() {
               <div style={{ fontWeight: 700 }}>{data.name} is sharing live location{data.label ? ` · ${data.label}` : ""}</div>
               <div className="muted" style={{ fontSize: 12.5 }}>{data.last ? `Last updated ${new Date(data.last.recorded_at).toLocaleTimeString()}` : "Waiting for first location…"}</div>
             </div>
+            {data.last?.speed_kmh != null && (
+              <div style={{ marginLeft: "auto", textAlign: "right" }} data-testid="live-speed">
+                <div style={{ fontWeight: 800, fontSize: 18, color: "#e92546" }}>{Math.round(data.last.speed_kmh)} km/h</div>
+                <div className="muted" style={{ fontSize: 11 }}>current speed</div>
+              </div>
+            )}
           </div>
           {data.last ? (
             <div ref={mapEl} data-testid="live-map" style={{ height: 460, borderRadius: 16, overflow: "hidden", border: "1px solid var(--panel-brd)" }} />

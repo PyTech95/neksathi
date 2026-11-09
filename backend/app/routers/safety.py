@@ -342,7 +342,8 @@ async def public_live_location(token: str):
         "last": None,
     }
     if active and last:
-        out["last"] = {"latitude": last["latitude"], "longitude": last["longitude"], "recorded_at": last["recorded_at"]}
+        out["last"] = {"latitude": last["latitude"], "longitude": last["longitude"],
+                       "recorded_at": last["recorded_at"], "speed_kmh": last.get("speed_kmh")}
     return out
 
 
