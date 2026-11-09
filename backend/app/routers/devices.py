@@ -204,6 +204,98 @@ async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str)
                 pass
 
 
+# --------------------------------------------------------- SIM-removed / power-off theft events (pt 4)
+from pydantic import BaseModel as _BaseModel, Field as _Field
+
+
+class TheftEventIn(_BaseModel):
+    type: str = _Field("sim_removed", max_length=32)   # sim_removed | power_off | device_booted
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    note: Optional[str] = _Field(default=None, max_length=200)
+
+
+_THEFT_EVENT_LABELS = {
+    "sim_removed": ("📵 SIM removed", "The SIM was removed from"),
+    "power_off": ("⚠️ Phone switched off", "Someone switched off"),
+    "device_booted": ("🔌 Phone restarted", "This phone was powered off and has just restarted —"),
+}
+
+
+async def _theft_event_fanout(user: dict, device: dict, event: dict):
+    """Notify the owner, their family circle and emergency contacts that the SIM
+    was removed / the phone was switched off or restarted (pt 4)."""
+    title, verb = _THEFT_EVENT_LABELS.get(event["type"], _THEFT_EVENT_LABELS["sim_removed"])
+    who = user.get("name") or "a Nek Sathi user"
+    dev = device.get("name", "device")
+    loc = ""
+    if event.get("latitude") is not None:
+        loc = f" Location: https://maps.google.com/?q={event['latitude']},{event['longitude']}."
+    msg = f"{verb} {who}'s phone '{dev}'.{loc}"
+
+    # Owner push on their own account.
+    try:
+        if _prefs(user).get("push", True):
+            await send_push(recipients=[user["id"]], data={
+                "type": "theft_event", "title": title, "message": msg,
+                "action_url": "/theft-protection"}, idempotency_key=event["id"])
+    except Exception:
+        pass
+
+    # Family circle (push) + emergency / family phones (SMS + WhatsApp).
+    phones = []
+    async for c in db.emergency_contacts.find({"user_id": user["id"]}):
+        if c.get("phone"):
+            phones.append(c["phone"])
+    fam_ids = []
+    fm = await db.family_members.find_one({"user_id": user["id"]})
+    if fm:
+        async for m in db.family_members.find({"family_id": fm["family_id"]}):
+            if m.get("user_id") and m["user_id"] != user["id"]:
+                fam_ids.append(m["user_id"])
+            if m.get("phone"):
+                phones.append(m["phone"])
+        if fam_ids:
+            async for mu in db.users.find({"id": {"$in": fam_ids}}):
+                if mu.get("phone"):
+                    phones.append(mu["phone"])
+    if fam_ids:
+        try:
+            await send_push(recipients=fam_ids, data={
+                "type": "theft_event", "title": f"🚨 {title}", "message": f"{who}: {msg}",
+                "action_url": "/family"}, idempotency_key="fam-" + event["id"])
+        except Exception:
+            pass
+    body = f"🚨 Nek Sathi — {title}: {msg} Open Nek Sathi for details."
+    for p in set(phones):
+        try:
+            await notify_whatsapp(p, body, meta={"kind": "theft_event", "user_id": user["id"]})
+        except Exception:
+            pass
+        try:
+            await send_sms(p, body, meta={"kind": "theft_event", "user_id": user["id"]})
+        except Exception:
+            pass
+
+
+@router.post("/devices/{device_id}/theft-event")
+@rate_limit("30/minute")
+async def report_theft_event(request: Request, device_id: str, payload: TheftEventIn, user: dict = Depends(current_user)):
+    """Native SIM-state / shutdown / boot receivers POST here when theft
+    protection is on, so the owner + family are alerted even with no wrong-unlock."""
+    device = await db.devices.find_one({"id": device_id, "user_id": user["id"]})
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    etype = payload.type if payload.type in _THEFT_EVENT_LABELS else "sim_removed"
+    event = {"id": new_id(), "user_id": user["id"], "device_id": device_id,
+             "device_name": device.get("name", "device"), "type": etype,
+             "latitude": payload.latitude, "longitude": payload.longitude,
+             "note": payload.note, "created_at": now_utc()}
+    await db.theft_events.insert_one(dict(event))
+    await _theft_event_fanout(user, device, event)
+    return {"ok": True, "id": event["id"], "type": etype}
+
+
 @router.post("/devices/{device_id}/intruder", response_model=IntruderEventOut)
 @rate_limit("20/minute")
 async def report_intruder(request: Request, device_id: str, payload: IntruderIn, user: dict = Depends(current_user)):
