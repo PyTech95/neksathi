@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import Copyright from "@/components/Copyright";
+import RingtoneCard from "@/components/RingtoneCard";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -554,6 +555,8 @@ export default function Settings() {
           </div>
           <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>System follows your phone's light/dark setting. Default is Light.</p>
         </div>
+
+        <RingtoneCard />
 
         <GoogleDriveCard />
 

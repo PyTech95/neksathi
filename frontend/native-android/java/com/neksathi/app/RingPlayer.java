@@ -1,6 +1,7 @@
 package com.neksathi.app;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
@@ -17,10 +18,24 @@ import android.os.Vibrator;
 public class RingPlayer {
     private static MediaPlayer mp;
     private static Vibrator vib;
+    private static boolean sirenMode = false;   // true while a siren ringtone is playing
 
     public static synchronized void start(Context ctx) {
         stop();
         Context app = ctx.getApplicationContext();
+
+        // Ringtone preference (pt 12): "default" | "siren" | "custom"<uri>.
+        // Stored by NekNativePlugin.setRingtone / pickCustomRingtone.
+        SharedPreferences sp = app.getSharedPreferences(CallApi.PREFS, Context.MODE_PRIVATE);
+        String mode = sp.getString("ringtone_mode", "default");
+
+        // Siren ringtone: use the alarm-style wailing siren (it vibrates too, so
+        // we don't also start RingPlayer's own vibration).
+        if ("siren".equals(mode)) {
+            sirenMode = true;
+            try { SirenPlayer.start(app); } catch (Exception ignored) {}
+            return;
+        }
 
         // Always vibrate (even in silent/vibrate mode).
         startVibrate(app);
@@ -32,12 +47,19 @@ public class RingPlayer {
         } catch (Exception ignored) {}
 
         Uri bundled = Uri.parse("android.resource://" + app.getPackageName() + "/" + R.raw.ringtone);
-        Uri[] uris = new Uri[]{
-                RingtoneManager.getActualDefaultRingtoneUri(app, RingtoneManager.TYPE_RINGTONE),
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
-                bundled
-        };
+        java.util.List<Uri> uris = new java.util.ArrayList<>();
+        // A chosen custom tone is tried first, then the usual fallback chain so
+        // SOME ring is always heard if the custom URI is no longer readable.
+        if ("custom".equals(mode)) {
+            String u = sp.getString("ringtone_uri", "");
+            if (!u.isEmpty()) {
+                try { uris.add(Uri.parse(u)); } catch (Exception ignored) {}
+            }
+        }
+        uris.add(RingtoneManager.getActualDefaultRingtoneUri(app, RingtoneManager.TYPE_RINGTONE));
+        uris.add(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE));
+        uris.add(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION));
+        uris.add(bundled);
         for (Uri uri : uris) {
             if (uri == null) continue;
             if (tryPlay(app, uri)) return;
@@ -81,6 +103,10 @@ public class RingPlayer {
     }
 
     public static synchronized void stop() {
+        if (sirenMode) {
+            try { SirenPlayer.stop(); } catch (Exception ignored) {}
+            sirenMode = false;
+        }
         try { if (mp != null) { mp.stop(); mp.release(); } } catch (Exception e) { }
         mp = null;
         try { if (vib != null) { vib.cancel(); } } catch (Exception e) { }

@@ -9,11 +9,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
 
+import androidx.activity.result.ActivityResult;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -21,6 +23,7 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 // Bridge between the web app and the native pieces: the "Call setup" screen,
@@ -364,6 +367,84 @@ public class NekNativePlugin extends Plugin {
             }
         }
         call.resolve();
+    }
+
+    // ----------------------------------------------- incoming-call ringtone (pt 12) --
+
+    private SharedPreferences ringPrefs() {
+        return getContext().getApplicationContext().getSharedPreferences(CallApi.PREFS, Context.MODE_PRIVATE);
+    }
+
+    // Current ringtone choice: {mode: default|siren|custom, uri, title}.
+    @PluginMethod
+    public void getRingtone(PluginCall call) {
+        SharedPreferences sp = ringPrefs();
+        JSObject o = new JSObject();
+        String mode = sp.getString("ringtone_mode", "default");
+        String uri = sp.getString("ringtone_uri", "");
+        o.put("mode", mode);
+        o.put("uri", uri);
+        if ("custom".equals(mode) && !uri.isEmpty()) {
+            try { o.put("title", RingtoneManager.getRingtone(getContext(), Uri.parse(uri)).getTitle(getContext())); } catch (Exception ignored) {}
+        }
+        call.resolve(o);
+    }
+
+    // Set the ringtone mode: "default" (system ringtone), "siren" (Nek Sathi
+    // siren) or "custom" (uri supplied, usually via pickCustomRingtone).
+    @PluginMethod
+    public void setRingtone(PluginCall call) {
+        String mode = call.getString("mode", "default");
+        if (!"default".equals(mode) && !"siren".equals(mode) && !"custom".equals(mode)) mode = "default";
+        SharedPreferences.Editor ed = ringPrefs().edit().putString("ringtone_mode", mode);
+        if (call.getData().has("uri")) ed.putString("ringtone_uri", call.getString("uri", ""));
+        ed.apply();
+        JSObject o = new JSObject();
+        o.put("mode", mode);
+        call.resolve(o);
+    }
+
+    // Open the system ringtone picker; the chosen tone becomes the custom ringtone.
+    // Resolves {mode:"custom", uri, title} or {cancelled:true}.
+    @PluginMethod
+    public void pickCustomRingtone(PluginCall call) {
+        try {
+            Intent intent = new Intent(RingtoneManager.ACTION_RINGTONE_PICKER);
+            intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE,
+                    RingtoneManager.TYPE_RINGTONE | RingtoneManager.TYPE_NOTIFICATION | RingtoneManager.TYPE_ALARM);
+            intent.putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Choose a Nek Sathi ringtone");
+            intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true);
+            intent.putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false);
+            String cur = ringPrefs().getString("ringtone_uri", "");
+            if (!cur.isEmpty()) {
+                try { intent.putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(cur)); } catch (Exception ignored) {}
+            }
+            startActivityForResult(call, intent, "ringtoneResult");
+        } catch (Exception e) {
+            call.reject("could not open ringtone picker");
+        }
+    }
+
+    @ActivityCallback
+    private void ringtoneResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        JSObject o = new JSObject();
+        try {
+            Intent data = result.getData();
+            Uri uri = data != null ? data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI) : null;
+            if (uri != null) {
+                ringPrefs().edit().putString("ringtone_mode", "custom").putString("ringtone_uri", uri.toString()).apply();
+                o.put("mode", "custom");
+                o.put("uri", uri.toString());
+                try { o.put("title", RingtoneManager.getRingtone(getContext(), uri).getTitle(getContext())); } catch (Exception ignored) {}
+            } else {
+                o.put("mode", ringPrefs().getString("ringtone_mode", "default"));
+                o.put("cancelled", true);
+            }
+        } catch (Exception e) {
+            o.put("error", String.valueOf(e));
+        }
+        call.resolve(o);
     }
 
     // Runs the whole capture pipeline once (photo + location + upload) so the
