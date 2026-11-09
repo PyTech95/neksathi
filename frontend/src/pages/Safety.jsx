@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import api, { PUBLIC_WEB } from "@/lib/api";
-import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Link2, ShieldCheck, ShieldX, Search, Building2, Navigation, FileScan, Upload, Smartphone, ChevronRight, Camera, Mic, Play, Radar } from "lucide-react";
+import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Link2, ShieldCheck, ShieldX, Search, Building2, Navigation, FileScan, Upload, Smartphone, ChevronRight, Camera, Mic, Play, Radar, Video } from "lucide-react";
 import { loadLeaflet } from "@/lib/leaflet";
-import { getPosition, captureSelfie, startSosTracking, stopSosTracking } from "@/lib/native";
+import { getPosition, captureSelfie, recordSosVideo, startSosTracking, stopSosTracking } from "@/lib/native";
 import { Link } from "react-router-dom";
 import SosActions from "@/components/SosActions";
 import { API } from "@/lib/api";
@@ -122,6 +122,7 @@ function Sos({ recipientCount, inFamily, onSent }) {
   const [arming, setArming] = useState(false);
   const [count, setCount] = useState(3);
   const [withPhoto, setWithPhoto] = useState(true);
+  const [withVideo, setWithVideo] = useState(false);
   const timer = useRef(null);
   const firedRef = useRef(false);
 
@@ -144,6 +145,13 @@ function Sos({ recipientCount, inFamily, onSent }) {
       onSent && onSent();
       // Keep sharing live location with responders while the SOS is active.
       startSosTracking((p) => api.post("/me/location", p));
+      // Optional: record a 10s clip (front camera) and upload it — the backend
+      // notifies family. Runs AFTER the SOS is sent, so it never delays the alert.
+      if (withVideo) {
+        recordSosVideo({ seconds: 10 })
+          .then((v) => { if (v?.video_base64) api.post("/user/sos-video", { video_base64: v.video_base64, duration_ms: v.duration_ms, ...coords }).catch(() => {}); })
+          .catch(() => {});
+      }
     } catch (e) {
       setResult({ error: e?.response?.data?.detail || "Could not send SOS" });
     } finally { setBusy(false); }
@@ -208,6 +216,10 @@ function Sos({ recipientCount, inFamily, onSent }) {
           <label onClick={() => setWithPhoto((v) => !v)} data-testid="sos-photo-toggle" style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12.5, marginTop: 4 }}>
             <span style={{ width: 18, height: 18, borderRadius: 5, border: "1px solid var(--panel-brd)", background: withPhoto ? "linear-gradient(100deg,#b3122f,#e92546)" : "transparent", display: "grid", placeItems: "center" }}>{withPhoto && <CheckCircle2 size={12} color="#fff" />}</span>
             <Camera size={14} /> Capture a silent photo as evidence
+          </label>
+          <label onClick={() => setWithVideo((v) => !v)} data-testid="sos-video-toggle" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12.5, marginTop: 8 }}>
+            <span style={{ width: 18, height: 18, borderRadius: 5, border: "1px solid var(--panel-brd)", background: withVideo ? "linear-gradient(100deg,#b3122f,#e92546)" : "transparent", display: "grid", placeItems: "center", flexShrink: 0 }}>{withVideo && <CheckCircle2 size={12} color="#fff" />}</span>
+            <Video size={14} /> Also record a 10-second video (front camera)
           </label>
           <p className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>A 3-second countdown protects against accidental taps.</p>
         </>

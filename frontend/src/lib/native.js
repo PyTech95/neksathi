@@ -98,6 +98,44 @@ export async function captureSelfie() {
   } catch (_) { return null; }
 }
 
+// Records a short SOS video clip and returns { video_base64, duration_ms }, or
+// null on denial/failure. Note: a WebView can only open ONE camera at a time, so
+// true simultaneous front+back capture isn't possible here — this uses the front
+// ("user") camera by default (who is with the person). Low bitrate keeps the
+// base64 within the backend's upload cap for a ~10s clip.
+export async function recordSosVideo({ seconds = 10, facingMode = "user" } = {}) {
+  if (!navigator.mediaDevices || !window.MediaRecorder) return null;
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: true,
+    });
+  } catch (_) { return null; }
+  return await new Promise((resolve) => {
+    const chunks = [];
+    const started = Date.now();
+    const stopAll = () => { try { stream.getTracks().forEach((t) => t.stop()); } catch (_) {} };
+    let mr;
+    try {
+      const types = ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"];
+      const mime = types.find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || "";
+      mr = mime ? new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 600000 }) : new MediaRecorder(stream);
+    } catch (_) { stopAll(); return resolve(null); }
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    mr.onstop = () => {
+      stopAll();
+      const blob = new Blob(chunks, { type: mr.mimeType || "video/webm" });
+      const reader = new FileReader();
+      reader.onloadend = () => resolve({ video_base64: reader.result, duration_ms: Date.now() - started });
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    };
+    try { mr.start(); } catch (_) { stopAll(); return resolve(null); }
+    setTimeout(() => { try { if (mr.state !== "inactive") mr.stop(); } catch (_) {} }, seconds * 1000);
+  });
+}
+
 // --- Active-SOS location tracking -------------------------------------------
 // Keeps posting the user's location while an SOS is active. Uses the native
 // Geolocation watch on device (survives foreground; for full background/killed
