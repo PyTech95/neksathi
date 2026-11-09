@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
+import QrStickerCard from "@/components/QrStickerCard";
 import { TAG_META } from "@/pages/Tags";
 import { ArrowLeft, ShieldAlert, Pencil, Save, Camera, Trash2, X, QrCode, Truck, ShieldCheck } from "lucide-react";
 
@@ -110,6 +111,7 @@ export default function TagDetail() {
               {t.plan_status === "active" && <p className="center muted" style={{ fontSize: 12, marginTop: 10 }}><ShieldCheck size={13} style={{ verticalAlign: "-2px" }} /> Your QR is live — scanning it connects to you privately.</p>}
             </div>
           )}
+          <QrStickerCard kind="tag" id={t.id} />
           <button className={`btn btn-block ${t.lost_mode ? "btn-danger" : "btn-ghost"}`} style={{ marginTop: 4 }} onClick={toggleLost} data-testid="toggle-tag-lost">
             <ShieldAlert size={16} /> {t.lost_mode ? "Lost mode ON — turn off" : "Enable lost mode"}
           </button>

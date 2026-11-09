@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
+import QrStickerCard from "@/components/QrStickerCard";
 import { ArrowLeft, Check, Copy, ShieldAlert, UserPlus, Trash2, Phone, Navigation, Users, Car, Truck, QrCode } from "lucide-react";
 
 const PLAN_PILL = { active: "pill-ok", grace: "pill-warn", expired: "pill-danger", none: "pill-muted" };
@@ -91,6 +92,7 @@ export default function VehicleDetail() {
             ) : (
               <Link to={`/buy-qr/${v.id}`} className="btn btn-primary btn-block" style={{ marginBottom: 14 }} data-testid="order-qr"><QrCode size={16} /> Order QR / Plan</Link>
             )}
+            <QrStickerCard kind="vehicle" id={v.id} />
 
             <button className={`btn btn-block ${v.lost_mode ? "btn-danger" : "btn-ghost"}`} onClick={toggleLost} data-testid="toggle-lost-mode">
               <ShieldAlert size={16} /> {v.lost_mode ? "Lost mode ON — turn off" : "Enable lost mode"}

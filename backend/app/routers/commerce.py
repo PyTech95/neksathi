@@ -859,6 +859,74 @@ async def admin_order_sticker_pdf(oid: str, request: Request, _: dict = Depends(
                              headers={"Content-Disposition": f'attachment; filename="{base}.pdf"'})
 
 
+# =========================================================================== OWNER · my QR sticker (customer-facing)
+async def _self_sticker_png(product: str, tid: str, user: dict, request: Request):
+    """Render the branded QR sticker for a vehicle/tag the CURRENT USER owns.
+
+    Mirrors the admin renderer but is gated on ownership (owner_id == user.id)
+    instead of require_admin, so a customer can view / download their own QR.
+    Returns (png_bytes, base_filename)."""
+    coll = _coll(product)
+    doc = await coll.find_one({"id": tid, "owner_id": user["id"]})
+    if not doc:
+        raise HTTPException(404, "Not found")
+    qr_id = doc.get("qr_id")
+    if not qr_id:
+        raise HTTPException(409, "This item doesn't have a QR assigned yet.")
+    # Prefer the real printed 6-digit code: reuse an order's code if present,
+    # else mint a stable one and persist it on the item so it never changes.
+    code = doc.get("sticker_code")
+    if not code:
+        key = "tag_id" if product == "tag" else "vehicle_id"
+        o = await db.qr_orders.find_one({key: tid, "sticker_code": {"$ne": None}})
+        code = (o or {}).get("sticker_code") or await _unique_sticker_code()
+        await coll.update_one({"id": tid}, {"$set": {"sticker_code": code}})
+    title = "Safety QR Tag" if product == "tag" else None
+    url = _scan_url(product, qr_id, request)
+    png = sticker.render_sticker(url, code, title=title)
+    label = doc.get("number_plate") or doc.get("name") or qr_id
+    base = f"neksathi-{label}-{code}".replace(" ", "_")
+    return png, base
+
+
+def _sticker_png_response(png: bytes, base: str):
+    return StreamingResponse(io.BytesIO(png), media_type="image/png",
+                             headers={"Content-Disposition": f'inline; filename="{base}.png"'})
+
+
+def _sticker_pdf_response(png: bytes, base: str):
+    from PIL import Image
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="PDF", resolution=150.0)
+    return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf",
+                             headers={"Content-Disposition": f'attachment; filename="{base}.pdf"'})
+
+
+@router.get("/me/vehicles/{vehicle_id}/sticker.png")
+async def my_vehicle_sticker_png(vehicle_id: str, request: Request, user: dict = Depends(current_user)):
+    png, base = await _self_sticker_png("vehicle", vehicle_id, user, request)
+    return _sticker_png_response(png, base)
+
+
+@router.get("/me/vehicles/{vehicle_id}/sticker.pdf")
+async def my_vehicle_sticker_pdf(vehicle_id: str, request: Request, user: dict = Depends(current_user)):
+    png, base = await _self_sticker_png("vehicle", vehicle_id, user, request)
+    return _sticker_pdf_response(png, base)
+
+
+@router.get("/me/tags/{tag_id}/sticker.png")
+async def my_tag_sticker_png(tag_id: str, request: Request, user: dict = Depends(current_user)):
+    png, base = await _self_sticker_png("tag", tag_id, user, request)
+    return _sticker_png_response(png, base)
+
+
+@router.get("/me/tags/{tag_id}/sticker.pdf")
+async def my_tag_sticker_pdf(tag_id: str, request: Request, user: dict = Depends(current_user)):
+    png, base = await _self_sticker_png("tag", tag_id, user, request)
+    return _sticker_pdf_response(png, base)
+
+
 # =========================================================================== ADMIN · Razorpay settings
 class RzpSettingsIn(BaseModel):
     key_id: Optional[str] = None
