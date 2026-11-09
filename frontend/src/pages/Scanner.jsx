@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { QrCode, X, RefreshCw, ExternalLink, ScanLine } from "lucide-react";
 
 // Paths that belong to this app and can be opened directly via the router.
@@ -35,11 +35,23 @@ export default function Scanner() {
   const start = async () => {
     setError(""); setDecoded(null); setStatus("starting");
     try {
-      const scanner = new Html5Qrcode("qr-reader", { verbose: false });
+      const scanner = new Html5Qrcode("qr-reader", {
+        verbose: false,
+        // Use the device-native BarcodeDetector when available — far faster than
+        // the bundled WASM/JS decoder on low-end Android (the main cause of slow
+        // scans). Restrict to QR format so the decoder does less work per frame.
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+      });
       scannerRef.current = scanner;
       await scanner.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
+        {
+          fps: 15,
+          qrbox: { width: 260, height: 260 },
+          disableFlip: true, // don't also try mirrored frames — halves work/frame
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        },
         (text) => handleDecoded(text),
         () => {}
       );

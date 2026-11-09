@@ -345,6 +345,29 @@ export default function PublicScan() {
                 </>
               )}
               {photoBlock(true)}
+              <div className="glass card-pad" style={{ padding: 18, marginTop: 14 }} data-testid="scan-note-block">
+                <label style={{ display: "block", marginBottom: 8, fontSize: 14, fontWeight: 700 }}>Message for the owner (optional)</label>
+                <textarea
+                  className="input"
+                  data-testid="scan-note-input"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value.slice(0, 300))}
+                  placeholder="e.g. Your car is blocking the gate — please move it."
+                  rows={2}
+                  style={{ resize: "vertical", width: "100%" }}
+                />
+                <label style={{ display: "block", margin: "12px 0 8px", fontSize: 14, fontWeight: 700 }}>Your mobile number (optional)</label>
+                <input
+                  className="input"
+                  data-testid="scan-phone-input"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, "").slice(0, 15))}
+                  placeholder="So the owner can call you back"
+                  inputMode="tel"
+                  style={{ width: "100%" }}
+                />
+                <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Add your number so the owner can call you back if needed.</p>
+              </div>
               <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
                 <button className="big-action" style={{ background: r.grad, opacity: !carPhoto ? 0.55 : 1 }} disabled={busy || !carPhoto} onClick={() => createIncident(r.key)} data-testid={`alert-${r.key}-btn`}>
                   {busy ? <Loader2 size={24} className="spin" /> : (r.urgent ? <Siren size={26} /> : <BellRing size={26} />)}
@@ -393,6 +416,10 @@ export default function PublicScan() {
                 )}
               </div>
             )}
+
+            <p className="center" data-testid="scan-thanks" style={{ marginTop: 16, fontSize: 14, fontWeight: 800, color: "#16a34a" }}>
+              🙏 Thanks for choosing Nek Sathi
+            </p>
 
             {incident.status !== "resolved" && (
               <button className="big-action" style={{ background: "linear-gradient(100deg,#b3122f,#e92546)", marginTop: 14 }} onClick={() => setShowCall(true)} data-testid="waiting-call-owner-btn">
