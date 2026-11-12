@@ -1,6 +1,8 @@
 package com.neksathi.app;
 
 import android.app.admin.DeviceAdminReceiver;
+import android.app.admin.DevicePolicyManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -23,6 +25,25 @@ public class TheftAdminReceiver extends DeviceAdminReceiver {
 
     public static SharedPreferences prefs(Context ctx) {
         return ctx.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    // Lock the screen right now (remote "Lock" from the portal, or a theft
+    // escalation). Needs the <force-lock/> policy in res/xml/device_admin.xml and
+    // an active device admin — both set up when the user enables protection.
+    public static void lockNow(Context ctx) {
+        try {
+            Context app = ctx.getApplicationContext();
+            DevicePolicyManager dpm = (DevicePolicyManager) app.getSystemService(Context.DEVICE_POLICY_SERVICE);
+            ComponentName cn = new ComponentName(app, TheftAdminReceiver.class);
+            if (dpm != null && dpm.isAdminActive(cn)) {
+                dpm.lockNow();
+                Log.i(TAG, "remote lockNow()");
+            } else {
+                Log.w(TAG, "lockNow skipped — device admin not active");
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "lockNow failed: " + e);
+        }
     }
 
     @Override

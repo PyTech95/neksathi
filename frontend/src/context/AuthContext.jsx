@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import api from "@/lib/api";
 import { initPush } from "@/lib/push";
+import { cacheClear } from "@/lib/cache";
 
 const AuthCtx = createContext(null);
 
@@ -56,6 +57,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem("nk_token");
+    cacheClear(); // drop cached tab data so the next account never sees it
     setUser(null);
   };
 

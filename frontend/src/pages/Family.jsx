@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
+import { cacheGet, cacheSet } from "@/lib/cache";
 import { loadLeaflet } from "@/lib/leaflet";
 import { getPosition, locationHint, openLocationSettings } from "@/lib/native";
 import SosActions from "@/components/SosActions";
@@ -41,22 +42,27 @@ function MemberActivity({ memberId }) {
 }
 
 export default function Family() {
-  const [data, setData] = useState(null);
-  const [placeEvents, setPlaceEvents] = useState([]);
-  const [rules, setRules] = useState(null);
-  const [zones, setZones] = useState([]);
-  const [checkIns, setCheckIns] = useState({ incoming: [], outgoing: [] });
-  const [activeSos, setActiveSos] = useState([]);
-  const [intruders, setIntruders] = useState([]);
+  // Hydrate instantly from the last view (if any) so coming back to this tab
+  // shows the previous data at once instead of a spinner + full refetch. The
+  // background refresh below updates it in place.
+  const _cached = cacheGet("family:v1");
+  const [data, setData] = useState(_cached?.data ?? null);
+  const [placeEvents, setPlaceEvents] = useState(_cached?.placeEvents ?? []);
+  const [rules, setRules] = useState(_cached?.rules ?? null);
+  const [zones, setZones] = useState(_cached?.zones ?? []);
+  const [checkIns, setCheckIns] = useState(_cached?.checkIns ?? { incoming: [], outgoing: [] });
+  const [activeSos, setActiveSos] = useState(_cached?.activeSos ?? []);
+  const [intruders, setIntruders] = useState(_cached?.intruders ?? []);
   const [addPhone, setAddPhone] = useState("");
   const [addName, setAddName] = useState("");
   const [addMsg, setAddMsg] = useState("");
   const [adding, setAdding] = useState(false);
   const [digestOpen, setDigestOpen] = useState(false);
-  const [digest, setDigest] = useState(null);
+  const [digest, setDigest] = useState(_cached?.digest ?? null);
   const [sending, setSending] = useState(false);
   const [sentMsg, setSentMsg] = useState("");
-  const [loading, setLoading] = useState(true);
+  // Only show the first-load spinner when there's nothing cached to show.
+  const [loading, setLoading] = useState(!_cached);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [err, setErr] = useState("");
@@ -72,22 +78,29 @@ export default function Family() {
   // members' speed/battery/location stay current without the page blinking.
   const load = async (background = false) => {
     if (!background) setLoading(true);
+    // Build a snapshot as we go so the whole view can be cached for instant
+    // re-entry (see cacheGet above).
+    const snap = { data: null, placeEvents: [], rules: null, zones: [],
+      checkIns: { incoming: [], outgoing: [] }, activeSos: [], intruders: [], digest: null };
     try {
       const d = (await api.get("/family")).data;
-      setData(d);
+      setData(d); snap.data = d;
       if (d.in_family) {
-        try { setPlaceEvents((await api.get("/family/place-events")).data.items || []); } catch (_) {}
-        try { setRules((await api.get("/family/alert-rules")).data); } catch (_) {}
-        try { setZones((await api.get("/family/zones")).data.items || []); } catch (_) {}
-        try { setCheckIns((await api.get("/family/check-ins")).data); } catch (_) {}
-        try { setActiveSos((await api.get("/family/active-sos")).data.items || []); } catch (_) {}
-        try { setIntruders((await api.get("/family/intruder-alerts")).data.items || []); } catch (_) {}
-        try { setDigest((await api.get("/family/digest")).data); } catch (_) {}
+        try { snap.placeEvents = (await api.get("/family/place-events")).data.items || []; setPlaceEvents(snap.placeEvents); } catch (_) {}
+        try { snap.rules = (await api.get("/family/alert-rules")).data; setRules(snap.rules); } catch (_) {}
+        try { snap.zones = (await api.get("/family/zones")).data.items || []; setZones(snap.zones); } catch (_) {}
+        try { snap.checkIns = (await api.get("/family/check-ins")).data; setCheckIns(snap.checkIns); } catch (_) {}
+        try { snap.activeSos = (await api.get("/family/active-sos")).data.items || []; setActiveSos(snap.activeSos); } catch (_) {}
+        try { snap.intruders = (await api.get("/family/intruder-alerts")).data.items || []; setIntruders(snap.intruders); } catch (_) {}
+        try { snap.digest = (await api.get("/family/digest")).data; setDigest(snap.digest); } catch (_) {}
       }
+      cacheSet("family:v1", snap); // remember this view for instant re-entry
     } catch (_) { /* keep showing the last good data */ }
     finally { if (!background) setLoading(false); }
   };
-  useEffect(() => { load(); }, []);
+  // On mount: if we have a cached view, refresh quietly (no spinner); otherwise
+  // do a normal first load with the spinner.
+  useEffect(() => { load(Boolean(_cached)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live refresh every 20s in the background (members' speed/battery/location +
   // SOS pins) — cached view stays put, so no reload flicker.

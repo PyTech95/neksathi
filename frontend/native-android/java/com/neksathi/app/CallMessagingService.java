@@ -50,6 +50,21 @@ public class CallMessagingService extends MessagingService {
             // Someone marked the SOS handled ("I'm safe" / "Mark resolved") →
             // stop the siren on every family phone that is ringing for it.
             stopSos(this);
+        } else if ("device_siren".equals(type) || "theft_siren".equals(type)) {
+            // Loud siren over the lock screen on THIS phone:
+            //   device_siren = the owner sounded their own (lost) phone remotely,
+            //                  or a SIM-removal escalation on the phone itself;
+            //   theft_siren  = a family member's phone must ring because someone's
+            //                  phone was lost / its SIM was pulled.
+            // (Previously there was no case for these, so the phone stayed silent.)
+            showDeviceSiren(data);
+        } else if ("device_siren_stop".equals(type)) {
+            // "Stop siren" / "Mark safe" / "Unlock" from the portal.
+            stopSos(this);
+        } else if ("device_lock".equals(type)) {
+            // Remote "Lock" — actually lock the screen via device admin (was only
+            // a DB flag before, so the phone never physically locked).
+            TheftAdminReceiver.lockNow(this);
         } else {
             super.onMessageReceived(remoteMessage);
         }
@@ -132,6 +147,48 @@ public class CallMessagingService extends MessagingService {
     }
 
     private static String emptyTo(String v, String dflt) { return (v == null || v.isEmpty()) ? dflt : v; }
+
+    // Loud siren + full-screen alert for a remote "sound siren" or a theft event on
+    // THIS phone: the owner sounding a lost phone, a SIM-removal escalation, or a
+    // family member's phone ringing because someone's phone was lost. Reuses the SOS
+    // siren plumbing (SirenPlayer + the bypass-DnD SOS channel + sosActive), so the
+    // phone screams over the lock screen and opening the app (MainActivity.onResume
+    // -> stopSos) or a "device_siren_stop" push silences it; capped at SOS_MAX_MS.
+    private void showDeviceSiren(Map<String, String> data) {
+        createSosChannel();
+        sosActive = true;
+        SirenPlayer.start(this);   // looping alarm-stream siren + vibration
+
+        String title = emptyTo(data.get("title"), "🔊 Nek Sathi siren");
+        String msg = emptyTo(data.get("message"), "Tap to open Nek Sathi and stop the siren.");
+
+        Intent open = new Intent(this, MainActivity.class);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) piFlags |= PendingIntent.FLAG_IMMUTABLE;
+        PendingIntent pi = PendingIntent.getActivity(this, 9, open, piFlags);
+
+        NotificationCompat.Builder b = new NotificationCompat.Builder(this, SOS_CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(title)
+                .setContentText(msg)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setFullScreenIntent(pi, true)
+                .setContentIntent(pi);
+
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) nm.notify(SOS_NOTIF_ID, b.build());
+
+        // Safety cap — stop even if the "stop" push never arrives (poor network).
+        final Context appCtx = getApplicationContext();
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override public void run() { stopSos(appCtx); }
+        }, SOS_MAX_MS);
+    }
 
     // Stop the SOS siren, clear its notification, and close the SOS screen if it is
     // showing. Guarded by sosActive so it is a no-op (and never touches an incoming-

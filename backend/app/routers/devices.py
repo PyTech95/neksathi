@@ -70,9 +70,21 @@ async def device_lock_state(device_id: str, user: dict = Depends(current_user)):
 
 @router.post("/devices/{device_id}/lock")
 async def lock_device(device_id: str, user: dict = Depends(current_user)):
-    r = await db.devices.update_one({"id": device_id, "user_id": user["id"]}, {"$set": {"locked": True}})
-    if not r.matched_count:
+    d = await db.devices.find_one({"id": device_id, "user_id": user["id"]})
+    if not d:
         raise HTTPException(status_code=404, detail="Device not found")
+    await db.devices.update_one({"id": device_id}, {"$set": {"locked": True}})
+    # Actually lock the phone: a data-only push wakes the native service, which
+    # calls DevicePolicyManager.lockNow() via the device-admin receiver. Without
+    # this the "Locked" state was only a DB flag — the physical phone stayed open.
+    try:
+        await send_push(recipients=[user["id"]], data={
+            "type": "device_lock", "device_id": device_id,
+            "title": "🔒 Phone locked",
+            "message": f"{d.get('name', 'Your phone')} was locked from Nek Sathi."},
+            data_only=True)
+    except Exception:
+        pass
     return {"locked": True}
 
 
@@ -81,6 +93,13 @@ async def unlock_device(device_id: str, user: dict = Depends(current_user)):
     r = await db.devices.update_one({"id": device_id, "user_id": user["id"]}, {"$set": {"locked": False}})
     if not r.matched_count:
         raise HTTPException(status_code=404, detail="Device not found")
+    # Android does not let an app clear the keyguard PIN, so we cannot physically
+    # unlock the phone — but we DO silence any remote siren that was sounding.
+    try:
+        await send_push(recipients=[user["id"]], data={
+            "type": "device_siren_stop", "device_id": device_id}, data_only=True)
+    except Exception:
+        pass
     return {"locked": False}
 
 
@@ -91,6 +110,12 @@ async def recover_device(device_id: str, user: dict = Depends(current_user)):
                                     {"$set": {"locked": False, "siren_active": False}})
     if not r.matched_count:
         raise HTTPException(status_code=404, detail="Device not found")
+    # Stop the siren on the phone itself (data-only push -> native SirenPlayer.stop()).
+    try:
+        await send_push(recipients=[user["id"]], data={
+            "type": "device_siren_stop", "device_id": device_id}, data_only=True)
+    except Exception:
+        pass
     return {"locked": False, "siren_active": False}
 
 
@@ -177,11 +202,16 @@ async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str)
                 except Exception:
                     pass
             if fam_user_ids:
+                loc_str = f"{event['latitude']},{event['longitude']}" if event.get("latitude") is not None else ""
                 try:
+                    # Loud siren on family phones — repeated failed unlocks mean the
+                    # phone is likely stolen, exactly when family should be alerted.
                     await send_push(recipients=fam_user_ids, data={
+                        "type": "theft_siren",
                         "title": "🚨 Family alert — intruder detected",
                         "message": f"{event['attempt_count']} failed unlocks on {who}'s phone. Tap to see the photo & location.",
-                        "action_url": "/family"}, idempotency_key="fam-" + event["id"])
+                        "sender_name": who, "location": loc_str,
+                        "action_url": "/family"}, idempotency_key="fam-" + event["id"], data_only=True)
                 except Exception:
                     pass
     except Exception:
@@ -260,10 +290,15 @@ async def _theft_event_fanout(user: dict, device: dict, event: dict):
                 if mu.get("phone"):
                     phones.append(mu["phone"])
     if fam_ids:
+        loc_str = f"{event['latitude']},{event['longitude']}" if event.get("latitude") is not None else ""
         try:
+            # data-only "theft_siren" so the family member's phone SOUNDS a siren
+            # over the lock screen (not just a silent notification). This is the
+            # "mobile lost → family phone rings" behaviour the client asked for.
             await send_push(recipients=fam_ids, data={
-                "type": "theft_event", "title": f"🚨 {title}", "message": f"{who}: {msg}",
-                "action_url": "/family"}, idempotency_key="fam-" + event["id"])
+                "type": "theft_siren", "title": f"🚨 {title}", "message": f"{who}: {msg}",
+                "sender_name": who, "location": loc_str,
+                "action_url": "/family"}, idempotency_key="fam-" + event["id"], data_only=True)
         except Exception:
             pass
     body = f"🚨 Nek Sathi — {title}: {msg} Open Nek Sathi for details."
@@ -292,8 +327,30 @@ async def report_theft_event(request: Request, device_id: str, payload: TheftEve
              "latitude": payload.latitude, "longitude": payload.longitude,
              "note": payload.note, "created_at": now_utc()}
     await db.theft_events.insert_one(dict(event))
+    if etype == "sim_removed":
+        await _escalate_sim_removed(user, device, device_id, payload.latitude, payload.longitude)
     await _theft_event_fanout(user, device, event)
     return {"ok": True, "id": event["id"], "type": etype}
+
+
+async def _escalate_sim_removed(user: dict, device: dict, device_id: str, lat, lng):
+    """A removed SIM is treated like a SIM swap: mirror it into db.sim_events (the
+    "SIM change alerts" list reads that collection, so without this a detected SIM
+    removal never shows in the UI), lock the phone and sound its siren."""
+    sim_ev = {"id": new_id(), "user_id": user["id"], "device_id": device_id,
+              "device_name": device.get("name", "device"), "new_number": None,
+              "carrier": None, "imsi": None, "latitude": lat,
+              "longitude": lng, "created_at": now_utc()}
+    await db.sim_events.insert_one(dict(sim_ev))
+    await db.devices.update_one({"id": device_id}, {"$set": {"locked": True, "siren_active": True}})
+    try:
+        await send_push(recipients=[user["id"]], data={
+            "type": "device_siren", "device_id": device_id,
+            "title": "📵 SIM removed — siren on",
+            "message": f"The SIM in {device.get('name', 'your phone')} was removed. Siren is sounding."},
+            data_only=True)
+    except Exception:
+        pass
 
 
 @router.post("/devices/{device_id}/intruder", response_model=IntruderEventOut)
@@ -413,10 +470,27 @@ async def list_sim_events(user: dict = Depends(current_user), limit: int = 50):
 
 @router.post("/devices/{device_id}/siren")
 async def set_siren(device_id: str, payload: SirenIn, user: dict = Depends(current_user)):
-    r = await db.devices.update_one({"id": device_id, "user_id": user["id"]},
-                                    {"$set": {"siren_active": payload.active}})
-    if not r.matched_count:
+    d = await db.devices.find_one({"id": device_id, "user_id": user["id"]})
+    if not d:
         raise HTTPException(status_code=404, detail="Device not found")
+    await db.devices.update_one({"id": device_id}, {"$set": {"siren_active": payload.active}})
+    # Make the phone actually sound / stop the siren. A data-only push wakes the
+    # native CallMessagingService (device_siren / device_siren_stop), which plays
+    # or stops SirenPlayer over the lock screen. Previously this endpoint only set
+    # a DB flag, so the phone never made a sound.
+    try:
+        if payload.active:
+            await send_push(recipients=[user["id"]], data={
+                "type": "device_siren", "device_id": device_id,
+                "device_name": d.get("name", "your phone"),
+                "title": "🔊 Nek Sathi siren",
+                "message": f"Siren sounding on {d.get('name', 'your phone')}. Open Nek Sathi to stop."},
+                data_only=True)
+        else:
+            await send_push(recipients=[user["id"]], data={
+                "type": "device_siren_stop", "device_id": device_id}, data_only=True)
+    except Exception:
+        pass
     return {"siren_active": payload.active}
 
 

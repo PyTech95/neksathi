@@ -154,7 +154,11 @@ h1, h2, h3, .head { font-family: 'Chakra Petch', sans-serif; letter-spacing: -0.
 .topnav {
   position: sticky; top: 0; z-index: 40;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 26px;
+  /* Top inset clears the status bar on Android 15+ edge-to-edge phones (e.g.
+     Pixel 10), where the web view draws under the status bar — otherwise the
+     brand + alert bell overlapped the clock/battery. 0 on web, so no change there.
+     Needs <meta viewport ... viewport-fit=cover> for the inset to be reported. */
+  padding: max(16px, env(safe-area-inset-top, 0px)) 26px 16px;
   background: linear-gradient(180deg, rgba(9, 9, 17, 0.82) 0%, rgba(9, 9, 17, 0.55) 100%);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
@@ -440,6 +444,10 @@ html[data-theme="light"] .topnav {
   background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.72) 100%);
   border-bottom: 1px solid rgba(20,20,50,.07);
 }
+/* On the light app header the brand was white-on-white — only "Sathi" (red)
+   showed. Make the "Nek" word dark so the whole logo reads on every page. */
+html[data-theme="light"] .brand { color: #15151f; }
+html[data-theme="light"] .mobile-drawer-head .brand { color: #15151f; }
 html[data-theme="light"] .bottom-nav { background: rgba(255,255,255,.97); border-top: 1px solid rgba(233,37,70,.22); }
 html[data-theme="light"] .pill-muted { background: rgba(20,20,50,.07); color: var(--muted); }
 html[data-theme="light"] .btn-ghost { color: var(--text); }

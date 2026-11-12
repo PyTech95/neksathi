@@ -56,8 +56,12 @@ public class IntruderCaptureService extends Service {
     private static final String TAG = "NekTheft";
     private static final String CHANNEL_ID = "theft_protection";
     private static final int NOTIF_ID = 42431;
-    private static final long CAMERA_TIMEOUT_MS = 9000;
-    private static final long AE_WARMUP_MS = 1800;
+    private static final long CAMERA_TIMEOUT_MS = 10000;
+    // The very first front-camera frames are usually black / badly exposed; keep a
+    // frame only after auto-exposure has had BOTH enough time AND enough frames to
+    // settle. (Raised from 1800ms — some phones produced an all-black capture.)
+    private static final long AE_WARMUP_MS = 2600;
+    private static final int MIN_FRAMES = 5;
 
     private HandlerThread thread;
     private Handler handler;
@@ -65,6 +69,7 @@ public class IntruderCaptureService extends Service {
     private CameraCaptureSession session;
     private ImageReader reader;
     private long sessionStart;
+    private int framesSeen = 0;
     private final AtomicBoolean done = new AtomicBoolean(false);
     private int attempt = 1;
 
@@ -190,9 +195,11 @@ public class IntruderCaptureService extends Service {
                 try {
                     img = r.acquireLatestImage();
                     if (img == null) return;
-                    // Let auto-exposure settle on the first frames, keep the first
-                    // one taken after the warm-up.
-                    if (System.currentTimeMillis() - sessionStart < AE_WARMUP_MS) return;
+                    framesSeen++;
+                    // Let auto-exposure settle: keep the first frame only after BOTH
+                    // the warm-up time AND a minimum number of frames have passed, so
+                    // we never save an initial black / unexposed frame.
+                    if (System.currentTimeMillis() - sessionStart < AE_WARMUP_MS || framesSeen < MIN_FRAMES) return;
                     ByteBuffer buf = img.getPlanes()[0].getBuffer();
                     byte[] bytes = new byte[buf.remaining()];
                     buf.get(bytes);
