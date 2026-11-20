@@ -237,6 +237,36 @@ async def get_sos_photo(event_id: str, user: dict = Depends(current_user)):
     return {"photo_base64": e["photo_base64"]}
 
 
+class SosPhotoIn(BaseModel):
+    photo_base64: str
+
+
+@router.post("/me/sos-events/{event_id}/photo")
+@rate_limit("6/minute")
+async def attach_sos_photo(request: Request, event_id: str, payload: SosPhotoIn, user: dict = Depends(current_user)):
+    """Attach a front-camera photo to an SOS that was already sent (used by the
+    volume-button SOS: the alert + location go out first, then the native camera
+    captures the sender's photo and attaches it here so the family can see it).
+    Kept separate from /me/sos so the SOS is never delayed or lost waiting on the
+    camera, and a blocked camera (Android 12+ background) simply means no photo."""
+    if not payload.photo_base64 or len(payload.photo_base64) > 5_000_000:
+        raise HTTPException(status_code=413, detail="Photo missing or too large")
+    if not await _attach_sos_photo(user["id"], event_id, payload.photo_base64):
+        raise HTTPException(status_code=404, detail="SOS event not found")
+    # Family sees it the moment their active-SOS poll next flips has_photo=True.
+    asyncio.create_task(_gdrive_autobackup(user["id"], payload.photo_base64, f"sos-{event_id}.jpg", "image/jpeg"))
+    return {"ok": True, "has_photo": True}
+
+
+async def _attach_sos_photo(user_id: str, event_id: str, photo_base64: str) -> bool:
+    """Set the front-camera photo on an already-sent SOS event. Returns False
+    when the event is not this user's (so the caller can 404)."""
+    r = await db.sos_events.update_one(
+        {"id": event_id, "user_id": user_id},
+        {"$set": {"photo_base64": photo_base64, "has_photo": True}})
+    return bool(r.matched_count)
+
+
 @router.post("/me/live-share", response_model=LiveShareOut)
 async def start_live_share(payload: LiveShareStartIn, user: dict = Depends(current_user)):
     doc = {

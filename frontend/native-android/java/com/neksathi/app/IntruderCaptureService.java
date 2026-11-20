@@ -72,6 +72,8 @@ public class IntruderCaptureService extends Service {
     private int framesSeen = 0;
     private final AtomicBoolean done = new AtomicBoolean(false);
     private int attempt = 1;
+    private String mode = "intruder";   // "intruder" (default) or "sos"
+    private String sosEventId = null;    // set in "sos" mode
 
     public static void start(Context ctx, int attemptCount) {
         Context app = ctx.getApplicationContext();
@@ -92,11 +94,31 @@ public class IntruderCaptureService extends Service {
         }
     }
 
+    // Capture the sender's front-camera photo for a volume-button SOS and attach
+    // it to the already-sent SOS event (reuses the same foreground-camera engine
+    // as the intruder capture). Best-effort: a blocked background camera
+    // (Android 12+) or a refused service start just means the SOS has no photo.
+    public static void startForSos(Context ctx, String sosEventId) {
+        if (sosEventId == null || sosEventId.isEmpty()) return;
+        Context app = ctx.getApplicationContext();
+        Intent i = new Intent(app, IntruderCaptureService.class);
+        i.putExtra("mode", "sos");
+        i.putExtra("sos_event_id", sosEventId);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) app.startForegroundService(i);
+            else app.startService(i);
+        } catch (Exception e) {
+            Log.w(TAG, "SOS photo capture couldn't start (SOS already sent): " + e);
+        }
+    }
+
     @Override public IBinder onBind(Intent intent) { return null; }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         attempt = intent != null ? intent.getIntExtra("attempt", 1) : 1;
+        mode = (intent != null && "sos".equals(intent.getStringExtra("mode"))) ? "sos" : "intruder";
+        sosEventId = intent != null ? intent.getStringExtra("sos_event_id") : null;
         goForeground();
         thread = new HandlerThread("nek-theft");
         thread.start();
@@ -277,10 +299,18 @@ public class IntruderCaptureService extends Service {
         try { if (reader != null) reader.close(); } catch (Exception ignored) {}
         final Context app = getApplicationContext();
         final int n = attempt;
+        final String m = mode;
+        final String evId = sosEventId;
         new Thread(new Runnable() {
             @Override public void run() {
                 String photo = jpeg == null ? null : "data:image/jpeg;base64," + Base64.encodeToString(jpeg, Base64.NO_WRAP);
-                upload(app, photo, n, loc);
+                if ("sos".equals(m)) {
+                    // No photo (camera blocked/timed out) -> nothing to attach; the
+                    // SOS alert + location already went out.
+                    if (photo != null) uploadSos(app, photo, evId);
+                } else {
+                    upload(app, photo, n, loc);
+                }
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override public void run() {
                         try { stopForeground(true); } catch (Exception ignored) {}
@@ -352,6 +382,19 @@ public class IntruderCaptureService extends Service {
         } else {
             theft.edit().remove("pending").putLong("last_report", System.currentTimeMillis()).apply();
         }
+    }
+
+    // Attach the SOS selfie to the event the volume-button alert already created
+    // (POST /api/me/sos-events/{event_id}/photo). Best-effort: no retry — the SOS
+    // itself already went out; the photo is an add-on.
+    static void uploadSos(Context ctx, String photo, String eventId) {
+        if (photo == null || eventId == null || eventId.isEmpty()) return;
+        SharedPreferences auth = ctx.getSharedPreferences(CallApi.PREFS, Context.MODE_PRIVATE);
+        String api = auth.getString("api", "");
+        String token = auth.getString("token", "");
+        if (api.isEmpty() || token.isEmpty()) return;
+        String body = "{\"photo_base64\":\"" + photo + "\"}";
+        post(api + "/me/sos-events/" + eventId + "/photo", token, body);
     }
 
     // Re-send a capture that could not be uploaded at the time (called when the

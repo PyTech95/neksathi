@@ -50,8 +50,13 @@ class SosHelper {
             @Override public void onLocation(final Location loc) {
                 new Thread(new Runnable() {
                     @Override public void run() {
-                        boolean ok = post(ctx, loc);
-                        if (!ok) {
+                        String eventId = post(ctx, loc);
+                        if (eventId != null) {
+                            // SOS + location are out. Now capture the sender's front-camera
+                            // photo and attach it to THIS event (best-effort — the SOS is
+                            // never held up or lost for the camera).
+                            IntruderCaptureService.startForSos(ctx, eventId);
+                        } else {
                             ctx.getApplicationContext().getSharedPreferences(VolumeSosService.PREFS, Context.MODE_PRIVATE)
                                     .edit().putBoolean("pending", true).apply();
                         }
@@ -114,7 +119,7 @@ class SosHelper {
         if (!p.has()) return;
         new Thread(new Runnable() {
             @Override public void run() {
-                if (post(ctx, lastKnownLocation(ctx))) p.clear();
+                if (post(ctx, lastKnownLocation(ctx)) != null) p.clear();
             }
         }).start();
     }
@@ -147,13 +152,15 @@ class SosHelper {
         } catch (Exception e) { return null; }
     }
 
-    private static boolean post(Context ctx, Location loc) {
+    // Sends the volume-button SOS and returns the created event id (null on
+    // failure), so the caller can attach a front-camera photo to that event.
+    private static String post(Context ctx, Location loc) {
         SharedPreferences auth = ctx.getSharedPreferences(CallApi.PREFS, Context.MODE_PRIVATE);
         String api = auth.getString("api", "");
         String token = auth.getString("token", "");
         if (api.isEmpty() || token.isEmpty()) {
             Log.w(TAG, "not signed in on this phone - cannot send SOS");
-            return false;
+            return null;
         }
         StringBuilder body = new StringBuilder("{\"source\":\"volume_button\"");
         if (loc != null) body.append(",\"latitude\":").append(loc.getLatitude()).append(",\"longitude\":").append(loc.getLongitude());
@@ -172,12 +179,38 @@ class SosHelper {
             os.flush(); os.close();
             int code = c.getResponseCode();
             Log.i(TAG, "SOS -> HTTP " + code);
-            return code >= 200 && code < 300;
+            if (code < 200 || code >= 300) return null;
+            return extractId(readBody(c));
         } catch (Exception e) {
             Log.w(TAG, "SOS send failed: " + e);
-            return false;
+            return null;
         } finally {
             if (c != null) try { c.disconnect(); } catch (Exception ignored) {}
         }
+    }
+
+    private static String readBody(HttpURLConnection c) {
+        try {
+            java.io.InputStream is = c.getInputStream();
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096]; int n;
+            while ((n = is.read(buf)) != -1) bo.write(buf, 0, n);
+            is.close();
+            return bo.toString("UTF-8");
+        } catch (Exception e) { return ""; }
+    }
+
+    // Pull the SOS event "id" out of the JSON response without a JSON library.
+    private static String extractId(String json) {
+        if (json == null) return null;
+        int k = json.indexOf("\"id\"");
+        if (k < 0) return null;
+        int colon = json.indexOf(':', k);
+        if (colon < 0) return null;
+        int q1 = json.indexOf('"', colon + 1);
+        if (q1 < 0) return null;
+        int q2 = json.indexOf('"', q1 + 1);
+        if (q2 < 0) return null;
+        return json.substring(q1 + 1, q2);
     }
 }
