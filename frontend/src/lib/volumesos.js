@@ -28,3 +28,10 @@ export async function testVolumeSos() {
   if (!isNativeApp()) return false;
   try { await NekNative.testVolumeSos(); return true; } catch (_) { return false; }
 }
+
+// Prompt for the camera + location permissions the silent auto-photo needs.
+// Used by the "Grant camera" button when status reports camera is off.
+export async function requestSosPermissions() {
+  if (!isNativeApp()) return false;
+  try { await NekNative.requestTheftPermissions(); return true; } catch (_) { return false; }
+}

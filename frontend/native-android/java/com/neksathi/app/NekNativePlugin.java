@@ -232,6 +232,24 @@ public class NekNativePlugin extends Plugin {
         try {
             boolean on = call.getBoolean("enabled", Boolean.TRUE);
             VolumeSosService.setEnabled(getContext(), on);
+            // Turning it ON needs CAMERA (silent auto front-camera photo) + location
+            // so the capture has them when the volume keys are pressed later. Ask now,
+            // while an Activity is in the foreground — otherwise the auto photo is
+            // silently skipped because nothing ever prompts for the camera.
+            if (on) {
+                Activity a = getActivity();
+                if (a != null) {
+                    java.util.List<String> ask = new java.util.ArrayList<>();
+                    if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED)
+                        ask.add(Manifest.permission.CAMERA);
+                    if (!IntruderCaptureService.hasLocationPermission(getContext())) {
+                        ask.add(Manifest.permission.ACCESS_FINE_LOCATION);
+                        ask.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+                    }
+                    if (!ask.isEmpty())
+                        ActivityCompat.requestPermissions(a, ask.toArray(new String[0]), 7732);
+                }
+            }
         } catch (Exception e) { /* ignore */ }
         getVolumeSosStatus(call);
     }
@@ -245,6 +263,7 @@ public class NekNativePlugin extends Plugin {
             SharedPreferences auth = ctx.getSharedPreferences(CallApi.PREFS, Context.MODE_PRIVATE);
             boolean hasAuth = !auth.getString("token", "").isEmpty() && !auth.getString("api", "").isEmpty();
             boolean location = IntruderCaptureService.hasLocationPermission(ctx);
+            boolean camera = ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
             boolean pending = ctx.getSharedPreferences(VolumeSosService.PREFS, Context.MODE_PRIVATE).getBoolean("pending", false);
             if (enabled) SosHelper.flushPending(ctx);
             o.put("supported", true);
@@ -252,6 +271,7 @@ public class NekNativePlugin extends Plugin {
             o.put("running", enabled);
             o.put("auth", hasAuth);
             o.put("location", location);
+            o.put("camera", camera);
             o.put("pending", pending);
         } catch (Exception e) {
             o.put("supported", false);

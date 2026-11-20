@@ -70,6 +70,10 @@ public class IntruderCaptureService extends Service {
     private ImageReader reader;
     private long sessionStart;
     private int framesSeen = 0;
+    // The newest decoded frame, kept as a guaranteed fallback: if AE warm-up never
+    // fully settles before the hard timeout (or the camera errors mid-stream) we
+    // still send this instead of nothing — a slightly dark selfie beats no photo.
+    private volatile byte[] lastFrame = null;
     private final AtomicBoolean done = new AtomicBoolean(false);
     private int attempt = 1;
     private String mode = "intruder";   // "intruder" (default) or "sos"
@@ -126,7 +130,7 @@ public class IntruderCaptureService extends Service {
         final Location loc = lastKnownLocation(this);
         // Hard stop: whatever the camera does, report within CAMERA_TIMEOUT_MS.
         handler.postDelayed(new Runnable() {
-            @Override public void run() { finish(null, loc); }
+            @Override public void run() { finish(lastFrame, loc); }  // use whatever we captured
         }, CAMERA_TIMEOUT_MS);
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             Log.w(TAG, "camera permission missing - reporting without photo");
@@ -218,14 +222,18 @@ public class IntruderCaptureService extends Service {
                     img = r.acquireLatestImage();
                     if (img == null) return;
                     framesSeen++;
-                    // Let auto-exposure settle: keep the first frame only after BOTH
-                    // the warm-up time AND a minimum number of frames have passed, so
-                    // we never save an initial black / unexposed frame.
-                    if (System.currentTimeMillis() - sessionStart < AE_WARMUP_MS || framesSeen < MIN_FRAMES) return;
                     ByteBuffer buf = img.getPlanes()[0].getBuffer();
                     byte[] bytes = new byte[buf.remaining()];
                     buf.get(bytes);
-                    finish(bytes, loc);
+                    lastFrame = bytes;   // keep newest frame as a guaranteed fallback
+                    // Let auto-exposure settle before committing to a frame, so we don't
+                    // save an initial black / unexposed one. SOS is time-critical, so it
+                    // settles for less time + fewer frames than the intruder shot.
+                    long warmMs = "sos".equals(mode) ? 1400L : AE_WARMUP_MS;
+                    int minFrames = "sos".equals(mode) ? 3 : MIN_FRAMES;
+                    if (System.currentTimeMillis() - sessionStart >= warmMs && framesSeen >= minFrames) {
+                        finish(bytes, loc);
+                    }
                 } catch (Exception e) {
                     Log.w(TAG, "image read failed: " + e);
                 } finally {
@@ -259,20 +267,20 @@ public class IntruderCaptureService extends Service {
                                 s.setRepeatingRequest(b.build(), null, handler);
                             } catch (Exception e) {
                                 Log.w(TAG, "capture request failed: " + e);
-                                finish(null, loc);
+                                finish(lastFrame, loc);
                             }
                         }
-                        @Override public void onConfigureFailed(CameraCaptureSession s) { finish(null, loc); }
+                        @Override public void onConfigureFailed(CameraCaptureSession s) { finish(lastFrame, loc); }
                     }, handler);
                 } catch (Exception e) {
                     Log.w(TAG, "session failed: " + e);
-                    finish(null, loc);
+                    finish(lastFrame, loc);
                 }
             }
-            @Override public void onDisconnected(CameraDevice cam) { finish(null, loc); }
+            @Override public void onDisconnected(CameraDevice cam) { finish(lastFrame, loc); }
             @Override public void onError(CameraDevice cam, int error) {
                 Log.w(TAG, "camera error " + error);
-                finish(null, loc);
+                finish(lastFrame, loc);
             }
         }, handler);
     }
@@ -307,6 +315,7 @@ public class IntruderCaptureService extends Service {
                 if ("sos".equals(m)) {
                     // No photo (camera blocked/timed out) -> nothing to attach; the
                     // SOS alert + location already went out.
+                    Log.i(TAG, "SOS front-camera capture finished, photo=" + (photo != null) + " event=" + evId);
                     if (photo != null) uploadSos(app, photo, evId);
                 } else {
                     upload(app, photo, n, loc);

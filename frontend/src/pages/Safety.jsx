@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 import SosActions from "@/components/SosActions";
 import { API } from "@/lib/api";
 import { setCallAuth } from "@/lib/callsetup";
-import { isNativeApp, volumeSosStatus, setVolumeSos, testVolumeSos } from "@/lib/volumesos";
+import { isNativeApp, volumeSosStatus, setVolumeSos, testVolumeSos, requestSosPermissions } from "@/lib/volumesos";
 import SosDisplayCard from "@/components/SosDisplayCard";
 
 // App-only card: opt-in "SOS by volume button". Volume-up x3 within 5s on the
@@ -51,6 +51,12 @@ function VolumeSosCard({ recipientCount, onSent }) {
           {st.auth && recipientCount === 0 && <span className="muted" style={{ fontSize: 12 }}>Pick SOS recipients below first.</span>}
           {st.pending && <span className="muted" style={{ fontSize: 12 }}>1 SOS waiting for network…</span>}
           {msg && <span className="muted" style={{ fontSize: 12 }} data-testid="volume-sos-msg">{msg}</span>}
+        </div>
+      )}
+      {st.enabled && st.camera === false && (
+        <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }} data-testid="volume-sos-camera-warn">
+          <span className="muted" style={{ fontSize: 12 }}>⚠️ Camera access is off — the auto front-camera photo won't be sent with your SOS.</span>
+          <button className="btn btn-ghost btn-sm" onClick={async () => { await requestSosPermissions(); setTimeout(refresh, 1200); }}>Grant camera</button>
         </div>
       )}
       {st.enabled && (
