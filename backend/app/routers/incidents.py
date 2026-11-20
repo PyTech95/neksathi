@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, 
 from app.config import NEK_PORTAL_NUMBER, log
 from app.db import db
 from app.ratelimit import rate_limit
+from app.routers.commerce import plan_blocked
 from app.schemas import IncidentCallIn, IncidentCreateIn, IncidentRespondIn
 from app.security import _prefs, current_user
 from app.services.calls import _bridge_masked_call, _call_callee_ids, _incident_recipients
@@ -85,6 +86,10 @@ async def create_incident(request: Request, qr_id: str, payload: IncidentCreateI
     v = await db.vehicles.find_one({"qr_id": qr_id})
     if not v:
         raise HTTPException(status_code=404, detail="QR not found or vehicle removed")
+    # Subscription gate: an expired (past-grace) plan pauses alerts until renewal.
+    blocked = plan_blocked(v)
+    if blocked:
+        raise HTTPException(status_code=403, detail=blocked)
     # Guard photo payload size (base64) — keep each under ~5MB.
     for _p in (payload.evidence_photo_base64, payload.reporter_photo_base64):
         if _p and len(_p) > 5_000_000:

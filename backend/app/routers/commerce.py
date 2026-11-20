@@ -243,6 +243,17 @@ def plan_state(doc: dict) -> dict:
     return {"status": "expired", "days_left": 0, "expires_at": exp.isoformat(), "plan_name": name}
 
 
+def plan_blocked(doc: dict) -> Optional[str]:
+    """Reporter-facing gate for the public QR flow. Returns a message when the
+    item's paid subscription has lapsed past its grace period — so scanning it
+    should NOT raise an alert or place a call until the owner renews — and None
+    while it is active, in grace, or was never on a paid plan (status 'none')."""
+    if plan_state(doc).get("status") == "expired":
+        return ("This Nek Sathi QR's protection has expired. Alerts and calls are "
+                "paused until the owner renews the subscription.")
+    return None
+
+
 async def _activate_plan(target_id: str, plan: dict, start=None, product: str = "vehicle"):
     start = start or now_utc()
     vdays = plan_validity(plan)
@@ -251,6 +262,7 @@ async def _activate_plan(target_id: str, plan: dict, start=None, product: str = 
         "plan_code": plan.get("code"), "plan_name": plan.get("name"),
         "plan_validity_days": vdays, "plan_activated_at": start,
         "plan_expires_at": expires, "plan_status": "active",
+        "renew_reminded": None,  # fresh plan — let renewal reminders fire again
     }})
     return expires
 
@@ -265,6 +277,7 @@ async def _extend_plan(doc: dict, plan: dict, product: str = "vehicle"):
         "plan_code": plan.get("code"), "plan_name": plan.get("name"),
         "plan_validity_days": vdays, "plan_expires_at": expires, "plan_status": "active",
         "plan_activated_at": doc.get("plan_activated_at") or now,
+        "renew_reminded": None,  # renewed — reminders reset for the new cycle
     }})
     return expires
 

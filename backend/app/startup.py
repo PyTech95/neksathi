@@ -14,6 +14,7 @@ from app.security import canon_phone, hash_password
 from app.utils import new_id, now_utc
 from app.services.background import (
     _digest_scheduler, _sos_escalation_scanner, _checkin_nudge_scanner,
+    _subscription_reminder_scanner,
 )
 
 
@@ -274,6 +275,7 @@ async def on_startup():
     asyncio.create_task(_digest_scheduler())
     asyncio.create_task(_sos_escalation_scanner())
     asyncio.create_task(_checkin_nudge_scanner())
+    asyncio.create_task(_subscription_reminder_scanner())
     log.info("Nek Sathi indexes ensured")
 
 

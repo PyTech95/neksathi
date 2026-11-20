@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, 
 from app.services import comms
 from app.db import db
 from app.ratelimit import rate_limit
+from app.routers.commerce import plan_blocked
 from app.schemas import RTCCandidateIn, RTCDescriptionIn
 from app.security import current_user, require_admin
 from app.services.calls import CALL_RING_TIMEOUT_SEC, _call_callee_ids, _callee_filter, _expire_stale_calls, _mask_phone, _notify_missed_call, _push_call_cancel, _vobiz_xml
@@ -31,6 +32,9 @@ async def rtc_call_start(request: Request, qr_id: str):
     v = await db.vehicles.find_one({"qr_id": qr_id})
     if not v:
         raise HTTPException(status_code=404, detail="QR not found or vehicle removed")
+    blocked = plan_blocked(v)
+    if blocked:
+        raise HTTPException(status_code=403, detail=blocked)
     await _expire_stale_calls()
     now = now_utc()
     # Simul-ring: owner + family. First to answer wins; the others stop ringing.

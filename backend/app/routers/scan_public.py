@@ -8,6 +8,7 @@ from app.services import comms
 from app.config import log
 from app.db import db
 from app.ratelimit import rate_limit
+from app.routers.commerce import plan_blocked, plan_state
 from app.schemas import BridgeOut, BridgeReqIn, ClaimIn, PublicVehicleOut, ScanAlertIn
 from app.security import current_user
 from app.services.fcm import send_push
@@ -24,6 +25,7 @@ async def public_qr_lookup(qr_id: str):
         raise HTTPException(status_code=404, detail="QR not found or vehicle removed")
     owner = await db.users.find_one({"id": v["owner_id"]})
     first_name = owner["name"].split()[0] if owner and owner.get("name") else "Owner"
+    ps = plan_state(v)
     return PublicVehicleOut(
         qr_id=v["qr_id"],
         number_plate=v["number_plate"],
@@ -34,6 +36,8 @@ async def public_qr_lookup(qr_id: str):
         color=v.get("color"),
         photo_base64=v.get("photo_base64"),
         owner_first_name=first_name,
+        plan_status=ps.get("status", "active"),
+        plan_days_left=ps.get("days_left", 0),
     )
 
 
@@ -43,6 +47,9 @@ async def public_qr_alert(request: Request, qr_id: str, payload: ScanAlertIn):
     v = await db.vehicles.find_one({"qr_id": qr_id})
     if not v:
         raise HTTPException(status_code=404, detail="QR not found")
+    blocked = plan_blocked(v)
+    if blocked:
+        raise HTTPException(status_code=403, detail=blocked)
     contacts = [c async for c in db.contacts.find({"vehicle_id": v["id"]})]
     channels = []
     if payload.type == "emergency":
@@ -149,6 +156,9 @@ async def public_bridge(request: Request, qr_id: str, payload: BridgeReqIn):
         v = await db.vehicles.find_one({"qr_id": qr_id})
         if not v:
             raise HTTPException(status_code=404, detail="Not found")
+        blocked = plan_blocked(v)
+        if blocked:
+            raise HTTPException(status_code=403, detail=blocked)
         owner = await db.users.find_one({"id": v["owner_id"]})
         owner_phone = owner and owner.get("phone")
         label = v["number_plate"]
@@ -156,6 +166,9 @@ async def public_bridge(request: Request, qr_id: str, payload: BridgeReqIn):
         t = await db.tags.find_one({"qr_id": qr_id})
         if not t:
             raise HTTPException(status_code=404, detail="Not found")
+        blocked = plan_blocked(t)
+        if blocked:
+            raise HTTPException(status_code=403, detail=blocked)
         owner = await db.users.find_one({"id": t["owner_id"]})
         owner_phone = owner and owner.get("phone")
         label = t["name"]

@@ -78,6 +78,10 @@ class PublicVehicleOut(BaseModel):
     color: Optional[str] = None
     photo_base64: Optional[str] = None
     owner_first_name: str  # first name only for humanization
+    # Subscription state so the scan page can show an "expired — owner must renew"
+    # screen instead of the report form. "active" | "grace" | "expired" | "none".
+    plan_status: str = "active"
+    plan_days_left: int = 0
 
 
 class ScanAlertIn(BaseModel):

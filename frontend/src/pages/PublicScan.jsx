@@ -278,6 +278,22 @@ export default function PublicScan() {
       <h1 style={{ fontSize: 28 }}>QR not found</h1><p className="muted">This sticker is not registered or the vehicle was removed.</p>
     </div></div>
   );
+  // Subscription lapsed (past grace): don't offer the report form — the owner
+  // must renew before this QR raises alerts again.
+  if (vehicle && vehicle.plan_status === "expired") return (
+    <div className="page container-nk center"><div className="glass card-pad" style={{ maxWidth: 460, margin: "40px auto", padding: 40 }} data-testid="scan-expired">
+      <div className="brand-badge" style={{ width: 54, height: 54, borderRadius: 14, margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center" }}><Car size={26} /></div>
+      <div className="chip" style={{ display: "inline-block", marginBottom: 14 }}>{vehicle.number_plate}</div>
+      <h1 style={{ fontSize: 24, marginBottom: 10 }}>Protection expired</h1>
+      <p className="muted" style={{ lineHeight: 1.6 }}>
+        This vehicle's Nek Sathi protection has expired, so alerts and calls are paused.
+        The owner needs to renew the subscription to reactivate it.
+      </p>
+      <p className="muted" style={{ fontSize: 13, marginTop: 14 }}>
+        If this is an emergency, please contact local authorities.
+      </p>
+    </div></div>
+  );
 
   const Header = () => (
     <div className="glass card-pad" style={{ padding: 22, marginBottom: 18 }}>

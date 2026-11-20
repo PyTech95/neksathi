@@ -11,7 +11,7 @@ from app.db import db
 from app.services.fcm import send_push
 from app.services.geo import _ist_now
 from app.services.notify import notify_whatsapp, send_sms
-from app.utils import new_id, now_utc
+from app.utils import _aware, new_id, now_utc
 
 
 SOS_ESCALATION_MIN = 3
@@ -187,6 +187,66 @@ async def _digest_scheduler():
         except Exception as e:
             log.warning("digest scheduler: %s", e)
         await asyncio.sleep(1800)
+
+
+def _renew_bucket(days_left: int) -> Optional[str]:
+    """Which renewal-reminder milestone a plan is in, or None (too early)."""
+    if days_left <= 0:
+        return "expired"
+    if days_left <= 1:
+        return "d1"
+    if days_left <= 7:
+        return "d7"
+    if days_left <= 15:
+        return "d15"
+    return None
+
+
+async def _subscription_reminder_scanner():
+    """Remind owners to renew before/at expiry — at ~15, 7 and 1 days left, and on
+    expiry. One reminder per milestone (deduped via `renew_reminded` on the item,
+    which is cleared when the plan is renewed)."""
+    while True:
+        try:
+            now = now_utc()
+            for coll_name, label_key in (("vehicles", "number_plate"), ("tags", "name")):
+                coll = db[coll_name]
+                async for doc in coll.find({"plan_expires_at": {"$ne": None}}):
+                    exp = _aware(doc.get("plan_expires_at"))
+                    if not exp:
+                        continue
+                    days_left = int((exp - now).total_seconds() // 86400)
+                    bucket = _renew_bucket(days_left)
+                    if not bucket or doc.get("renew_reminded") == bucket:
+                        continue
+                    await coll.update_one({"id": doc["id"]}, {"$set": {"renew_reminded": bucket}})
+                    owner_id = doc.get("owner_id")
+                    if not owner_id:
+                        continue
+                    label = doc.get(label_key) or "your Nek Sathi QR"
+                    if bucket == "expired":
+                        title = "⚠️ Nek Sathi plan expired"
+                        msg = f"Protection for {label} has expired. Renew now to reactivate alerts & calls."
+                    else:
+                        plural = "s" if days_left != 1 else ""
+                        title = "⏳ Nek Sathi plan expiring soon"
+                        msg = f"Protection for {label} expires in {days_left} day{plural}. Renew to stay protected."
+                    try:
+                        await send_push(recipients=[owner_id], data={
+                            "title": title, "message": msg, "action_url": "/subscription"},
+                            idempotency_key=f"renew-{doc['id']}-{bucket}")
+                    except Exception:
+                        pass
+                    ow = await db.users.find_one({"id": owner_id})
+                    if ow and ow.get("phone"):
+                        try:
+                            await notify_whatsapp(ow["phone"], f"Nek Sathi: {msg}",
+                                                  meta={"kind": "renew_reminder", "item_id": doc["id"]})
+                        except Exception:
+                            pass
+        except Exception as e:
+            log.warning("subscription reminder scanner: %s", e)
+        await asyncio.sleep(21600)  # every 6 hours
 
 
 async def _checkin_nudge_scanner():
