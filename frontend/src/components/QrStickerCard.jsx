@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
-import { QrCode, Download, FileText, Loader2 } from "lucide-react";
+import { QrCode, Download, FileText, Loader2, Printer } from "lucide-react";
 
 // Shows the owner their own branded Nek Sathi QR sticker (same design as the
 // printed one) with PNG / PDF download. Auth-protected images are fetched as
@@ -9,6 +9,7 @@ export default function QrStickerCard({ kind, id }) {
   const [imgUrl, setImgUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [pending, setPending] = useState(false); // sticker not printed yet (409)
   const [busy, setBusy] = useState("");
   const objUrl = useRef(null);
 
@@ -16,6 +17,7 @@ export default function QrStickerCard({ kind, id }) {
     let alive = true;
     setLoading(true);
     setErr("");
+    setPending(false);
     api
       .get(`/me/${kind}s/${id}/sticker.png`, { responseType: "blob" })
       .then((r) => {
@@ -27,7 +29,9 @@ export default function QrStickerCard({ kind, id }) {
       })
       .catch((e) => {
         if (!alive) return;
-        setErr(e?.response?.status === 409 ? "A QR will appear here once your sticker is assigned." : "Couldn't load your QR. Pull to refresh or try again.");
+        // 409 = QR not printed yet: show a friendly "being prepared" state, not an error.
+        if (e?.response?.status === 409) setPending(true);
+        else setErr("Couldn't load your QR. Pull to refresh or try again.");
       })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; if (objUrl.current) { URL.revokeObjectURL(objUrl.current); objUrl.current = null; } };
@@ -63,6 +67,16 @@ export default function QrStickerCard({ kind, id }) {
 
       {loading ? (
         <div className="center" style={{ padding: 30 }}><Loader2 className="spin" size={26} /></div>
+      ) : pending ? (
+        <div className="center" style={{ padding: "22px 16px", textAlign: "center" }} data-testid="qr-sticker-pending">
+          <div className="brand-badge" style={{ width: 46, height: 46, borderRadius: 12, margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Printer size={22} />
+          </div>
+          <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Your QR is being prepared</p>
+          <p className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
+            It will appear here once we've printed your sticker. We'll notify you — track progress above.
+          </p>
+        </div>
       ) : err ? (
         <p className="muted" style={{ fontSize: 13 }} data-testid="qr-sticker-error">{err}</p>
       ) : (

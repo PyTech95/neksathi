@@ -877,8 +877,10 @@ async def _self_sticker_png(product: str, tid: str, user: dict, request: Request
     """Render the branded QR sticker for a vehicle/tag the CURRENT USER owns.
 
     Mirrors the admin renderer but is gated on ownership (owner_id == user.id)
-    instead of require_admin, so a customer can view / download their own QR.
-    Returns (png_bytes, base_filename)."""
+    instead of require_admin. Crucially it is ALSO gated on the order having
+    been printed (status in STICKER_READY): the customer's QR must not appear —
+    or be downloadable — until admin has actually printed the physical sticker,
+    because the real sticker doesn't exist before that. Returns (png, base)."""
     coll = _coll(product)
     doc = await coll.find_one({"id": tid, "owner_id": user["id"]})
     if not doc:
@@ -886,13 +888,16 @@ async def _self_sticker_png(product: str, tid: str, user: dict, request: Request
     qr_id = doc.get("qr_id")
     if not qr_id:
         raise HTTPException(409, "This item doesn't have a QR assigned yet.")
-    # Prefer the real printed 6-digit code: reuse an order's code if present,
-    # else mint a stable one and persist it on the item so it never changes.
-    code = doc.get("sticker_code")
-    if not code:
-        key = "tag_id" if product == "tag" else "vehicle_id"
-        o = await db.qr_orders.find_one({key: tid, "sticker_code": {"$ne": None}})
-        code = (o or {}).get("sticker_code") or await _unique_sticker_code()
+    # Gate: only reveal the QR once admin has marked the order printed (or later).
+    key = "tag_id" if product == "tag" else "vehicle_id"
+    order = await db.qr_orders.find_one({key: tid, "status": {"$in": list(STICKER_READY)}})
+    if not order:
+        raise HTTPException(409, "Your QR will be available once we've printed your sticker — "
+                                 "you'll be notified as soon as it's ready.")
+    # Use the real printed 6-digit code (minted on the order at print time) and
+    # persist it on the item so the customer's copy always matches the printed one.
+    code = doc.get("sticker_code") or order.get("sticker_code") or await _unique_sticker_code()
+    if doc.get("sticker_code") != code:
         await coll.update_one({"id": tid}, {"$set": {"sticker_code": code}})
     title = "Safety QR Tag" if product == "tag" else None
     url = _scan_url(product, qr_id, request)
