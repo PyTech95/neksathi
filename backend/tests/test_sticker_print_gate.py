@@ -76,3 +76,21 @@ def test_not_owner_is_404(monkeypatch):
         return ei.value
 
     assert asyncio.run(run()).status_code == 404
+
+
+def test_dealer_assigned_visible_without_order(monkeypatch):
+    db = _fresh(monkeypatch)
+
+    async def run():
+        # Dealer assigned a pre-printed sticker from inventory: no qr_order exists,
+        # but the physical sticker is already in hand, so the QR must be visible.
+        await db.vehicles.insert_one({"id": "V9", "owner_id": "U1", "qr_id": "Q9",
+                                      "number_plate": "DL9CAF1111", "assigned_by": "vendor",
+                                      "vendor_id": "VEND1"})
+        await db.qr_inventory.insert_one({"qr_id": "Q9", "serial_no": "778899", "status": "assigned"})
+        png, base = await cm._self_sticker_png("vehicle", "V9", {"id": "U1"}, None)
+        return png, base
+
+    png, base = asyncio.run(run())
+    assert png == b"PNGBYTES"
+    assert "778899" in base  # uses the pre-printed inventory serial as the code

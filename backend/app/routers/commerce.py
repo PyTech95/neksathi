@@ -888,15 +888,25 @@ async def _self_sticker_png(product: str, tid: str, user: dict, request: Request
     qr_id = doc.get("qr_id")
     if not qr_id:
         raise HTTPException(409, "This item doesn't have a QR assigned yet.")
-    # Gate: only reveal the QR once admin has marked the order printed (or later).
+    # Visible only once a PHYSICAL sticker exists. That happens two ways:
+    #   - online order: admin marked it printed (status in STICKER_READY), OR
+    #   - dealer assign: it came from pre-printed inventory, so the sticker is
+    #     already in the customer's hand (dealer_assign/verify sets vendor_id).
     key = "tag_id" if product == "tag" else "vehicle_id"
     order = await db.qr_orders.find_one({key: tid, "status": {"$in": list(STICKER_READY)}})
-    if not order:
+    dealer_assigned = doc.get("assigned_by") == "vendor" or bool(doc.get("vendor_id"))
+    if not order and not dealer_assigned:
         raise HTTPException(409, "Your QR will be available once we've printed your sticker — "
                                  "you'll be notified as soon as it's ready.")
-    # Use the real printed 6-digit code (minted on the order at print time) and
-    # persist it on the item so the customer's copy always matches the printed one.
-    code = doc.get("sticker_code") or order.get("sticker_code") or await _unique_sticker_code()
+    # Match the code printed on the real sticker: the online order's printed code,
+    # or the pre-printed inventory serial for a dealer-assigned QR; else mint a
+    # stable one and persist it so the customer's copy never changes.
+    code = doc.get("sticker_code") or (order.get("sticker_code") if order else None)
+    if not code and dealer_assigned:
+        inv = await db.qr_inventory.find_one({"qr_id": qr_id})
+        code = (inv or {}).get("serial_no")
+    if not code:
+        code = await _unique_sticker_code()
     if doc.get("sticker_code") != code:
         await coll.update_one({"id": tid}, {"$set": {"sticker_code": code}})
     title = "Safety QR Tag" if product == "tag" else None
