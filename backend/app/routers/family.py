@@ -10,7 +10,7 @@ from app.schemas import ActivityIn, AlertRulesIn, CheckInIn, CheckInRespondIn, F
 from app.security import current_user, canon_phone
 from app.services.background import _build_family_digest, _digest_text, _send_family_digest
 from app.services.fcm import send_push
-from app.services.geo import _evaluate_geofences, _ist_now
+from app.services.geo import _evaluate_geofences, _ist_now, _haversine_km
 from app.services.notify import notify_whatsapp
 from app.utils import _aware, clean, new_id, now_utc
 
@@ -205,8 +205,74 @@ async def push_status(payload: StatusIn, user: dict = Depends(current_user)):
     if payload.speed_kmh is not None:
         await _maybe_overspeed_family_alert(user, payload.speed_kmh)
     if payload.latitude is not None and payload.longitude is not None:
+        await record_location_history(user["id"], payload.latitude, payload.longitude,
+                                      getattr(payload, "speed_kmh", None), getattr(payload, "battery", None))
         transitions = await _evaluate_geofences(user, payload.latitude, payload.longitude)
     return {"ok": True, "transitions": transitions}
+
+
+# How close together two trail points may be before we drop the newer one, so a
+# day's history stays a readable timeline instead of a flood of near-identical
+# pings: at most one point every ~2 minutes unless the person moved ~120m+.
+_TRAIL_MIN_GAP_S = 120
+_TRAIL_MIN_MOVE_M = 120
+
+
+async def record_location_history(user_id: str, lat: Optional[float], lng: Optional[float],
+                                  speed_kmh: Optional[float] = None, battery: Optional[int] = None) -> bool:
+    """Append a point to the member's location trail (throttled). Returns True if a
+    point was stored. Used by both /me/status and /me/location so the family
+    history fills whenever the phone reports a location."""
+    if lat is None or lng is None:
+        return False
+    now = now_utc()
+    last = await db.location_history.find_one({"user_id": user_id}, sort=[("recorded_at", -1)])
+    if last:
+        gap = (now - _aware(last["recorded_at"])).total_seconds()
+        moved_m = _haversine_km(lat, lng, last.get("latitude"), last.get("longitude")) * 1000
+        if gap < _TRAIL_MIN_GAP_S and moved_m < _TRAIL_MIN_MOVE_M:
+            return False
+    await db.location_history.insert_one({
+        "id": new_id(), "user_id": user_id, "latitude": lat, "longitude": lng,
+        "speed_kmh": speed_kmh, "battery": battery, "recorded_at": now,
+    })
+    return True
+
+
+@router.get("/family/member/{member_id}/history")
+async def member_history(member_id: str, since: Optional[str] = None, until: Optional[str] = None,
+                         user: dict = Depends(current_user)):
+    """The day's location trail for one family member — the '9:00 here, 9:30 there'
+    timeline. Everyone in the circle may view everyone (per the product decision),
+    but only members who share their location, and only within our own circle."""
+    fam = await _my_family(user["id"])
+    if not fam:
+        raise HTTPException(status_code=400, detail="You are not in a family circle.")
+    m = await db.family_members.find_one({"id": member_id, "family_id": fam["id"]})
+    if not m:
+        raise HTTPException(status_code=404, detail="Member not found.")
+    if not (m.get("share_location", True) or m["user_id"] == user["id"]):
+        return {"shared": False, "name": m.get("name"), "points": []}
+    start = _parse_iso(since) or (now_utc() - timedelta(hours=24))
+    end = _parse_iso(until) or now_utc()
+    points = []
+    cursor = db.location_history.find(
+        {"user_id": m["user_id"], "recorded_at": {"$gte": start, "$lte": end}}
+    ).sort("recorded_at", 1)
+    async for p in cursor:
+        points.append({"lat": p.get("latitude"), "lng": p.get("longitude"),
+                       "speed_kmh": p.get("speed_kmh"), "at": p.get("recorded_at")})
+    return {"shared": True, "name": m.get("name"), "points": points}
+
+
+def _parse_iso(s: Optional[str]):
+    if not s:
+        return None
+    try:
+        from datetime import datetime
+        return _aware(datetime.fromisoformat(s.replace("Z", "+00:00")))
+    except Exception:
+        return None
 
 
 async def _maybe_overspeed_family_alert(user: dict, speed_kmh: Optional[float]):

@@ -41,6 +41,86 @@ function MemberActivity({ memberId }) {
   );
 }
 
+// A member's location trail for a chosen day — "9:00 here, 9:30 there" — drawn
+// as a route on the map plus a time-ordered list. Reads /family/member/:id/history.
+function MemberTimeline({ memberId, name, onClose }) {
+  const [day, setDay] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const mapEl = useRef(null); const mapObj = useRef(null); const layer = useRef(null);
+
+  const isToday = new Date().toDateString() === day.toDateString();
+  const shiftDay = (n) => setDay((d) => { const x = new Date(d); x.setDate(x.getDate() + n); x.setHours(0, 0, 0, 0); return x; });
+
+  useEffect(() => {
+    setLoading(true);
+    const start = new Date(day); start.setHours(0, 0, 0, 0);
+    const end = new Date(day); end.setHours(23, 59, 59, 999);
+    api.get(`/family/member/${memberId}/history`, { params: { since: start.toISOString(), until: end.toISOString() } })
+      .then((r) => setData(r.data)).catch(() => setData({ shared: true, points: [] })).finally(() => setLoading(false));
+  }, [memberId, day]);
+
+  useEffect(() => {
+    if (!data || !mapEl.current) return;
+    const pts = (data.points || []).filter((p) => p.lat != null && p.lng != null);
+    loadLeaflet().then((L) => {
+      if (!mapObj.current) {
+        mapObj.current = L.map(mapEl.current, { zoomControl: true }).setView(pts[0] ? [pts[0].lat, pts[0].lng] : [20.59, 78.96], pts[0] ? 13 : 4);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }).addTo(mapObj.current);
+        layer.current = L.layerGroup().addTo(mapObj.current);
+      }
+      layer.current.clearLayers();
+      if (pts.length) {
+        const ll = pts.map((p) => [p.lat, p.lng]);
+        L.polyline(ll, { color: "#e92546", weight: 4, opacity: 0.85 }).addTo(layer.current);
+        L.circleMarker(ll[0], { radius: 7, color: "#10b981", fillColor: "#10b981", fillOpacity: 1 }).addTo(layer.current).bindPopup("Start of day");
+        L.circleMarker(ll[ll.length - 1], { radius: 7, color: "#e92546", fillColor: "#e92546", fillOpacity: 1 }).addTo(layer.current).bindPopup("Latest");
+        try { mapObj.current.fitBounds(ll, { padding: [28, 28] }); } catch (_) {}
+      }
+    }).catch(() => {});
+  }, [data]);
+
+  useEffect(() => () => { if (mapObj.current) { try { mapObj.current.remove(); } catch (_) {} mapObj.current = null; } }, []);
+
+  const pts = (data?.points || []).filter((p) => p.lat != null);
+  const fmtTime = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const dayLabel = isToday ? "Today" : day.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+
+  return (
+    <div className="modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose} data-testid="member-timeline">
+      <div className="glass" style={{ width: "100%", maxWidth: 560, maxHeight: "88vh", borderRadius: "18px 18px 0 0", padding: 18, overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, fontSize: 17, display: "inline-flex", alignItems: "center", gap: 8 }}><Activity size={18} className="neon" /> {name}'s timeline</div>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close"><X size={16} /></button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => shiftDay(-1)} data-testid="timeline-prev">‹ Prev</button>
+          <span style={{ fontWeight: 700 }}>{dayLabel}</span>
+          <button className="btn btn-ghost btn-sm" onClick={() => shiftDay(1)} disabled={isToday} data-testid="timeline-next">Next ›</button>
+        </div>
+        <div ref={mapEl} style={{ height: 220, borderRadius: 12, overflow: "hidden", marginBottom: 12, background: "rgba(255,255,255,.04)" }} data-testid="timeline-map" />
+        {loading ? (
+          <div className="center" style={{ padding: 20 }}><Loader2 className="spin" size={22} /></div>
+        ) : data && data.shared === false ? (
+          <p className="muted center" style={{ fontSize: 13 }}>This member isn't sharing location.</p>
+        ) : pts.length === 0 ? (
+          <p className="muted center" style={{ fontSize: 13 }} data-testid="timeline-empty">No location recorded for {dayLabel.toLowerCase()}.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid="timeline-list">
+            <div className="muted" style={{ fontSize: 12.5 }}>{pts.length} point{pts.length === 1 ? "" : "s"} · {fmtTime(pts[0].at)} – {fmtTime(pts[pts.length - 1].at)}</div>
+            {pts.slice().reverse().map((p, i) => (
+              <div key={i} className="info-row" style={{ padding: "7px 0", borderTop: i ? "1px solid var(--border, rgba(255,255,255,.06))" : "none" }}>
+                <span className="ir-k" style={{ fontWeight: 700 }}><Clock size={13} /> {fmtTime(p.at)}</span>
+                <a className="btn btn-ghost btn-sm" href={`https://maps.google.com/?q=${p.lat},${p.lng}`} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}><MapPin size={13} /> {p.speed_kmh != null ? `${Math.round(p.speed_kmh)} km/h` : "Map"}</a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Family() {
   // Hydrate instantly from the last view (if any) so coming back to this tab
   // shows the previous data at once instead of a spinner + full refetch. The
@@ -68,6 +148,7 @@ export default function Family() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [timeline, setTimeline] = useState(null); // { id, name } of member whose day trail is open
   const [openMember, setOpenMember] = useState(null);
   const [locPrompt, setLocPrompt] = useState(null);  // {message, canOpenSettings} when location is off
   const [photoBox, setPhotoBox] = useState(null);     // enlarged intruder photo
@@ -390,6 +471,7 @@ export default function Family() {
                   {data.is_guardian && !m.is_me && <button className="btn btn-ghost btn-sm" onClick={() => requestCheckIn(m.member_id)} data-testid={`member-checkin-${m.member_id}`}><HeartHandshake size={14} /> Check in</button>}
                   {data.is_guardian && !m.is_me && <button className="btn btn-ghost btn-sm" onClick={() => nudgeMember(m.member_id)} data-testid={`member-nudge-${m.member_id}`} title="Ring their phone loudly"><BellRing size={14} /> Nudge</button>}
                   {(data.is_guardian || m.is_me) && <button className="btn btn-ghost btn-sm" onClick={() => setOpenMember(openMember === m.member_id ? null : m.member_id)} data-testid={`member-activity-btn-${m.member_id}`}><Activity size={14} /> Activity</button>}
+                  {m.latitude != null && <button className="btn btn-ghost btn-sm" onClick={() => setTimeline({ id: m.member_id, name: m.name || "Member" })} data-testid={`member-timeline-btn-${m.member_id}`}><Clock size={14} /> Timeline</button>}
                   {data.is_guardian && m.role !== "guardian" && <button className="btn btn-ghost btn-sm" onClick={() => removeMember(m.member_id)} data-testid={`member-remove-${m.member_id}`}><UserMinus size={14} /> Remove</button>}
                 </div>
                 {openMember === m.member_id && <MemberActivity memberId={m.member_id} />}
@@ -562,6 +644,7 @@ export default function Family() {
           )}
         </>
       )}
+      {timeline && <MemberTimeline memberId={timeline.id} name={timeline.name} onClose={() => setTimeline(null)} />}
       <style>{`@media(max-width:640px){.family-start{grid-template-columns:1fr!important}}`}</style>
     </div>
   );
