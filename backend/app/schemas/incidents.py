@@ -20,7 +20,7 @@ class BridgeOut(BaseModel):
 
 
 class IncidentCreateIn(BaseModel):
-    type: Literal["wrong_parking", "vehicle_blocking", "headlight_on", "door_open", "emergency", "vehicle_damage", "other", "accident", "theft"]
+    type: Literal["wrong_parking", "vehicle_blocking", "headlight_on", "door_open", "keys_left", "bike_fallen", "load_problem", "emergency", "vehicle_damage", "other", "accident", "theft"]
     scanner_note: Optional[str] = Field(default=None, max_length=500)
     scanner_phone: Optional[str] = Field(default=None, max_length=20)
     scanner_lat: Optional[float] = None

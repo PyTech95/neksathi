@@ -1,13 +1,16 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
-import { ParkingCircle, Siren, ShieldAlert, ArrowLeft, BellRing, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare } from "lucide-react";
+import { ParkingCircle, Siren, ShieldAlert, ArrowLeft, BellRing, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare, Key, Bike, Package } from "lucide-react";
 
 const META = {
   wrong_parking: { icon: <ParkingCircle size={16} />, color: "#f5a524", label: "Wrong parking" },
   vehicle_blocking: { icon: <Ban size={16} />, color: "#fb923c", label: "Vehicle blocking" },
   headlight_on: { icon: <Lightbulb size={16} />, color: "#eab308", label: "Headlight ON" },
   door_open: { icon: <DoorOpen size={16} />, color: "#e92546", label: "Door / window open" },
+  keys_left: { icon: <Key size={16} />, color: "#f59e0b", label: "Keys left" },
+  bike_fallen: { icon: <Bike size={16} />, color: "#f97316", label: "Bike fallen" },
+  load_problem: { icon: <Package size={16} />, color: "#f59e0b", label: "Load / cargo" },
   emergency: { icon: <Siren size={16} />, color: "#ff3b5c", label: "Emergency" },
   vehicle_damage: { icon: <AlertTriangle size={16} />, color: "#f97316", label: "Vehicle damage" },
   other: { icon: <MessageSquare size={16} />, color: "#ff4d67", label: "Other" },

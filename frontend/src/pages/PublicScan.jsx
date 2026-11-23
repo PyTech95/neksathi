@@ -4,7 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import api from "@/lib/api";
 import CameraCapture from "@/components/CameraCapture";
 import InAppCall from "@/components/InAppCall";
-import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare, Volume2 } from "lucide-react";
+import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare, Volume2, Key, Bike, Package } from "lucide-react";
 
 // Reliable scan location. In the native app the Capacitor Geolocation plugin
 // is used (much more dependable inside the WebView); otherwise the browser API
@@ -117,11 +117,30 @@ const REASONS = [
   { key: "vehicle_blocking", label: "Vehicle Blocking", icon: <Ban size={26} />, grad: "linear-gradient(100deg,#f97316,#fb923c)", desc: "This vehicle is blocking the way. Ask the owner to move it — a 15-minute window starts." },
   { key: "headlight_on", label: "Headlight ON", icon: <Lightbulb size={26} />, grad: "linear-gradient(100deg,#ca8a04,#eab308)", desc: "The headlights are left ON. Let the owner know before the battery drains." },
   { key: "door_open", label: "Door / Window Open", icon: <DoorOpen size={26} />, grad: "linear-gradient(100deg,#b3122f,#e92546)", desc: "A door or window is left open. Notify the owner to secure the vehicle." },
+  { key: "keys_left", label: "Keys Left in Vehicle", icon: <Key size={26} />, grad: "linear-gradient(100deg,#ca8a04,#f59e0b)", desc: "The keys are left in the vehicle. Let the owner know before someone takes it." },
+  { key: "bike_fallen", label: "Bike Fallen / Falling", icon: <Bike size={26} />, grad: "linear-gradient(100deg,#d97706,#f97316)", desc: "This two-wheeler has fallen or is about to. Alert the owner to come set it right." },
+  { key: "load_problem", label: "Load / Cargo Problem", icon: <Package size={26} />, grad: "linear-gradient(100deg,#b45309,#f59e0b)", desc: "A problem with the load or cargo. Notify the owner to check it." },
   { key: "emergency", label: "Emergency", icon: <Siren size={26} />, grad: "linear-gradient(100deg,#e11d48,#ff3b5c)", urgent: true, photoOptional: true, desc: "Urgent! Notify the owner & family immediately." },
   { key: "vehicle_damage", label: "Vehicle Damage", icon: <AlertTriangle size={26} />, grad: "linear-gradient(100deg,#dc2626,#f97316)", desc: "The vehicle appears damaged. Report it to the owner with a photo." },
   { key: "other", label: "Other", icon: <MessageSquare size={26} />, grad: "linear-gradient(100deg,#b3122f,#ff4d67)", desc: "Something else about this vehicle — leave a note for the owner." },
   { key: "theft", label: "Theft / Suspicious", icon: <ShieldAlert size={26} />, grad: "linear-gradient(100deg,#6d28d9,#ff4d67)", desc: "Report suspicious activity or theft. The owner & family are alerted immediately." },
 ];
+
+// Which reasons show for which vehicle type. Universal reasons (parking,
+// blocking, headlight, damage, emergency, theft, other) appear for all; the
+// rest are type-specific so a bike never shows "Door open" and a truck can
+// report a cargo problem. Falls back to the car set for unknown types.
+const REASON_ORDER = {
+  car:        ["wrong_parking", "vehicle_blocking", "headlight_on", "door_open", "vehicle_damage", "emergency", "theft", "other"],
+  bike:       ["wrong_parking", "vehicle_blocking", "headlight_on", "keys_left", "bike_fallen", "vehicle_damage", "emergency", "theft", "other"],
+  tractor:    ["wrong_parking", "vehicle_blocking", "headlight_on", "keys_left", "vehicle_damage", "emergency", "theft", "other"],
+  commercial: ["wrong_parking", "vehicle_blocking", "headlight_on", "door_open", "load_problem", "vehicle_damage", "emergency", "theft", "other"],
+  other:      ["wrong_parking", "vehicle_blocking", "headlight_on", "vehicle_damage", "emergency", "theft", "other"],
+};
+const REASON_MAP = Object.fromEntries(REASONS.map((r) => [r.key, r]));
+function reasonsFor(vtype) {
+  return (REASON_ORDER[vtype] || REASON_ORDER.car).map((k) => REASON_MAP[k]).filter(Boolean);
+}
 
 export default function PublicScan() {
   const { qrId } = useParams();
@@ -332,7 +351,7 @@ export default function PublicScan() {
           <div data-testid="scan-choose">
             <h2 className="center" style={{ fontSize: 24, marginBottom: 16 }}>How can we help?</h2>
             <div className="grid" style={{ gap: 12 }}>
-              {REASONS.map((r) => (
+              {reasonsFor(vehicle?.vehicle_type).map((r) => (
                 <button key={r.key} className="big-action" style={{ background: r.grad }} onClick={() => { setScreen(r.key); setShowCam(true); }} data-testid={`choose-${r.key}`}>
                   {r.icon} {r.label}
                 </button>
