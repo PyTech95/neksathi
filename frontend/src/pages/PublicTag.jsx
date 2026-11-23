@@ -2,15 +2,42 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "@/lib/api";
 import { TAG_META } from "@/pages/Tags";
-import { PackageSearch, Siren, Lock, AlertTriangle, MessageCircle, CheckCircle2, MapPin, HeartPulse, Phone, Loader2, ShieldPlus } from "lucide-react";
+import { PackageSearch, Siren, Lock, AlertTriangle, MessageCircle, CheckCircle2, MapPin, HeartPulse, Phone, Loader2, ShieldPlus, Bell, Baby } from "lucide-react";
 
-const ACTIONS = [
-  { type: "found", label: "I Found This", icon: <PackageSearch size={28} />, bg: "linear-gradient(100deg,#059669,#10b981)" },
-  { type: "emergency", label: "Emergency", icon: <Siren size={28} />, bg: "linear-gradient(100deg,#e11d48,#ff3b5c)" },
-  { type: "theft", label: "Report Theft", icon: <Lock size={28} />, bg: "linear-gradient(100deg,#b3122f,#ff4d67)" },
-  { type: "damage", label: "Report Damage", icon: <AlertTriangle size={28} />, bg: "linear-gradient(100deg,#f59e0b,#f5a524)" },
-  { type: "contact", label: "Contact Owner", icon: <MessageCircle size={28} />, bg: "linear-gradient(100deg,#b3122f,#e92546)" },
-];
+// Every finder action maps to a backend alert type the owner understands.
+const ACTION_DEFS = {
+  found:     { label: "I Found This", icon: <PackageSearch size={28} />, bg: "linear-gradient(100deg,#059669,#10b981)" },
+  emergency: { label: "Emergency", icon: <Siren size={28} />, bg: "linear-gradient(100deg,#e11d48,#ff3b5c)" },
+  sos:       { label: "This Person Needs Help", icon: <Siren size={28} />, bg: "linear-gradient(100deg,#e11d48,#ff3b5c)" },
+  kid_help:  { label: "This Child Needs Help", icon: <Baby size={28} />, bg: "linear-gradient(100deg,#e11d48,#ff3b5c)" },
+  theft:     { label: "Report Theft", icon: <Lock size={28} />, bg: "linear-gradient(100deg,#b3122f,#ff4d67)" },
+  damage:    { label: "Report Damage", icon: <AlertTriangle size={28} />, bg: "linear-gradient(100deg,#f59e0b,#f5a524)" },
+  contact:   { label: "Contact Owner", icon: <MessageCircle size={28} />, bg: "linear-gradient(100deg,#b3122f,#e92546)" },
+  doorbell:  { label: "Notify Resident", icon: <Bell size={28} />, bg: "linear-gradient(100deg,#7b43c4,#9b5de5)" },
+};
+// Which actions a finder sees depends on the tag type: a person tag is about
+// getting help / reaching family; an item tag is about returning it; a door is
+// about reaching the resident. Falls back to the "other" (lost & found) set.
+const TAG_ACTIONS = {
+  person:  { keys: ["sos", "contact"] },
+  kid:     { keys: ["kid_help", "found", "contact"], labels: { found: "I Found This Child" } },
+  patient: { keys: ["sos", "contact"] },
+  staff:   { keys: ["found", "contact", "emergency"], labels: { found: "Return to Office" } },
+  pet:     { keys: ["found", "emergency", "contact"], labels: { found: "I Found This Pet" } },
+  bag:     { keys: ["found", "contact"] },
+  luggage: { keys: ["found", "contact"] },
+  keys:    { keys: ["found", "contact"] },
+  phone:   { keys: ["found", "theft", "contact"] },
+  laptop:  { keys: ["found", "theft", "contact"] },
+  door:    { keys: ["doorbell", "emergency"] },
+  other:   { keys: ["found", "contact"] },
+};
+function actionsFor(tagType) {
+  const spec = TAG_ACTIONS[tagType] || TAG_ACTIONS.other;
+  return spec.keys
+    .map((k) => { const d = ACTION_DEFS[k]; return d ? { type: k, ...d, label: (spec.labels && spec.labels[k]) || d.label } : null; })
+    .filter(Boolean);
+}
 const PERSON_TYPES = ["kid", "person", "patient", "staff"];
 
 export default function PublicTag() {
@@ -102,7 +129,7 @@ export default function PublicTag() {
         </div>
 
         <div className="grid" style={{ gap: 12, marginBottom: 22 }}>
-          {ACTIONS.map((a) => (
+          {actionsFor(tag.tag_type).map((a) => (
             <button key={a.type} className="big-action" style={{ background: a.bg, fontSize: 20 }} disabled={busy} onClick={() => send(a.type)} data-testid={`tag-alert-${a.type}`}>{a.icon} {a.label}</button>
           ))}
         </div>

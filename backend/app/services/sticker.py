@@ -115,11 +115,19 @@ def render_sticker(url: str, code: str, title: str | None = None) -> bytes:
     img = _template()
     d = ImageDraw.Draw(img)
 
-    # optional: repaint the red header band with a custom title (tags)
+    # optional: repaint the red header band with a custom title (tags). The font
+    # auto-shrinks so longer per-type headlines (e.g. "LOST PET — PLEASE HELP")
+    # always fit the band width instead of overflowing.
     if title:
         d.rectangle(list(HDR), fill=RED)
+        band_w = (HDR[2] - HDR[0]) - 40
+        size = 46
+        f = _font(size, _FONT_XB)
+        while size > 22 and d.textlength(title, font=f) > band_w:
+            size -= 2
+            f = _font(size, _FONT_XB)
         d.text(((HDR[0] + HDR[2]) // 2, (HDR[1] + HDR[3]) // 2 + 1),
-               title, font=_font(46, _FONT_XB), fill=WHITE, anchor="mm")
+               title, font=f, fill=WHITE, anchor="mm")
 
     # fresh QR
     q = _make_qr(url)

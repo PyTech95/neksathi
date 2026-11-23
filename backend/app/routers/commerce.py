@@ -129,6 +129,29 @@ async def _unique_sticker_code() -> str:
     return sticker.new_sticker_code()
 
 
+# Per-type headline printed on a tag sticker's header band, so a glance tells what
+# the QR is for (emergency vs lost-and-found vs door) instead of every tag looking
+# the same. Vehicles keep the template's own header (title stays None).
+_TAG_STICKER_TITLE = {
+    "person": "IN CASE OF EMERGENCY",
+    "kid": "IN CASE OF EMERGENCY",
+    "patient": "IN CASE OF EMERGENCY",
+    "staff": "STAFF ID",
+    "pet": "LOST PET — PLEASE HELP",
+    "bag": "IF FOUND, PLEASE RETURN",
+    "luggage": "IF FOUND, PLEASE RETURN",
+    "keys": "IF FOUND, PLEASE RETURN",
+    "phone": "IF FOUND, PLEASE RETURN",
+    "laptop": "IF FOUND, PLEASE RETURN",
+    "door": "SMART DOOR",
+    "other": "IF FOUND, PLEASE RETURN",
+}
+
+
+def _tag_sticker_title(tag_type: Optional[str]) -> str:
+    return _TAG_STICKER_TITLE.get(tag_type or "", "SAFETY QR TAG")
+
+
 # --------------------------------------------------------------------------- referral / tokens
 import secrets as _secrets
 import string as _string
@@ -847,7 +870,7 @@ async def _order_sticker_png(oid: str, request: Request):
     if not code:
         code = await _unique_sticker_code()
         await db.qr_orders.update_one({"id": oid}, {"$set": {"sticker_code": code}})
-    title = "Safety QR Tag" if product == "tag" else None
+    title = _tag_sticker_title(o.get("tag_type") or (doc or {}).get("tag_type")) if product == "tag" else None
     url = _scan_url(product, qr_id, request)
     png = sticker.render_sticker(url, code, title=title)
     base = f"neksathi-{(o.get('number_plate') or qr_id)}-{code}".replace(" ", "_")
@@ -909,7 +932,7 @@ async def _self_sticker_png(product: str, tid: str, user: dict, request: Request
         code = await _unique_sticker_code()
     if doc.get("sticker_code") != code:
         await coll.update_one({"id": tid}, {"$set": {"sticker_code": code}})
-    title = "Safety QR Tag" if product == "tag" else None
+    title = _tag_sticker_title(doc.get("tag_type")) if product == "tag" else None
     url = _scan_url(product, qr_id, request)
     png = sticker.render_sticker(url, code, title=title)
     label = doc.get("number_plate") or doc.get("name") or qr_id
