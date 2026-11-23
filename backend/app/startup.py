@@ -74,8 +74,13 @@ async def on_startup():
     await db.sos_videos.create_index([("vehicle_id", 1), ("created_at", -1)])
     await db.sos_videos.create_index([("user_id", 1), ("created_at", -1)])
     # Family location trail: fast per-member day queries + auto-delete after 8 days.
-    await db.location_history.create_index([("user_id", 1), ("recorded_at", 1)])
-    await db.location_history.create_index("recorded_at", expireAfterSeconds=8 * 24 * 3600)
+    # Guarded: an index failure here must NEVER abort startup (that would take the
+    # whole API — and OTP/login — down), so log and carry on like the email index.
+    try:
+        await db.location_history.create_index([("user_id", 1), ("recorded_at", 1)])
+        await db.location_history.create_index("recorded_at", expireAfterSeconds=8 * 24 * 3600)
+    except Exception as _e:
+        log.warning("location_history index create failed (continuing): %s", _e)
     await db.sos_chunks.create_index([("upload_id", 1), ("index", 1)], unique=True)
     await db.sos_uploads.create_index("user_id")
     await db.password_resets.create_index("token", unique=True)
