@@ -1,6 +1,7 @@
 package com.neksathi.app;
 
 import android.Manifest;
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -105,6 +106,16 @@ public class IntruderCaptureService extends Service {
     public static void startForSos(Context ctx, String sosEventId) {
         if (sosEventId == null || sosEventId.isEmpty()) return;
         Context app = ctx.getApplicationContext();
+        // Auto front photo only when the phone is UNLOCKED. On a locked screen
+        // Android blocks silent background camera use anyway, so we skip the photo
+        // rather than fail — the SOS alert + location already went out on their own.
+        try {
+            KeyguardManager km = (KeyguardManager) app.getSystemService(Context.KEYGUARD_SERVICE);
+            if (km != null && km.isKeyguardLocked()) {
+                Log.i(TAG, "SOS: phone locked — skipping front photo (SOS already sent)");
+                return;
+            }
+        } catch (Exception ignored) {}
         Intent i = new Intent(app, IntruderCaptureService.class);
         i.putExtra("mode", "sos");
         i.putExtra("sos_event_id", sosEventId);

@@ -4,6 +4,7 @@
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { Camera, CameraResultType, CameraSource, CameraDirection } from "@capacitor/camera";
+import NekNative from "@/lib/neknative";
 
 export const isNative = Capacitor.isNativePlatform();
 
@@ -96,6 +97,20 @@ export async function captureSelfie() {
     stream.getTracks().forEach((t) => t.stop());
     return data;
   } catch (_) { return null; }
+}
+
+// Auto silent front-camera photo for an SOS event. On the native app the capture
+// + upload happen natively and ONLY when the phone is unlocked (it self-skips on a
+// locked screen), so this returns null — nothing for JS to upload. On the web it
+// grabs a silent selfie and returns the data URL for the caller to attach to the
+// SOS event. Always best-effort: never throws, never blocks the SOS alert.
+export async function captureSosPhoto(eventId) {
+  if (!eventId) return null;
+  if (isNative) {
+    try { await NekNative.captureSosPhoto({ eventId }); } catch (_) {}
+    return null;
+  }
+  try { return await captureSelfie(); } catch (_) { return null; }
 }
 
 // Records a short SOS video clip and returns { video_base64, duration_ms }, or

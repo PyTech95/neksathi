@@ -288,6 +288,17 @@ public class NekNativePlugin extends Plugin {
         call.resolve();
     }
 
+    // Silent front-camera capture for an SOS raised from inside the app. The
+    // native service captures + uploads the photo to the given SOS event, and
+    // only when the phone is unlocked (it skips itself on a locked screen).
+    @PluginMethod
+    public void captureSosPhoto(PluginCall call) {
+        String eventId = call.getString("eventId", null);
+        if (eventId == null || eventId.isEmpty()) { call.reject("eventId required"); return; }
+        try { IntruderCaptureService.startForSos(getContext(), eventId); } catch (Exception e) { /* SOS already sent */ }
+        call.resolve();
+    }
+
     // ------------------------------------------ SOS lock-screen display help --
 
     // What's still missing for the full-screen SOS alert to pop over the lock
