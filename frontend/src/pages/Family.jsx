@@ -354,33 +354,33 @@ export default function Family() {
                     member has a vehicle registered (no empty placeholders). */}
                 <div style={{ marginTop: 10, display: "grid", gap: 6, fontSize: 13 }} data-testid={`member-detail-${m.member_id}`}>
                   {m.speed_kmh != null && (
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <span className="muted"><Gauge size={13} style={{ verticalAlign: "-2px" }} /> Speed</span>
-                      <span style={{ fontWeight: 700, color: m.overspeed ? "#ff3b5c" : "inherit" }} data-testid={`member-speed-${m.member_id}`}>{Math.round(m.speed_kmh)} km/h{m.overspeed ? " · over limit!" : ""}</span>
+                    <div className="info-row">
+                      <span className="muted ir-k"><Gauge size={13} /> Speed</span>
+                      <span className="ir-v" style={{ color: m.overspeed ? "#ff3b5c" : "inherit" }} data-testid={`member-speed-${m.member_id}`}>{Math.round(m.speed_kmh)} km/h{m.overspeed ? " · over limit!" : ""}</span>
                     </div>
                   )}
                   {m.vehicle_number && (
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <span className="muted"><Smartphone size={13} style={{ verticalAlign: "-2px" }} /> Vehicle</span>
-                      <span style={{ fontWeight: 700 }} data-testid={`member-vehicle-${m.member_id}`}>{m.vehicle_number}{m.speed_limit_kmh ? ` · limit ${m.speed_limit_kmh}` : ""}</span>
+                    <div className="info-row">
+                      <span className="muted ir-k"><Smartphone size={13} /> Vehicle</span>
+                      <span className="ir-v" data-testid={`member-vehicle-${m.member_id}`}>{m.vehicle_number}{m.speed_limit_kmh ? ` · limit ${m.speed_limit_kmh}` : ""}</span>
                     </div>
                   )}
                   {m.battery != null && (
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <span className="muted"><BatteryMedium size={13} style={{ verticalAlign: "-2px" }} /> Battery</span>
-                      <span style={{ fontWeight: 700, color: m.battery <= 15 ? "#ff3b5c" : "inherit" }}>{m.battery}%</span>
+                    <div className="info-row">
+                      <span className="muted ir-k"><BatteryMedium size={13} /> Battery</span>
+                      <span className="ir-v" style={{ color: m.battery <= 15 ? "#ff3b5c" : "inherit" }}>{m.battery}%</span>
                     </div>
                   )}
                   {m.last_seen && (
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                      <span className="muted"><Clock size={13} style={{ verticalAlign: "-2px" }} /> Last seen</span>
-                      <span>{new Date(m.last_seen).toLocaleString()}</span>
+                    <div className="info-row">
+                      <span className="muted ir-k"><Clock size={13} /> Last seen</span>
+                      <span className="ir-v" style={{ fontWeight: 400 }}>{new Date(m.last_seen).toLocaleString()}</span>
                     </div>
                   )}
                   {m.latitude != null && (
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                      <span className="muted"><MapPin size={13} style={{ verticalAlign: "-2px" }} /> Location</span>
-                      <a className="btn btn-ghost btn-sm" href={`https://maps.google.com/?q=${m.latitude},${m.longitude}`} target="_blank" rel="noreferrer" data-testid={`member-map-${m.member_id}`} style={{ padding: "2px 10px" }}>Open map</a>
+                    <div className="info-row">
+                      <span className="muted ir-k"><MapPin size={13} /> Location</span>
+                      <a className="btn btn-ghost btn-sm" href={`https://maps.google.com/?q=${m.latitude},${m.longitude}`} target="_blank" rel="noreferrer" data-testid={`member-map-${m.member_id}`} style={{ padding: "2px 10px", flexShrink: 0 }}>Open map</a>
                     </div>
                   )}
                 </div>
