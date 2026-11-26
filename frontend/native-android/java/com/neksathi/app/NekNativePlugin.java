@@ -258,6 +258,40 @@ public class NekNativePlugin extends Plugin {
         }
     }
 
+    // ------------------------------------------------ background location --
+
+    // Start / stop the opt-in background location-sharing foreground service.
+    @PluginMethod
+    public void startLocationService(PluginCall call) {
+        try {
+            LocationService.setEnabled(getContext(), true);
+            JSObject ret = new JSObject();
+            ret.put("running", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("could not start location sharing: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void stopLocationService(PluginCall call) {
+        try {
+            LocationService.setEnabled(getContext(), false);
+            JSObject ret = new JSObject();
+            ret.put("running", false);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("could not stop location sharing: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void getLocationServiceStatus(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("running", LocationService.isEnabled(getContext()));
+        call.resolve(ret);
+    }
+
     // ---------------------------------------------------------- volume SOS --
 
     // Turn the opt-in "volume-up x3 = SOS" protection on or off for this phone.

@@ -5,6 +5,7 @@ import { loadLeaflet } from "@/lib/leaflet";
 import { getPosition, locationHint, openLocationSettings } from "@/lib/native";
 import SosActions from "@/components/SosActions";
 import SosPhoto from "@/components/SosPhoto";
+import BackgroundLocationCard from "@/components/BackgroundLocationCard";
 import { Users, ShieldCheck, Copy, CheckCircle2, LogOut, UserMinus, MapPin, BatteryMedium, Activity, Loader2, Crown, Eye, EyeOff, LocateFixed, Clock, Smartphone, LogIn, Bell, Moon, Send, BarChart3, AlertTriangle, HeartHandshake, BatteryLow, ShieldAlert, Timer, BellRing, ChevronDown, UserPlus, Camera, Lock, Gauge, X } from "lucide-react";
 
 function fmtSecs(s) { if (!s) return "0m"; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; }
@@ -417,6 +418,8 @@ export default function Family() {
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }} onClick={() => setSharing("act", !me.share_activity)} data-testid="toggle-share-activity">{me.share_activity ? <Eye size={15} className="neon" /> : <EyeOff size={15} className="muted" />} Share activity</label>
             </div>
           )}
+
+          {me && me.share_location && <BackgroundLocationCard />}
 
           <h2 style={{ fontSize: 18, margin: "0 0 12px" }}>Members</h2>
           <div style={{ display: "grid", gap: 10 }}>
