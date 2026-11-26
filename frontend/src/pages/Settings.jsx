@@ -9,7 +9,7 @@ import BottomSheet from "@/components/BottomSheet";
 import Modal from "@/components/Modal";
 import { openCallSetup, isNativeApp } from "@/lib/callsetup";
 import { getThemePref, setThemePref } from "@/lib/theme";
-import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink, Phone, Play, Square, Upload, ChevronDown, Check, LogOut, Receipt, ChevronRight, Gift, Sun, Moon, Monitor, Ban } from "lucide-react";
+import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink, Phone, Play, Square, Upload, ChevronDown, Check, LogOut, Receipt, ChevronRight, Gift, Sun, Moon, Monitor, Ban, Wallet as WalletIcon } from "lucide-react";
 
 const DEFAULT_PREFS = { whatsapp: true, email: true, push: true, incident_alerts: true, speed_alerts: true, marketing: false, ringtone: "classic" };
 
@@ -321,6 +321,13 @@ export default function Settings() {
         )}
         <span className="chip"><UserCog size={13} /> Account</span>
         <h1 style={{ fontSize: 34, marginTop: 12, marginBottom: 20 }}>Profile & <span className="neon">preferences</span></h1>
+
+        <button type="button" className="glass glass-hover" onClick={() => navigate("/wallet")} data-testid="go-wallet"
+          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 18, display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(245,165,36,.16)", border: "1px solid rgba(245,165,36,.4)", color: "#f5a524" }}><WalletIcon size={18} /></span>
+          <span style={{ flex: 1 }}><b>My wallet</b><div className="muted" style={{ fontSize: 13 }}>Nek Coins balance &amp; history</div></span>
+          <ChevronRight size={18} className="muted" />
+        </button>
 
         <button type="button" className="glass glass-hover" onClick={() => navigate("/transactions")} data-testid="go-transactions"
           style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 18, display: "flex", alignItems: "center", gap: 12 }}>

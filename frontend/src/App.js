@@ -79,6 +79,7 @@ import AdminTagPlans from "@/pages/AdminTagPlans";
 import DealerAssign from "@/pages/DealerAssign";
 import AdminVendorView from "@/pages/AdminVendorView";
 import Transactions from "@/pages/Transactions";
+import Wallet from "@/pages/Wallet";
 import Referral from "@/pages/Referral";
 import { Capacitor } from "@capacitor/core";
 
@@ -212,6 +213,7 @@ function Shell() {
           <Route path="/orders" element={<Protected><Orders /></Protected>} />
           <Route path="/orders/:id" element={<Protected><OrderDetail /></Protected>} />
           <Route path="/transactions" element={<Protected><Transactions /></Protected>} />
+          <Route path="/wallet" element={<Protected><Wallet /></Protected>} />
           <Route path="/referral" element={<Protected><Referral /></Protected>} />
           <Route path="/safety" element={<Protected><Safety /></Protected>} />
           <Route path="/helplines" element={<Protected><Helplines /></Protected>} />

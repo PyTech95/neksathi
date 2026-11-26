@@ -642,6 +642,33 @@ async def my_tokens(user: dict = Depends(current_user)):
             "tokens_per_rupee": TOKENS_PER_RUPEE}
 
 
+@router.get("/me/wallet")
+async def my_wallet(user: dict = Depends(current_user), skip: int = 0, limit: int = 20):
+    """Wallet view: token balance, its rupee value, and the earn/spend history
+    (paginated), so the user can see where their Nek Coins came from and went."""
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "tokens": 1}) or {}
+    tokens = int(u.get("tokens") or 0)
+    skip = max(0, skip)
+    limit = max(1, min(limit, 50))
+    total = await db.token_ledger.count_documents({"user_id": user["id"]})
+    history = []
+    async for e in db.token_ledger.find({"user_id": user["id"]}).sort("created_at", -1).skip(skip).limit(limit):
+        history.append({
+            "id": e.get("id"),
+            "delta": int(e.get("delta") or 0),
+            "reason": e.get("reason") or "adjustment",
+            "created_at": e.get("created_at"),
+        })
+    return {
+        "tokens": tokens,
+        "value_rupees": round(tokens / TOKENS_PER_RUPEE, 2),
+        "tokens_per_rupee": TOKENS_PER_RUPEE,
+        "total": total,
+        "count": len(history),
+        "history": history,
+    }
+
+
 # =========================================================================== RECHARGE
 class RechargeCreateIn(BaseModel):
     product_type: str = "vehicle"
