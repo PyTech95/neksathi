@@ -20,10 +20,14 @@
         font-family: 'Manrope', system-ui, -apple-system, sans-serif; }
       #boot { position: fixed; inset: 0; display: flex; align-items: center;
         justify-content: center; flex-direction: column; gap: 18px; background: #07070d; }
-      /* Transparent brand logo with a slow, gentle zoom-in — then a soft breathe.
-         Deliberately unhurried so it feels calm on every device. */
-      #boot img { width: 96px; height: 96px; object-fit: contain;
+      /* Logo in a soft light badge (so the mark stays crisp on the dark boot),
+         with a slow, gentle zoom-in then a soft breathe — unhurried on every device. */
+      #boot .logo { width: 108px; height: 108px; border-radius: 50%;
+        background: radial-gradient(circle at 50% 40%, #ffffff, #e8eaf4);
+        display: grid; place-items: center;
+        box-shadow: 0 0 0 6px rgba(233,37,70,.12), 0 22px 54px -16px rgba(233,37,70,.5);
         animation: bootZoom 1.8s cubic-bezier(.2,.7,.2,1) both, bootBreathe 3.2s ease-in-out 1.8s infinite; }
+      #boot .logo img { width: 78px; height: 78px; object-fit: contain; }
       #boot .wm { font-size: 20px; font-weight: 800; letter-spacing: -.01em; color: #edeef6;
         opacity: 0; animation: bootFade .6s ease .7s forwards; }
       #boot .wm b { color: #e92546; }
@@ -39,6 +43,6 @@
   </head>
   <body>
     <noscript>Enable JavaScript to use Nek Sathi. The website brings together personal safety tools, family sharing and Smart QR.</noscript>
-    <div id="root"><div id="boot"><img src="%PUBLIC_URL%/website/logo-mark.png" alt="Nek Sathi" /><div class="wm">Nek <b>Sathi</b></div><div class="bar"><i></i></div></div></div>
+    <div id="root"><div id="boot"><div class="logo"><img src="%PUBLIC_URL%/website/logo-clean.png" alt="Nek Sathi" /></div><div class="wm">Nek <b>Sathi</b></div><div class="bar"><i></i></div></div></div>
   </body>
 </html>
