@@ -297,6 +297,21 @@ export default function PublicScan() {
       <h1 style={{ fontSize: 28 }}>QR not found</h1><p className="muted">This sticker is not registered or the vehicle was removed.</p>
     </div></div>
   );
+  // Owner paused this QR: show a neutral "temporarily unavailable" screen and no
+  // report form (no personal data, no alert path).
+  if (vehicle && vehicle.qr_paused) return (
+    <div className="page container-nk center"><div className="glass card-pad" style={{ maxWidth: 460, margin: "40px auto", padding: 40 }} data-testid="scan-paused">
+      <div className="brand-badge" style={{ width: 54, height: 54, borderRadius: 14, margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center" }}><Car size={26} /></div>
+      <h1 style={{ fontSize: 24, marginBottom: 10 }}>Temporarily unavailable</h1>
+      <p className="muted" style={{ lineHeight: 1.6 }}>
+        This Nek Sathi QR is currently paused by its owner, so it isn't accepting
+        alerts right now. Please check back later.
+      </p>
+      <p className="muted" style={{ fontSize: 13, marginTop: 14 }}>
+        If this is an emergency, please contact local authorities.
+      </p>
+    </div></div>
+  );
   // Subscription lapsed (past grace): don't offer the report form — the owner
   // must renew before this QR raises alerts again.
   if (vehicle && vehicle.plan_status === "expired") return (

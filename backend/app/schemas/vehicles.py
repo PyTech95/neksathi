@@ -30,6 +30,9 @@ class VehicleOut(BaseModel):
     qr_id: str
     speed_limit_kmh: int
     lost_mode: bool
+    # Owner can pause a QR so scans show "temporarily unavailable" and no alert
+    # is raised, without deleting the vehicle or its plan.
+    qr_paused: bool = False
     created_at: datetime
     # commerce: whether a QR sticker was ordered+paid, and the plan state
     qr_ordered: bool = False
@@ -82,6 +85,9 @@ class PublicVehicleOut(BaseModel):
     # screen instead of the report form. "active" | "grace" | "expired" | "none".
     plan_status: str = "active"
     plan_days_left: int = 0
+    # True when the owner has paused this QR — the scan page shows a neutral
+    # "temporarily unavailable" screen instead of the report form.
+    qr_paused: bool = False
 
 
 class ScanAlertIn(BaseModel):
@@ -122,6 +128,10 @@ class AccidentIn(BaseModel):
 
 class LostModeIn(BaseModel):
     enabled: bool
+
+
+class QrPauseIn(BaseModel):
+    paused: bool
 
 
 class SOSVideoIn(BaseModel):

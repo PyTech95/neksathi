@@ -7,7 +7,7 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from app.config import log
 from app.db import db
-from app.schemas import AccidentIn, AlertOut, CHUNK_MAX_BYTES, ContactIn, ContactOut, InviteCreateOut, LocationIn, LocationOut, LostModeIn, PublicInvitePreview, SOSChunkIn, SOSCompleteIn, SOSInitIn, SOSVideoIn, SOSVideoMeta, SharedVehicleOut, UserSOSVideoIn, VehicleIn, VehicleOut
+from app.schemas import AccidentIn, AlertOut, CHUNK_MAX_BYTES, ContactIn, ContactOut, InviteCreateOut, LocationIn, LocationOut, LostModeIn, QrPauseIn, PublicInvitePreview, SOSChunkIn, SOSCompleteIn, SOSInitIn, SOSVideoIn, SOSVideoMeta, SharedVehicleOut, UserSOSVideoIn, VehicleIn, VehicleOut
 from app.security import _prefs, current_user
 from app.services.fcm import send_push
 from app.utils import _veh_plan_state, clean, new_id, now_utc
@@ -30,6 +30,7 @@ def to_vehicle_out(v: dict) -> VehicleOut:
         qr_id=v["qr_id"],
         speed_limit_kmh=v.get("speed_limit_kmh", 80),
         lost_mode=v.get("lost_mode", False),
+        qr_paused=v.get("qr_paused", False),
         created_at=v["created_at"],
         qr_ordered=bool(v.get("qr_ordered", False)),
         qr_order_id=v.get("qr_order_id"),
@@ -127,6 +128,18 @@ async def toggle_lost_mode(vehicle_id: str, payload: LostModeIn, user: dict = De
         raise HTTPException(status_code=404, detail="Vehicle not found")
     await db.vehicles.update_one({"id": vehicle_id}, {"$set": {"lost_mode": payload.enabled}})
     v["lost_mode"] = payload.enabled
+    return to_vehicle_out(clean(v))
+
+
+@router.post("/vehicles/{vehicle_id}/qr-pause", response_model=VehicleOut)
+async def toggle_qr_pause(vehicle_id: str, payload: QrPauseIn, user: dict = Depends(current_user)):
+    """Pause / resume a QR. While paused, a public scan shows a neutral
+    "temporarily unavailable" screen and no alert can be raised."""
+    v = await db.vehicles.find_one({"id": vehicle_id, "owner_id": user["id"]})
+    if not v:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    await db.vehicles.update_one({"id": vehicle_id}, {"$set": {"qr_paused": payload.paused}})
+    v["qr_paused"] = payload.paused
     return to_vehicle_out(clean(v))
 
 

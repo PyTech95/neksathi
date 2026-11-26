@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
 import QrStickerCard from "@/components/QrStickerCard";
-import { ArrowLeft, Check, Copy, ShieldAlert, UserPlus, Trash2, Phone, Navigation, Users, Car, Truck, QrCode } from "lucide-react";
+import { ArrowLeft, Check, Copy, ShieldAlert, UserPlus, Trash2, Phone, Navigation, Users, Car, Truck, QrCode, PauseCircle, PlayCircle } from "lucide-react";
 
 const PLAN_PILL = { active: "pill-ok", grace: "pill-warn", expired: "pill-danger", none: "pill-muted" };
 
@@ -27,6 +27,7 @@ export default function VehicleDetail() {
   useEffect(() => { load(); }, [load]);
 
   const toggleLost = async () => { const r = await api.post(`/vehicles/${id}/lost_mode`, { enabled: !v.lost_mode }); setV(r.data); };
+  const togglePause = async () => { const r = await api.post(`/vehicles/${id}/qr-pause`, { paused: !v.qr_paused }); setV(r.data); };
   const createInvite = async () => { setInviteBusy(true); try { const r = await api.post(`/vehicles/${id}/invites`); setInviteUrl(r.data.join_url); } finally { setInviteBusy(false); } };
   const copyInvite = () => { navigator.clipboard.writeText(inviteUrl); setInviteCopied(true); setTimeout(() => setInviteCopied(false), 1600); };
 
@@ -94,8 +95,19 @@ export default function VehicleDetail() {
             )}
             <QrStickerCard kind="vehicle" id={v.id} />
 
+            {v.qr_paused && (
+              <div className="glass" data-testid="qr-paused-note" style={{ padding: "10px 14px", borderRadius: 12, margin: "4px 0 10px", borderColor: "rgba(245,165,36,.5)", display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+                <PauseCircle size={16} style={{ color: "#f5a524", flexShrink: 0 }} />
+                <span className="muted">This QR is <b style={{ color: "var(--text)" }}>paused</b> — scans show "temporarily unavailable" and raise no alerts.</span>
+              </div>
+            )}
+
             <button className={`btn btn-block ${v.lost_mode ? "btn-danger" : "btn-ghost"}`} onClick={toggleLost} data-testid="toggle-lost-mode">
               <ShieldAlert size={16} /> {v.lost_mode ? "Lost mode ON — turn off" : "Enable lost mode"}
+            </button>
+
+            <button className={`btn btn-block ${v.qr_paused ? "btn-danger" : "btn-ghost"}`} onClick={togglePause} style={{ marginTop: 10 }} data-testid="toggle-qr-pause">
+              {v.qr_paused ? <><PlayCircle size={16} /> QR paused — resume scanning</> : <><PauseCircle size={16} /> Pause this QR</>}
             </button>
             <Link to={`/track/${id}`} className="btn btn-ghost btn-block" style={{ marginTop: 10 }} data-testid="live-tracking-link"><Navigation size={16} /> Live tracking & speed</Link>
             <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={createInvite} disabled={inviteBusy} data-testid="invite-family-btn"><Users size={16} /> {inviteBusy ? "Generating…" : "Invite family"}</button>

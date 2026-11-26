@@ -38,6 +38,7 @@ async def public_qr_lookup(qr_id: str):
         owner_first_name=first_name,
         plan_status=ps.get("status", "active"),
         plan_days_left=ps.get("days_left", 0),
+        qr_paused=bool(v.get("qr_paused", False)),
     )
 
 
@@ -47,6 +48,8 @@ async def public_qr_alert(request: Request, qr_id: str, payload: ScanAlertIn):
     v = await db.vehicles.find_one({"qr_id": qr_id})
     if not v:
         raise HTTPException(status_code=404, detail="QR not found")
+    if v.get("qr_paused"):
+        raise HTTPException(status_code=403, detail="This QR is paused by the owner and isn't accepting alerts right now.")
     blocked = plan_blocked(v)
     if blocked:
         raise HTTPException(status_code=403, detail=blocked)
