@@ -2,11 +2,13 @@ import { useState } from "react";
 import Copyright from "@/components/Copyright";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useT } from "@/lib/i18n";
 import api from "@/lib/api";
 import { UserPlus, Gift } from "lucide-react";
 
 export default function Register() {
   const { register } = useAuth();
+  const { t } = useT();
   const nav = useNavigate();
   const [params] = useSearchParams();
   const ref = (params.get("ref") || "").trim().toUpperCase();
@@ -26,7 +28,7 @@ export default function Register() {
       if (ref) { try { await api.post("/me/referral/apply", { code: ref }); } catch {} }
       nav("/dashboard");
     } catch (e) {
-      setErr(e?.response?.data?.detail || "Registration failed");
+      setErr(e?.response?.data?.detail || t("auth.reg.failed"));
     } finally {
       setBusy(false);
     }
@@ -36,33 +38,33 @@ export default function Register() {
     <div className="page" data-testid="register-page">
       <div className="container-nk" style={{ maxWidth: 460 }}>
         <div className="glass card-pad fade-up" style={{ padding: 32 }}>
-          <h1 style={{ fontSize: 30, marginBottom: 6 }}>Create your <span className="neon">account</span></h1>
-          <p className="muted" style={{ marginBottom: 22 }}>Start protecting your vehicles in minutes.</p>
-          {ref && <div className="glass" style={{ padding: 12, borderRadius: 12, marginBottom: 16, borderColor: "rgba(233,37,70,.4)", fontSize: 13 }} data-testid="ref-banner"><Gift size={14} style={{ verticalAlign: "-2px", color: "#ff5a74" }} /> Referral code <b>{ref}</b> will be applied — you'll earn bonus tokens on your first plan.</div>}
+          <h1 style={{ fontSize: 30, marginBottom: 6 }}>{t("auth.reg.title1")} <span className="neon">{t("auth.reg.title2")}</span></h1>
+          <p className="muted" style={{ marginBottom: 22 }}>{t("auth.reg.sub")}</p>
+          {ref && <div className="glass" style={{ padding: 12, borderRadius: 12, marginBottom: 16, borderColor: "rgba(233,37,70,.4)", fontSize: 13 }} data-testid="ref-banner"><Gift size={14} style={{ verticalAlign: "-2px", color: "#ff5a74" }} /> {t("auth.reg.ref1")} <b>{ref}</b> {t("auth.reg.ref2")}</div>}
           <form onSubmit={submit}>
             <div className="field">
-              <label>Full name</label>
+              <label>{t("auth.reg.fullName")}</label>
               <input className="input" value={form.name} onChange={set("name")} required data-testid="register-name" placeholder="Aarav Sharma" />
             </div>
             <div className="field">
-              <label>Email</label>
+              <label>{t("auth.reg.email")}</label>
               <input className="input" type="email" value={form.email} onChange={set("email")} required data-testid="register-email" placeholder="you@example.com" />
             </div>
             <div className="field">
-              <label>Phone</label>
+              <label>{t("auth.reg.phone")}</label>
               <input className="input" value={form.phone} onChange={set("phone")} required data-testid="register-phone" placeholder="+91 98765 43210" />
             </div>
             <div className="field">
-              <label>Password</label>
-              <input className="input" type="password" value={form.password} onChange={set("password")} required minLength={6} data-testid="register-password" placeholder="At least 6 characters" />
+              <label>{t("auth.reg.password")}</label>
+              <input className="input" type="password" value={form.password} onChange={set("password")} required minLength={6} data-testid="register-password" placeholder={t("auth.reg.passwordPh")} />
             </div>
             {err && <p style={{ color: "var(--danger)", fontSize: 14, marginBottom: 12 }} data-testid="register-error">{err}</p>}
             <button className="btn btn-primary btn-block" disabled={busy} data-testid="register-submit">
-              <UserPlus size={17} /> {busy ? "Creating…" : "Create account"}
+              <UserPlus size={17} /> {busy ? t("auth.reg.creating") : t("auth.reg.create")}
             </button>
           </form>
           <p className="muted center" style={{ marginTop: 18, fontSize: 14 }}>
-            Already have an account? <Link to="/login" className="neon" style={{ fontWeight: 700 }}>Log in</Link>
+            {t("auth.reg.haveAccount")} <Link to="/login" className="neon" style={{ fontWeight: 700 }}>{t("auth.reg.login")}</Link>
           </p>
         </div>
         <Copyright />

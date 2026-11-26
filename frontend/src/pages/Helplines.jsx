@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { Siren, Ambulance, Flame, HeartHandshake, Baby, Hospital, Building2, Phone, ShieldAlert } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 // National emergency helplines, one tap to dial. Numbers come from
 // GET /public/emergency-numbers (admin-configurable; India defaults). Android
@@ -9,14 +10,15 @@ import { Siren, Ambulance, Flame, HeartHandshake, Baby, Hospital, Building2, Pho
 const DEFAULTS = { police: "112", ambulance: "108", fire: "101", women: "1091", child: "1098" };
 
 const LINES = [
-  { key: "police", label: "Police", desc: "Emergency police response", icon: Siren, color: "#2563eb" },
-  { key: "ambulance", label: "Ambulance", desc: "Medical emergency & ambulance", icon: Ambulance, color: "#dc2626" },
-  { key: "fire", label: "Fire Brigade", desc: "Fire & rescue services", icon: Flame, color: "#ea580c" },
-  { key: "women", label: "Women Helpline", desc: "Help & safety for women", icon: HeartHandshake, color: "#db2777" },
-  { key: "child", label: "Child Helpline", desc: "Help for children in distress", icon: Baby, color: "#0891b2" },
+  { key: "police", tkey: "hl.police", dkey: "hl.police.sub", icon: Siren, color: "#2563eb" },
+  { key: "ambulance", tkey: "hl.ambulance", dkey: "hl.ambulance.sub", icon: Ambulance, color: "#dc2626" },
+  { key: "fire", tkey: "hl.fire", dkey: "hl.fire.sub", icon: Flame, color: "#ea580c" },
+  { key: "women", tkey: "hl.women", dkey: "hl.women.sub", icon: HeartHandshake, color: "#db2777" },
+  { key: "child", tkey: "hl.child", dkey: "hl.child.sub", icon: Baby, color: "#0891b2" },
 ];
 
 export default function Helplines() {
+  const { t } = useT();
   const [n, setN] = useState(DEFAULTS);
 
   useEffect(() => {
@@ -30,12 +32,12 @@ export default function Helplines() {
   return (
     <div className="page" data-testid="helplines-page">
       <div className="container-nk" style={{ maxWidth: 640 }}>
-        <span className="chip"><ShieldAlert size={13} /> Emergency</span>
-        <h1 style={{ fontSize: 32, marginTop: 12, marginBottom: 4 }}>Emergency <span className="neon">helplines</span></h1>
-        <p className="muted" style={{ marginBottom: 20 }}>One tap opens your dialer with the number ready — just press call.</p>
+        <span className="chip"><ShieldAlert size={13} /> {t("hl.chip")}</span>
+        <h1 style={{ fontSize: 32, marginTop: 12, marginBottom: 4 }}>{t("hl.title1")} <span className="neon">{t("hl.title2")}</span></h1>
+        <p className="muted" style={{ marginBottom: 20 }}>{t("hl.sub")}</p>
 
         <div style={{ display: "grid", gap: 10 }}>
-          {LINES.map(({ key, label, desc, icon: Icon, color }) => (
+          {LINES.map(({ key, tkey, dkey, icon: Icon, color }) => (
             <a
               key={key}
               href={`tel:${n[key]}`}
@@ -47,8 +49,8 @@ export default function Helplines() {
                 <Icon size={22} />
               </span>
               <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontWeight: 700, fontSize: 16, display: "block" }}>{label}</span>
-                <span className="muted" style={{ fontSize: 12.5 }}>{desc}</span>
+                <span style={{ fontWeight: 700, fontSize: 16, display: "block" }}>{t(tkey)}</span>
+                <span className="muted" style={{ fontSize: 12.5 }}>{t(dkey)}</span>
               </span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 7, flexShrink: 0 }}>
                 <b style={{ fontSize: 17, color }}>{n[key]}</b>
@@ -58,23 +60,23 @@ export default function Helplines() {
           ))}
         </div>
 
-        <h2 style={{ fontSize: 19, margin: "26px 0 10px" }}>Find help nearby</h2>
+        <h2 style={{ fontSize: 19, margin: "26px 0 10px" }}>{t("hl.findNearby")}</h2>
         <div className="grid grid-2" style={{ gap: 10 }}>
           <a href="https://www.google.com/maps/search/hospital+near+me" target="_blank" rel="noreferrer" data-testid="find-hospital"
             className="glass glass-hover" style={{ display: "flex", alignItems: "center", gap: 12, padding: 16, borderRadius: 16, textDecoration: "none", color: "var(--text)", border: "1px solid var(--panel-brd)" }}>
             <span style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, display: "grid", placeItems: "center", background: "rgba(220,38,38,.14)", color: "#dc2626", border: "1px solid rgba(220,38,38,.4)" }}><Hospital size={20} /></span>
-            <span><b style={{ fontSize: 15 }}>Nearest hospital</b><div className="muted" style={{ fontSize: 12.5 }}>Open in Maps</div></span>
+            <span><b style={{ fontSize: 15 }}>{t("hl.hospital")}</b><div className="muted" style={{ fontSize: 12.5 }}>{t("hl.openMaps")}</div></span>
           </a>
           <a href="https://www.google.com/maps/search/police+station+near+me" target="_blank" rel="noreferrer" data-testid="find-police"
             className="glass glass-hover" style={{ display: "flex", alignItems: "center", gap: 12, padding: 16, borderRadius: 16, textDecoration: "none", color: "var(--text)", border: "1px solid var(--panel-brd)" }}>
             <span style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, display: "grid", placeItems: "center", background: "rgba(37,99,235,.14)", color: "#2563eb", border: "1px solid rgba(37,99,235,.4)" }}><Building2 size={20} /></span>
-            <span><b style={{ fontSize: 15 }}>Nearest police station</b><div className="muted" style={{ fontSize: 12.5 }}>Open in Maps</div></span>
+            <span><b style={{ fontSize: 15 }}>{t("hl.policeStation")}</b><div className="muted" style={{ fontSize: 12.5 }}>{t("hl.openMaps")}</div></span>
           </a>
         </div>
 
         <div className="glass" style={{ marginTop: 20, padding: "12px 16px", borderRadius: 14, fontSize: 12.5, display: "flex", gap: 10, alignItems: "flex-start" }}>
           <ShieldAlert size={16} style={{ color: "#f5a524", flexShrink: 0, marginTop: 1 }} />
-          <span className="muted">In a life-threatening emergency, call <b style={{ color: "var(--text)" }}>112</b> — India's single emergency number for police, fire and ambulance.</span>
+          <span className="muted">{t("hl.note1")} <b style={{ color: "var(--text)" }}>112</b> {t("hl.note2")}</span>
         </div>
       </div>
     </div>
