@@ -2,9 +2,24 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { Car, Plus, Trash2, ShieldAlert, ChevronRight, ChevronDown, X, Phone, PhoneMissed, PhoneOff, PhoneOutgoing, Bike, Tractor, Truck, CircleHelp, Check } from "lucide-react";
+import { Car, Plus, Trash2, ShieldAlert, ShieldCheck, ChevronRight, ChevronDown, X, Phone, PhoneMissed, PhoneOff, PhoneOutgoing, Bike, Tractor, Truck, CircleHelp, Check, Siren, ScanLine, Users, QrCode } from "lucide-react";
 import BottomSheet from "@/components/BottomSheet";
 import VehicleFields, { tidyVehicle } from "@/components/VehicleFields";
+
+const QUICK_ACTIONS = [
+  { to: "/safety", icon: Siren, label: "SOS", accent: "#ff3b5c", primary: true },
+  { to: "/scanner", icon: ScanLine, label: "Scan QR", accent: "#e92546" },
+  { to: "/family", icon: Users, label: "Family", accent: "#ff4d67" },
+  { to: "/tags", icon: QrCode, label: "Tags", accent: "#e92546" },
+];
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  if (h < 21) return "Good evening";
+  return "Good night";
+}
 
 const VEHICLE_TYPES = ["car", "bike", "tractor", "commercial", "other"];
 const VEHICLE_TYPE_META = {
@@ -86,16 +101,44 @@ export default function Dashboard() {
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
+  const isProtected = vehicles.some((v) => v.plan_status === "active");
+
   return (
     <div className="page" data-testid="dashboard-page">
       <div className="container-nk">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 26, flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <span className="chip">Owner dashboard</span>
-            <h1 style={{ fontSize: 34, marginTop: 12 }}>Hi {user?.name?.split(" ")[0]}, your <span className="neon">garage</span></h1>
-            <p className="muted">Manage vehicles and their safety QR stickers.</p>
+        {/* Home hero: greeting + safety status + quick actions */}
+        <div className="glass card-pad" data-testid="home-hero" style={{ padding: 22, marginBottom: 22, position: "relative", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <span style={{ width: 48, height: 48, borderRadius: 14, flexShrink: 0, display: "grid", placeItems: "center", overflow: "hidden", background: "linear-gradient(135deg,#b3122f,#e92546)", color: "#fff", fontWeight: 800, fontSize: 20 }}>
+              {user?.avatar_base64 ? <img src={user.avatar_base64} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (user?.name?.[0] || "?")}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="muted" style={{ fontSize: 13 }}>{greeting()},</div>
+              <h1 style={{ fontSize: 23, margin: "1px 0 0", lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.name?.split(" ")[0] || "there"}</h1>
+            </div>
+            <span data-testid="protection-status" className="pill" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5, ...(isProtected ? { background: "rgba(52,211,153,.14)", borderColor: "rgba(52,211,153,.4)", color: "#34d399" } : { background: "rgba(245,165,36,.14)", borderColor: "rgba(245,165,36,.4)", color: "#f5a524" }) }}>
+              {isProtected ? <><ShieldCheck size={13} /> Protected</> : <><ShieldAlert size={13} /> Set up</>}
+            </span>
           </div>
-          <button className="btn btn-primary" onClick={() => setShowAdd(true)} data-testid="add-vehicle-btn"><Plus size={18} /> Add vehicle</button>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginTop: 18 }}>
+            {QUICK_ACTIONS.map(({ to, icon: Icon, label, accent, primary }) => (
+              <Link key={to} to={to} data-testid={`quick-${label.toLowerCase().replace(/\s+/g, "-")}`}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 7, textDecoration: "none", color: "var(--text)" }}>
+                <span style={{ width: "100%", aspectRatio: "1", maxWidth: 62, borderRadius: 16, display: "grid", placeItems: "center",
+                  background: primary ? "linear-gradient(135deg,#b3122f,#e92546)" : `${accent}18`,
+                  color: primary ? "#fff" : accent,
+                  border: primary ? "none" : `1px solid ${accent}3a` }}>
+                  <Icon size={22} />
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>{label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <h2 style={{ fontSize: 21, margin: 0, display: "inline-flex", alignItems: "center", gap: 8 }}><Car size={19} className="neon" /> Your <span className="neon">garage</span></h2>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)} data-testid="add-vehicle-btn"><Plus size={16} /> Add vehicle</button>
         </div>
 
         {user && !user.phone_verified && (
