@@ -523,12 +523,12 @@ export default function Settings() {
         <div className="glass card-pad" style={{ padding: 26, marginBottom: 18 }} data-testid="appearance-card">
           <h2 style={{ fontSize: 20, marginBottom: 6 }}><Sun size={18} style={{ verticalAlign: "-3px" }} /> Appearance</h2>
           <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>Choose how Nek Sathi looks on this device.</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+          <div style={{ display: "grid", gap: 10 }}>
             {[
-              { id: "light", label: "Light", Icon: Sun },
-              { id: "dark", label: "Dark", Icon: Moon },
-              { id: "system", label: "System", Icon: Monitor },
-            ].map(({ id, label, Icon }) => {
+              { id: "light", label: "Light", desc: "Always bright", Icon: Sun },
+              { id: "dark", label: "Dark", desc: "Always dark", Icon: Moon },
+              { id: "system", label: "System default", desc: "Match your phone's setting", Icon: Monitor },
+            ].map(({ id, label, desc, Icon }) => {
               const on = theme === id;
               return (
                 <button
@@ -539,21 +539,33 @@ export default function Settings() {
                   aria-pressed={on}
                   className="glass"
                   style={{
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-                    padding: "16px 8px", cursor: "pointer", borderRadius: 14,
+                    display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left",
+                    padding: "13px 16px", cursor: "pointer", borderRadius: 14,
                     border: on ? "2px solid var(--accent)" : "1px solid var(--panel-brd)",
                     background: on ? "rgba(233,37,70,.12)" : "var(--panel)",
-                    color: "var(--text)", fontWeight: 700, fontSize: 13.5,
+                    color: "var(--text)",
                   }}
                 >
-                  <Icon size={22} style={{ color: on ? "var(--accent)" : "var(--muted)" }} />
-                  {label}
-                  {on && <Check size={14} style={{ color: "var(--accent)" }} />}
+                  <span style={{
+                    width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center",
+                    background: on ? "rgba(233,37,70,.16)" : "rgba(127,127,140,.12)",
+                    color: on ? "var(--accent)" : "var(--muted)",
+                    border: on ? "1px solid rgba(233,37,70,.4)" : "1px solid var(--panel-brd)",
+                  }}>
+                    <Icon size={19} />
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontWeight: 700, fontSize: 15, display: "block" }}>{label}</span>
+                    <span className="muted" style={{ fontSize: 12.5 }}>{desc}</span>
+                  </span>
+                  {on
+                    ? <Check size={20} style={{ color: "var(--accent)", flexShrink: 0 }} />
+                    : <span style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid var(--panel-brd)", flexShrink: 0 }} />}
                 </button>
               );
             })}
           </div>
-          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>System follows your phone's light/dark setting. Default is Light.</p>
+          <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>System follows your phone's light/dark setting. Default is Light.</p>
         </div>
 
         <RingtoneCard />
