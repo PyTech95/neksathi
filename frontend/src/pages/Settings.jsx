@@ -15,12 +15,12 @@ import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, Shield
 const DEFAULT_PREFS = { whatsapp: true, email: true, push: true, incident_alerts: true, speed_alerts: true, marketing: false, ringtone: "classic" };
 
 const PREF_ROWS = [
-  { key: "whatsapp", icon: <MessageSquare size={18} />, title: "WhatsApp alerts", desc: "Incident & account updates on WhatsApp." },
-  { key: "push", icon: <Bell size={18} />, title: "Push notifications", desc: "Instant alerts inside the app." },
-  { key: "email", icon: <Mail size={18} />, title: "Email updates", desc: "Receipts, summaries and important notices." },
-  { key: "incident_alerts", icon: <ShieldAlert size={18} />, title: "Incident alerts", desc: "Wrong-parking, accident and theft reports." },
-  { key: "speed_alerts", icon: <Gauge size={18} />, title: "Overspeed alerts", desc: "Alert me when a vehicle crosses its speed limit." },
-  { key: "marketing", icon: <Megaphone size={18} />, title: "Offers & tips", desc: "Occasional product news and offers." },
+  { key: "whatsapp", icon: <MessageSquare size={18} />, tkey: "sett.pref.whatsapp", dkey: "sett.pref.whatsapp.d" },
+  { key: "push", icon: <Bell size={18} />, tkey: "sett.pref.push", dkey: "sett.pref.push.d" },
+  { key: "email", icon: <Mail size={18} />, tkey: "sett.pref.email", dkey: "sett.pref.email.d" },
+  { key: "incident_alerts", icon: <ShieldAlert size={18} />, tkey: "sett.pref.incident", dkey: "sett.pref.incident.d" },
+  { key: "speed_alerts", icon: <Gauge size={18} />, tkey: "sett.pref.speed", dkey: "sett.pref.speed.d" },
+  { key: "marketing", icon: <Megaphone size={18} />, tkey: "sett.pref.marketing", dkey: "sett.pref.marketing.d" },
 ];
 
 function Toggle({ on, onClick, testid }) {
@@ -172,8 +172,8 @@ export default function Settings() {
     e.target.value = "";
     if (!file) return;
     setToneErr("");
-    if (!file.type.startsWith("audio/")) { setToneErr("Please choose an audio file (mp3, m4a, wav…)."); return; }
-    if (file.size > 4 * 1024 * 1024) { setToneErr("File too large — keep it under ~4 MB (about a 30-second tone)."); return; }
+    if (!file.type.startsWith("audio/")) { setToneErr(t("sett.tone.audioOnly")); return; }
+    if (file.size > 4 * 1024 * 1024) { setToneErr(t("sett.tone.tooLarge")); return; }
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result;
@@ -183,20 +183,20 @@ export default function Settings() {
         // Allow a little slack (true 30s files often report 30.x), and don't
         // reject when the browser can't read the duration (Infinity/NaN — common
         // with some MP3s) — just accept it.
-        if (isFinite(dur) && dur > 35) { setToneErr("Ringtone must be 30 seconds or shorter."); return; }
+        if (isFinite(dur) && dur > 35) { setToneErr(t("sett.tone.tooLong")); return; }
         try {
           localStorage.setItem("nk_custom_ringtone", dataUrl);
           localStorage.setItem("nk_custom_ringtone_name", file.name);
-        } catch (_) { setToneErr("Couldn't save — storage is full. Try a smaller file."); return; }
+        } catch (_) { setToneErr(t("sett.tone.storageFull")); return; }
         setCustomTone(dataUrl);
         setCustomToneName(file.name);
         setPrefs((p) => ({ ...p, ringtone: "custom" }));
         try { localStorage.setItem("nk_ringtone", "custom"); } catch (_) {}
       };
-      a.onerror = () => setToneErr("Couldn't read that audio file. Try another.");
+      a.onerror = () => setToneErr(t("sett.tone.readErr"));
       a.src = dataUrl;
     };
-    reader.onerror = () => setToneErr("Couldn't read that file.");
+    reader.onerror = () => setToneErr(t("sett.tone.readErr2"));
     reader.readAsDataURL(file);
   };
   useEffect(() => () => stopPreview(), []);
@@ -235,8 +235,8 @@ export default function Settings() {
     try {
       const r = await api.put("/auth/me", { name: name.trim(), phone: phone.trim(), notify_prefs: prefs, avatar_base64: avatar || "" });
       setUser(r.data);
-      setNotice("Profile updated.");
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not save your changes."); }
+      setNotice(t("sett.profileUpdated"));
+    } catch (e) { setErr(e?.response?.data?.detail || t("sett.saveErr")); }
     finally { setBusy(false); }
   };
 
@@ -245,21 +245,21 @@ export default function Settings() {
     try {
       await api.post("/auth/change-password", pwd);
       setPwd({ old_password: "", new_password: "" });
-      setPwdMsg("Password changed.");
-    } catch (e) { setPwdErr(e?.response?.data?.detail || "Could not change password."); }
+      setPwdMsg(t("sett.pwdChanged"));
+    } catch (e) { setPwdErr(e?.response?.data?.detail || t("sett.pwdErr")); }
     finally { setPwdBusy(false); }
   };
 
   // Open the verify sheet and immediately request an OTP to the typed number.
   const startPhoneVerify = async () => {
-    if (!phone.trim()) { setErr("Enter your mobile number first."); return; }
+    if (!phone.trim()) { setErr(t("sett.enterPhone")); return; }
     setPvErr(""); setPvCode(""); setPvDev(null); setPvChannel(null);
     setPvStep(1); setPvOpen(true); setPvBusy(true);
     try {
       const r = await api.post("/auth/phone/verify/request", { phone: phone.trim() });
       setPvDev(r.data.dev_code); setPvChannel(r.data.channel); setPvStep(2);
     } catch (e) {
-      setPvErr(e?.response?.data?.detail || "Could not send code"); setPvStep(1);
+      setPvErr(e?.response?.data?.detail || t("sett.sendErr")); setPvStep(1);
     } finally { setPvBusy(false); }
   };
 
@@ -269,23 +269,23 @@ export default function Settings() {
       const r = await api.post("/auth/phone/verify/confirm", { phone: phone.trim(), code: pvCode.trim() });
       setUser(r.data);                 // badge flips to Verified
       setPvOpen(false); setPvCode("");
-      setNotice("Mobile number verified.");
+      setNotice(t("sett.phoneVerified"));
     } catch (e) {
-      setPvErr(e?.response?.data?.detail || "Invalid or expired code");
+      setPvErr(e?.response?.data?.detail || t("sett.invalidCode"));
     } finally { setPvBusy(false); }
   };
 
   // Open the email-verify popup and send an OTP to the typed email.
   const startEmailVerify = async () => {
     const em = email.trim();
-    if (!em || !em.includes("@")) { setErr("Enter a valid email first."); return; }
+    if (!em || !em.includes("@")) { setErr(t("sett.enterEmail")); return; }
     setEvErr(""); setEvCode(""); setEvDev(null); setEvSent(false);
     setEvOpen(true); setEvBusy(true);
     try {
       const r = await api.post("/auth/email/verify/request", { email: em });
       setEvDev(r.data.dev_code); setEvSent(!!r.data.email_sent);
     } catch (e) {
-      setEvErr(e?.response?.data?.detail || "Could not send code");
+      setEvErr(e?.response?.data?.detail || t("sett.sendErr"));
     } finally { setEvBusy(false); }
   };
 
@@ -295,9 +295,9 @@ export default function Settings() {
       const r = await api.post("/auth/email/verify/confirm", { email: email.trim(), code: evCode.trim() });
       setUser(r.data);                 // email updated + badge -> Verified
       setEvOpen(false); setEvCode("");
-      setNotice("Email verified.");
+      setNotice(t("sett.emailVerified"));
     } catch (e) {
-      setEvErr(e?.response?.data?.detail || "Invalid or expired code");
+      setEvErr(e?.response?.data?.detail || t("sett.invalidCode"));
     } finally { setEvBusy(false); }
   };
 
@@ -317,15 +317,15 @@ export default function Settings() {
           <div data-testid="complete-profile-banner" className="glass" style={{ padding: "12px 16px", borderRadius: 14, marginBottom: 16, border: "1px solid rgba(245,165,36,.5)", background: "rgba(245,165,36,.1)", display: "flex", alignItems: "center", gap: 10 }}>
             <UserCog size={18} style={{ color: "#f5a524", flexShrink: 0 }} />
             <div style={{ fontSize: 13.5 }}>
-              <b>Complete your profile</b> — {nameIncomplete && "add your name"}{nameIncomplete && emailIncomplete && ", "}{emailIncomplete && "add & verify your email"}. It helps your family recognise you. You can do this anytime.
+              <b>{t("sett.completeTitle")}</b> — {nameIncomplete && t("sett.addName")}{nameIncomplete && emailIncomplete && ", "}{emailIncomplete && t("sett.addEmail")}{t("sett.completeTail")}
             </div>
           </div>
         )}
-        <span className="chip"><UserCog size={13} /> Account</span>
-        <h1 style={{ fontSize: 34, marginTop: 12, marginBottom: 20 }}>Profile & <span className="neon">preferences</span></h1>
+        <span className="chip"><UserCog size={13} /> {t("sett.accountChip")}</span>
+        <h1 style={{ fontSize: 34, marginTop: 12, marginBottom: 20 }}>{t("sett.title1")} <span className="neon">{t("sett.title2")}</span></h1>
 
         <form onSubmit={save} className="glass card-pad" style={{ padding: 26, marginBottom: 18 }}>
-          <h2 style={{ fontSize: 20, marginBottom: 14 }}>Your details</h2>
+          <h2 style={{ fontSize: 20, marginBottom: 14 }}>{t("sett.yourDetails")}</h2>
           {/* Avatar centered; only an "Add photo" button underneath. */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginBottom: 18 }}>
             <div data-testid="avatar-preview" style={{ width: 92, height: 92, borderRadius: "50%", background: "linear-gradient(135deg,#b3122f,#e92546)", display: "grid", placeItems: "center", overflow: "hidden", fontFamily: "Chakra Petch", fontSize: 36, fontWeight: 700, flexShrink: 0, border: "2px solid rgba(255,255,255,.15)" }}>
@@ -333,116 +333,116 @@ export default function Settings() {
             </div>
             <div style={{ textAlign: "center" }}>
               <input ref={fileRef} type="file" accept="image/*" onChange={pickAvatar} style={{ display: "none" }} data-testid="avatar-input" />
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileRef.current?.click()} data-testid="upload-avatar-btn"><Camera size={15} /> {avatar ? "Change photo" : "Add photo"}</button>
-              {avatar && <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={() => setAvatar("")} data-testid="remove-avatar-btn"><Trash2 size={14} color="#ff3b5c" /> Remove</button>}
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileRef.current?.click()} data-testid="upload-avatar-btn"><Camera size={15} /> {avatar ? t("sett.changePhoto") : t("sett.addPhoto")}</button>
+              {avatar && <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={() => setAvatar("")} data-testid="remove-avatar-btn"><Trash2 size={14} color="#ff3b5c" /> {t("common.remove")}</button>}
             </div>
           </div>
           <div className="grid grid-2">
-            <div className="field"><label>Full name</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} data-testid="settings-name" /></div>
+            <div className="field"><label>{t("sett.fullName")}</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} data-testid="settings-name" /></div>
             <div className="field">
               <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                <span>Phone</span>
+                <span>{t("common.phone")}</span>
                 {phoneIsVerified ? (
                   <span data-testid="phone-verified-badge" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#34d399" }}>
-                    <CheckCircle2 size={14} /> Verified
+                    <CheckCircle2 size={14} /> {t("sett.verified")}
                   </span>
                 ) : (
                   <span data-testid="phone-unverified-badge" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#f5a524" }}>
-                    <ShieldAlert size={14} /> Not verified
+                    <ShieldAlert size={14} /> {t("sett.notVerified")}
                   </span>
                 )}
               </label>
               <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} required data-testid="settings-phone" placeholder="+91 …" />
               {!phoneIsVerified && (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={startPhoneVerify} disabled={pvBusy} data-testid="phone-verify-btn" style={{ marginTop: 8 }}>
-                  <ShieldAlert size={14} /> Verify this number
+                  <ShieldAlert size={14} /> {t("sett.verifyNumber")}
                 </button>
               )}
             </div>
           </div>
 
-          <Modal open={pvOpen} onClose={() => { setPvOpen(false); setPvErr(""); }} title="Verify your mobile number">
+          <Modal open={pvOpen} onClose={() => { setPvOpen(false); setPvErr(""); }} title={t("sett.verifyPhoneTitle")}>
             <div style={{ display: "grid", gap: 12 }}>
               <p className="muted" style={{ fontSize: 13.5, margin: 0 }}>
-                We’re sending a 6-digit code to <b style={{ color: "#fff" }}>{phone.trim()}</b>. Verifying it sets this as your account number so future mobile-OTP logins always find your data.
+                {t("sett.verifyPhoneBody1")} <b style={{ color: "#fff" }}>{phone.trim()}</b>{t("sett.verifyPhoneBody2")}
               </p>
               {pvDev ? (
                 <div className="glass" style={{ padding: 12, borderColor: "rgba(233,37,70,.4)" }} data-testid="phone-verify-dev-code">
-                  <p className="muted" style={{ fontSize: 12, margin: 0 }}>Preview mode (no live gateway) — your code:</p>
+                  <p className="muted" style={{ fontSize: 12, margin: 0 }}>{t("sett.previewLive")}</p>
                   <p className="neon head" style={{ fontSize: 26, letterSpacing: 4, margin: "4px 0 0" }}>{pvDev}</p>
                 </div>
               ) : pvStep === 2 ? (
                 <div className="glass" style={{ padding: "10px 12px", fontSize: 13, borderColor: "rgba(52,211,153,.35)" }} data-testid="phone-verify-sent">
-                  A 6-digit code was sent to your {pvChannel === "whatsapp" ? "WhatsApp" : "mobile"}.
+                  {pvChannel === "whatsapp" ? t("sett.codeSentWa") : t("sett.codeSentSms")}
                 </div>
               ) : null}
               <div className="field" style={{ margin: 0 }}>
-                <label>Enter 6-digit code</label>
+                <label>{t("auth.otp.enterCode")}</label>
                 <input className="input" value={pvCode} onChange={(e) => setPvCode(e.target.value)} inputMode="numeric" placeholder="••••••" data-testid="phone-verify-code" />
               </div>
               {pvErr && <p style={{ color: "var(--danger)", fontSize: 13, margin: 0 }} data-testid="phone-verify-error">{pvErr}</p>}
               <button type="button" className="btn btn-primary btn-block" onClick={confirmPhoneVerify} disabled={pvBusy || !pvCode.trim()} data-testid="phone-verify-confirm">
-                {pvBusy ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />} {pvBusy ? "Verifying…" : "Verify number"}
+                {pvBusy ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />} {pvBusy ? t("sett.verifying") : t("sett.verifyNumberBtn")}
               </button>
-              <button type="button" className="btn btn-ghost btn-block" onClick={startPhoneVerify} disabled={pvBusy} data-testid="phone-verify-resend">Resend code</button>
+              <button type="button" className="btn btn-ghost btn-block" onClick={startPhoneVerify} disabled={pvBusy} data-testid="phone-verify-resend">{t("auth.fp.resend")}</button>
             </div>
           </Modal>
           <div className="field" style={{ marginBottom: 0 }}>
             <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <span>Email</span>
+              <span>{t("sett.email")}</span>
               {emailIsVerified ? (
                 <span data-testid="email-verified-badge" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#34d399" }}>
-                  <CheckCircle2 size={14} /> Verified
+                  <CheckCircle2 size={14} /> {t("sett.verified")}
                 </span>
               ) : (
                 <span data-testid="email-unverified-badge" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#f5a524" }}>
-                  <ShieldAlert size={14} /> Not verified
+                  <ShieldAlert size={14} /> {t("sett.notVerified")}
                 </span>
               )}
             </label>
             <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="settings-email" placeholder="you@example.com" />
             {!emailIsVerified && (
               <button type="button" className="btn btn-ghost btn-sm" onClick={startEmailVerify} disabled={evBusy} data-testid="email-verify-btn" style={{ marginTop: 8 }}>
-                <ShieldAlert size={14} /> Verify this email
+                <ShieldAlert size={14} /> {t("sett.verifyEmail")}
               </button>
             )}
           </div>
 
-          <Modal open={evOpen} onClose={() => { setEvOpen(false); setEvErr(""); }} title="Verify your email">
+          <Modal open={evOpen} onClose={() => { setEvOpen(false); setEvErr(""); }} title={t("sett.verifyEmailTitle")}>
             <div style={{ display: "grid", gap: 12 }}>
               <p className="muted" style={{ fontSize: 13.5, margin: 0 }}>
-                We’re sending a 6-digit code to <b style={{ color: "#fff" }}>{email.trim()}</b>. Enter it to set and verify this email on your account.
+                {t("sett.verifyEmailBody1")} <b style={{ color: "#fff" }}>{email.trim()}</b>{t("sett.verifyEmailBody2")}
               </p>
               {evDev ? (
                 <div className="glass" style={{ padding: 12, borderColor: "rgba(233,37,70,.4)" }} data-testid="email-verify-dev-code">
-                  <p className="muted" style={{ fontSize: 12, margin: 0 }}>Preview mode (email not set up yet) — your code:</p>
+                  <p className="muted" style={{ fontSize: 12, margin: 0 }}>{t("sett.previewEmail")}</p>
                   <p className="neon head" style={{ fontSize: 26, letterSpacing: 4, margin: "4px 0 0" }}>{evDev}</p>
                 </div>
               ) : evSent ? (
                 <div className="glass" style={{ padding: "10px 12px", fontSize: 13, borderColor: "rgba(52,211,153,.35)" }} data-testid="email-verify-sent">
-                  A 6-digit code was emailed to you. Check inbox (and spam).
+                  {t("sett.emailSent")}
                 </div>
               ) : null}
               <div className="field" style={{ margin: 0 }}>
-                <label>Enter 6-digit code</label>
+                <label>{t("auth.otp.enterCode")}</label>
                 <input className="input" value={evCode} onChange={(e) => setEvCode(e.target.value)} inputMode="numeric" placeholder="••••••" data-testid="email-verify-code" />
               </div>
               {evErr && <p style={{ color: "var(--danger)", fontSize: 13, margin: 0 }} data-testid="email-verify-error">{evErr}</p>}
               <button type="button" className="btn btn-primary btn-block" onClick={confirmEmailVerify} disabled={evBusy || !evCode.trim()} data-testid="email-verify-confirm">
-                {evBusy ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />} {evBusy ? "Verifying…" : "Verify email"}
+                {evBusy ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />} {evBusy ? t("sett.verifying") : t("sett.verifyEmailBtn")}
               </button>
-              <button type="button" className="btn btn-ghost btn-block" onClick={startEmailVerify} disabled={evBusy} data-testid="email-verify-resend">Resend code</button>
+              <button type="button" className="btn btn-ghost btn-block" onClick={startEmailVerify} disabled={evBusy} data-testid="email-verify-resend">{t("auth.fp.resend")}</button>
             </div>
           </Modal>
 
-          <h2 style={{ fontSize: 20, margin: "22px 0 10px" }}>Notification preferences</h2>
+          <h2 style={{ fontSize: 20, margin: "22px 0 10px" }}>{t("sett.notifPrefs")}</h2>
           <div className="grid" style={{ gap: 8 }}>
             {PREF_ROWS.map((row) => (
               <div key={row.key} className="glass" style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px" }} data-testid={`pref-row-${row.key}`}>
                 <span style={{ color: "#e92546" }}>{row.icon}</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 15 }}>{row.title}</div>
-                  <div className="muted" style={{ fontSize: 13 }}>{row.desc}</div>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>{t(row.tkey)}</div>
+                  <div className="muted" style={{ fontSize: 13 }}>{t(row.dkey)}</div>
                 </div>
                 <Toggle on={!!prefs[row.key]} onClick={() => togglePref(row.key)} testid={`pref-toggle-${row.key}`} />
               </div>
@@ -452,8 +452,8 @@ export default function Settings() {
           <div className="glass" style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", marginTop: 8 }} data-testid="ringtone-row">
             <span style={{ color: "#e92546", flexShrink: 0 }}><Phone size={18} /></span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 15 }}>Incoming call ringtone</div>
-              <div className="muted" style={{ fontSize: 13 }}>Tone that plays when someone calls you from a scanned QR.</div>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>{t("sett.ringtone")}</div>
+              <div className="muted" style={{ fontSize: 13 }}>{t("sett.ringtoneDesc")}</div>
             </div>
             <button type="button" className="btn btn-ghost btn-sm" data-testid="ringtone-open" onClick={() => setTonePicker(true)}
               style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, maxWidth: 150, overflow: "hidden" }}>
@@ -464,7 +464,7 @@ export default function Settings() {
             </button>
           </div>
 
-          <BottomSheet open={tonePicker} onClose={() => { stopPreview(); setTonePicker(false); }} title="Incoming call ringtone">
+          <BottomSheet open={tonePicker} onClose={() => { stopPreview(); setTonePicker(false); }} title={t("sett.ringtone")}>
             <div style={{ display: "grid", gap: 8 }}>
               {RINGTONES.map((r) => (
                 <ToneRow key={r.id} testid={`tone-${r.id}`} name={r.name}
@@ -483,8 +483,8 @@ export default function Settings() {
                   background: "rgba(255,255,255,.04)", border: "1px dashed rgba(233,37,70,.5)", color: "#fff", marginTop: 2 }}>
                 <span style={{ width: 40, height: 40, borderRadius: 11, display: "grid", placeItems: "center", background: "rgba(233,37,70,.14)", color: "#ff5a74", flexShrink: 0 }}><Upload size={18} /></span>
                 <span style={{ flex: 1, textAlign: "left" }}>
-                  <span style={{ fontWeight: 600, display: "block" }}>Choose own ringtone</span>
-                  <span className="muted" style={{ fontSize: 12.5 }}>Upload from your device · max 30 seconds</span>
+                  <span style={{ fontWeight: 600, display: "block" }}>{t("sett.chooseOwn")}</span>
+                  <span className="muted" style={{ fontSize: 12.5 }}>{t("sett.uploadFrom")}</span>
                 </span>
               </button>
               <input ref={toneFileRef} type="file" accept="audio/*" onChange={pickCustomTone} style={{ display: "none" }} data-testid="tone-file" />
@@ -496,49 +496,49 @@ export default function Settings() {
             <div className="glass" style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", marginTop: 8 }} data-testid="callsetup-row">
               <span style={{ color: "#e92546", flexShrink: 0 }}><Phone size={18} /></span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>Lock-screen calls setup</div>
-                <div className="muted" style={{ fontSize: 13 }}>Make calls ring full-screen even when locked (notifications · battery · autostart).</div>
+                <div style={{ fontWeight: 600, fontSize: 15 }}>{t("sett.lockCalls")}</div>
+                <div className="muted" style={{ fontSize: 13 }}>{t("sett.lockCallsDesc")}</div>
               </div>
-              <button type="button" className="btn btn-ghost btn-sm" data-testid="open-callsetup" onClick={openCallSetup} style={{ flexShrink: 0 }}>Open</button>
+              <button type="button" className="btn btn-ghost btn-sm" data-testid="open-callsetup" onClick={openCallSetup} style={{ flexShrink: 0 }}>{t("scan.open")}</button>
             </div>
           )}
 
           {notice && <p style={{ color: "#e92546", fontWeight: 600, marginTop: 14 }} data-testid="settings-notice"><CheckCircle2 size={15} style={{ verticalAlign: "-2px" }} /> {notice}</p>}
           {err && <p style={{ color: "var(--danger)", fontSize: 13, marginTop: 14 }} data-testid="settings-error">{err}</p>}
-          <button className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16 }} data-testid="save-settings">{busy ? <Loader2 size={16} className="spin" /> : <Save size={16} />} {busy ? "Saving…" : "Save changes"}</button>
+          <button className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16 }} data-testid="save-settings">{busy ? <Loader2 size={16} className="spin" /> : <Save size={16} />} {busy ? t("common.saving") : t("common.save")}</button>
         </form>
 
         {/* Wallet / transactions / refer — placed below "Your details" so the user reaches them after their profile. */}
         <button type="button" className="glass glass-hover" onClick={() => navigate("/wallet")} data-testid="go-wallet"
           style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(245,165,36,.16)", border: "1px solid rgba(245,165,36,.4)", color: "#f5a524" }}><WalletIcon size={18} /></span>
-          <span style={{ flex: 1 }}><b>My wallet</b><div className="muted" style={{ fontSize: 13 }}>Nek Coins balance &amp; history</div></span>
+          <span style={{ flex: 1 }}><b>{t("sett.wallet")}</b><div className="muted" style={{ fontSize: 13 }}>{t("sett.wallet.d")}</div></span>
           <ChevronRight size={18} className="muted" />
         </button>
 
         <button type="button" className="glass glass-hover" onClick={() => navigate("/transactions")} data-testid="go-transactions"
           style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(233,37,70,.14)", border: "1px solid rgba(233,37,70,.4)", color: "#ff5a74" }}><Receipt size={18} /></span>
-          <span style={{ flex: 1 }}><b>Transaction history</b><div className="muted" style={{ fontSize: 13 }}>Your payments & downloadable bills</div></span>
+          <span style={{ flex: 1 }}><b>{t("sett.transactions")}</b><div className="muted" style={{ fontSize: 13 }}>{t("sett.transactions.d")}</div></span>
           <ChevronRight size={18} className="muted" />
         </button>
 
         <button type="button" className="glass glass-hover" onClick={() => navigate("/referral")} data-testid="go-referral"
           style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 18, display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(233,37,70,.14)", border: "1px solid rgba(233,37,70,.4)", color: "#ff5a74" }}><Gift size={18} /></span>
-          <span style={{ flex: 1 }}><b>Refer &amp; earn</b><div className="muted" style={{ fontSize: 13 }}>Invite friends, earn tokens &amp; get discounts</div></span>
+          <span style={{ flex: 1 }}><b>{t("sett.refer")}</b><div className="muted" style={{ fontSize: 13 }}>{t("sett.refer.d")}</div></span>
           <ChevronRight size={18} className="muted" />
         </button>
 
         <div className="glass card-pad" style={{ padding: 26, marginBottom: 18 }} data-testid="appearance-card">
-          <h2 style={{ fontSize: 20, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}><Sun size={18} /> Appearance</h2>
-          <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>Choose how Nek Sathi looks on this device.</p>
+          <h2 style={{ fontSize: 20, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}><Sun size={18} /> {t("sett.appearance")}</h2>
+          <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>{t("sett.appearanceSub")}</p>
           <div style={{ display: "grid", gap: 10 }}>
             {[
-              { id: "light", label: "Light", desc: "Always bright", Icon: Sun },
-              { id: "dark", label: "Dark", desc: "Always dark", Icon: Moon },
-              { id: "system", label: "System default", desc: "Match your phone's setting", Icon: Monitor },
-            ].map(({ id, label, desc, Icon }) => {
+              { id: "light", lkey: "sett.themeLight", dkey: "sett.themeLight.d", Icon: Sun },
+              { id: "dark", lkey: "sett.themeDark", dkey: "sett.themeDark.d", Icon: Moon },
+              { id: "system", lkey: "sett.themeSystem", dkey: "sett.themeSystem.d", Icon: Monitor },
+            ].map(({ id, lkey, dkey, Icon }) => {
               const on = theme === id;
               return (
                 <button
@@ -565,8 +565,8 @@ export default function Settings() {
                     <Icon size={19} />
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontWeight: 700, fontSize: 15, display: "block" }}>{label}</span>
-                    <span className="muted" style={{ fontSize: 12.5 }}>{desc}</span>
+                    <span style={{ fontWeight: 700, fontSize: 15, display: "block" }}>{t(lkey)}</span>
+                    <span className="muted" style={{ fontSize: 12.5 }}>{t(dkey)}</span>
                   </span>
                   {on
                     ? <Check size={20} style={{ color: "var(--accent)", flexShrink: 0 }} />
@@ -575,7 +575,7 @@ export default function Settings() {
               );
             })}
           </div>
-          <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>System follows your phone's light/dark setting. Default is Light.</p>
+          <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>{t("sett.themeNote")}</p>
         </div>
 
         <div className="glass card-pad" style={{ padding: 26, marginBottom: 18 }} data-testid="language-card">
@@ -611,31 +611,29 @@ export default function Settings() {
         <GoogleDriveCard />
 
         <form onSubmit={changePassword} className="glass card-pad" style={{ padding: 26 }}>
-          <h2 style={{ fontSize: 20, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}><KeyRound size={18} /> Change password</h2>
+          <h2 style={{ fontSize: 20, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}><KeyRound size={18} /> {t("sett.changePwd")}</h2>
           <div className="grid grid-2">
-            <div className="field"><label>Current password</label><input className="input" type="password" value={pwd.old_password} onChange={(e) => setPwd({ ...pwd, old_password: e.target.value })} required data-testid="settings-old-password" /></div>
-            <div className="field"><label>New password</label><input className="input" type="password" value={pwd.new_password} onChange={(e) => setPwd({ ...pwd, new_password: e.target.value })} required minLength={6} data-testid="settings-new-password" placeholder="min 6 chars" /></div>
+            <div className="field"><label>{t("sett.currentPwd")}</label><input className="input" type="password" value={pwd.old_password} onChange={(e) => setPwd({ ...pwd, old_password: e.target.value })} required data-testid="settings-old-password" /></div>
+            <div className="field"><label>{t("auth.fp.newPw")}</label><input className="input" type="password" value={pwd.new_password} onChange={(e) => setPwd({ ...pwd, new_password: e.target.value })} required minLength={6} data-testid="settings-new-password" placeholder={t("sett.min6")} /></div>
           </div>
           {pwdMsg && <p style={{ color: "#e92546", fontWeight: 600, marginBottom: 10 }} data-testid="password-notice">{pwdMsg}</p>}
           {pwdErr && <p style={{ color: "var(--danger)", fontSize: 13, marginBottom: 10 }} data-testid="password-error">{pwdErr}</p>}
-          <button className="btn btn-ghost btn-block" disabled={pwdBusy} data-testid="change-password-btn">{pwdBusy ? "Updating…" : "Update password"}</button>
+          <button className="btn btn-ghost btn-block" disabled={pwdBusy} data-testid="change-password-btn">{pwdBusy ? t("sett.updating") : t("sett.updatePwd")}</button>
         </form>
 
         <div className="glass card-pad" data-testid="account-card" style={{ padding: 26, borderColor: "rgba(255,59,92,.35)" }}>
-          <h2 style={{ fontSize: 20, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}><LogOut size={18} /> Account</h2>
+          <h2 style={{ fontSize: 20, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}><LogOut size={18} /> {t("sett.account")}</h2>
           <button className="btn btn-ghost btn-block" data-testid="settings-logout" onClick={() => { logout(); navigate("/login"); }} style={{ justifyContent: "center", color: "#ff7591" }}>
-            <LogOut size={16} /> Logout
+            <LogOut size={16} /> {t("sett.logout")}
           </button>
 
           <div style={{ marginTop: 20, paddingTop: 18, borderTop: "1px solid rgba(255,59,92,.25)" }}>
-            <h3 style={{ fontSize: 16, margin: "0 0 8px", display: "flex", alignItems: "center", gap: 8 }}><Trash2 size={16} color="#ff3b5c" /> Delete account</h3>
+            <h3 style={{ fontSize: 16, margin: "0 0 8px", display: "flex", alignItems: "center", gap: 8 }}><Trash2 size={16} color="#ff3b5c" /> {t("sett.deleteAccount")}</h3>
             <p className="muted" style={{ fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
-              You can request permanent deletion of your Nek Sathi account and the personal data linked to it
-              (profile, vehicles, Smart QR, family safety info and preferences). Some data may be retained where
-              required for legal, security or fraud-prevention reasons. Once processed, account access may no longer be available.
+              {t("sett.deleteBody")}
             </p>
             <button className="btn btn-danger btn-block" data-testid="settings-delete-account" onClick={() => navigate("/support")} style={{ justifyContent: "center" }}>
-              <Trash2 size={15} /> Request account deletion
+              <Trash2 size={15} /> {t("sett.requestDeletion")}
             </button>
           </div>
         </div>
