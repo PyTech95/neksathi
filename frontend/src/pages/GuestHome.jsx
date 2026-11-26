@@ -28,7 +28,7 @@ export default function GuestHome() {
     <div className="page" data-testid="guest-home">
       <div className="container-nk" style={{ maxWidth: 680 }}>
         <div className="center" style={{ padding: "8px 0 18px" }}>
-          <img src="/website/logo-mark.png" alt="Nek Sathi" style={{ width: 64, height: 64, borderRadius: 16, margin: "0 auto 12px" }} />
+          <img src="/website/logo-icon.png" alt="Nek Sathi" style={{ width: 64, height: 64, borderRadius: 16, margin: "0 auto 12px" }} />
           <h1 style={{ fontSize: 30, margin: "0 0 6px" }}>Welcome to <span className="neon">Nek Sathi</span></h1>
           <p className="muted" style={{ fontSize: 14.5, margin: "0 auto", maxWidth: 440 }}>
             आपकी सुरक्षा, हमारी ज़िम्मेदारी — explore what Nek Sathi does. Log in free to start using any feature.

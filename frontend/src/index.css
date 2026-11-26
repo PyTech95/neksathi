@@ -420,7 +420,7 @@ h1, h2, h3, .head { font-family: 'Chakra Petch', sans-serif; letter-spacing: -0.
 .mobile-drawer-sep { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 12px 14px 4px; }
 
 /* ---- Brand logo + top-bar cluster ---- */
-.brand-logo { width: 36px; height: 36px; border-radius: 10px; background: #fff; padding: 3px; object-fit: contain; box-shadow: 0 6px 18px -6px rgba(233,37,70,.6); flex-shrink: 0; }
+.brand-logo { width: 36px; height: 36px; border-radius: 10px; object-fit: contain; box-shadow: 0 6px 18px -6px rgba(233,37,70,.45); flex-shrink: 0; }
 .nav-right { display: flex; align-items: center; gap: 8px; }
 
 /* ---- Bottom tab bar (mobile app) ---- */

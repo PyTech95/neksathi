@@ -275,7 +275,7 @@ function SplashGate({ children }) {
       {show && (
         <div className={"nk-splash" + (leaving ? " nk-splash--leave" : "")} data-testid="app-splash">
           <div className="nk-splash__center">
-            <img src="/website/logo-mark.png" className="nk-splash__logo" alt="Nek Sathi" />
+            <img src="/website/logo-icon.png" className="nk-splash__logo" alt="Nek Sathi" />
             <div className="nk-splash__tag">हर मुश्किल में</div>
             <div className="nk-splash__brand">Nek <span>Sathi</span></div>
             <div className="nk-splash__sub">आपकी सुरक्षा, हमारी ज़िम्मेदारी</div>

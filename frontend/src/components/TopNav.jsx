@@ -79,7 +79,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
   return (
     <nav className={`topnav${scrolled ? " scrolled" : ""}`} data-testid="top-nav">
       <Link to="/" className="brand" data-testid="brand-link">
-        <img src="/website/logo-mark.png" className="brand-logo" alt="Nek Sathi" />
+        <img src="/website/logo-icon.png" className="brand-logo" alt="Nek Sathi" />
         Nek<span className="neon">&nbsp;Sathi</span>
       </Link>
       <div className="nav-right">
@@ -216,7 +216,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
           <div className="mobile-overlay" data-testid="mobile-overlay" onClick={() => setMobileOpen(false)} />
           <div className="mobile-drawer" data-testid="mobile-drawer">
             <div className="mobile-drawer-head">
-              <span className="brand" style={{ fontSize: 18 }}><img src="/website/logo-mark.png" className="brand-logo" alt="Nek Sathi" style={{ width: 30, height: 30 }} />Nek<span className="neon">&nbsp;Sathi</span></span>
+              <span className="brand" style={{ fontSize: 18 }}><img src="/website/logo-icon.png" className="brand-logo" alt="Nek Sathi" style={{ width: 30, height: 30 }} />Nek<span className="neon">&nbsp;Sathi</span></span>
               <button aria-label="Close menu" data-testid="mobile-close-btn" onClick={() => setMobileOpen(false)} style={{ background: "none", border: "none", color: "var(--text)", cursor: "pointer" }}><X size={22} /></button>
             </div>
             <div className="mobile-drawer-body">
