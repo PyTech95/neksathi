@@ -9,6 +9,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CameraMetadata;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
@@ -222,6 +225,37 @@ public class NekNativePlugin extends Plugin {
             return;
         }
         call.resolve();
+    }
+
+    // -------------------------------------------------------------- torch --
+
+    // Turn the rear flashlight (torch) on or off. Uses CameraManager.setTorchMode
+    // (API 23+), which needs no CAMERA permission. Prefers a flash-capable rear
+    // camera, falling back to the first flash-capable camera.
+    @PluginMethod
+    public void setTorch(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        try {
+            CameraManager cm = (CameraManager) getContext().getSystemService(Context.CAMERA_SERVICE);
+            if (cm == null) { call.reject("camera service unavailable"); return; }
+            String camId = null, anyFlashId = null;
+            for (String id : cm.getCameraIdList()) {
+                CameraCharacteristics ch = cm.getCameraCharacteristics(id);
+                Boolean hasFlash = ch.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+                if (!Boolean.TRUE.equals(hasFlash)) continue;
+                if (anyFlashId == null) anyFlashId = id;
+                Integer facing = ch.get(CameraCharacteristics.LENS_FACING);
+                if (facing == null || facing == CameraMetadata.LENS_FACING_BACK) { camId = id; break; }
+            }
+            if (camId == null) camId = anyFlashId;
+            if (camId == null) { call.reject("no flashlight on this device"); return; }
+            cm.setTorchMode(camId, on);
+            JSObject ret = new JSObject();
+            ret.put("on", on);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("torch failed: " + e.getMessage());
+        }
     }
 
     // ---------------------------------------------------------- volume SOS --

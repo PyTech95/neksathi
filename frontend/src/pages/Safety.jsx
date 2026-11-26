@@ -9,6 +9,7 @@ import { API } from "@/lib/api";
 import { setCallAuth } from "@/lib/callsetup";
 import { isNativeApp, volumeSosStatus, setVolumeSos, testVolumeSos, requestSosPermissions } from "@/lib/volumesos";
 import SosDisplayCard from "@/components/SosDisplayCard";
+import FlashlightCard from "@/components/FlashlightCard";
 
 // App-only card: opt-in "SOS by volume button". Volume-up x3 within 5s on the
 // lock screen (or app closed) sends an SOS with location to the chosen family
@@ -748,6 +749,8 @@ export default function Safety() {
           </div>
         </div>
       </div>
+
+      <div style={{ marginTop: 18 }}><FlashlightCard /></div>
 
       {/* SOS recipients — who in the family circle receives this user's SOS */}
       <SosRecipients data={sosRec} onChange={load} />
