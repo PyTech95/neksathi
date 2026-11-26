@@ -17,6 +17,7 @@ import android.webkit.WebView;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -250,6 +251,28 @@ public class MainActivity extends BridgeActivity {
         }
         if (!toAsk.isEmpty()) {
             ActivityCompat.requestPermissions(this, toAsk.toArray(new String[0]), 1001);
+        }
+    }
+
+    // Hardware back: go to the previous in-app page (WebView / React Router
+    // history) instead of closing the app. Only on the first page (Home), a
+    // second back within 2s exits — the standard "press back again to exit".
+    private long lastBackPress = 0;
+
+    @Override
+    public void onBackPressed() {
+        WebView webView = null;
+        try { webView = getBridge().getWebView(); } catch (Exception e) { webView = null; }
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastBackPress < 2000) {
+            super.onBackPressed(); // leave the app from the home page
+        } else {
+            lastBackPress = now;
+            Toast.makeText(this, "Press back again to exit", Toast.LENGTH_SHORT).show();
         }
     }
 }

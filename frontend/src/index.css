@@ -38,9 +38,12 @@
 
 * { box-sizing: border-box; }
 
-html, body, #root { height: 100%; }
-/* Stop rubber-band over-scroll bounce (which also made the sticky header jitter). */
-html { overscroll-behavior-y: none; }
+/* `html` is the single scroll root so `position: sticky` on the top bar actually
+   sticks. (Previously height:100% on #root + overflow-x:hidden on body made BODY
+   a competing scroll container, which let the sticky header scroll away.) */
+html { height: 100%; overscroll-behavior-y: none; overflow-x: hidden; }
+body { min-height: 100%; }
+#root { min-height: 100%; }
 
 body {
   margin: 0;
@@ -48,7 +51,6 @@ body {
   color: var(--text);
   font-family: 'Manrope', -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
 }
 
 /* animated ambient background */

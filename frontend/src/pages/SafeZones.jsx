@@ -149,7 +149,7 @@ export default function SafeZones() {
       )}
 
       {show && (
-        <div className="modal-overlay" data-testid="zone-modal" onClick={() => setShow(false)} style={{ position: "fixed", inset: 0, background: "rgba(3,3,10,.7)", backdropFilter: "blur(6px)", display: "grid", placeItems: "center", zIndex: 100, padding: 16 }}>
+        <div className="modal-overlay" data-testid="zone-modal" onClick={() => setShow(false)} style={{ position: "fixed", inset: 0, background: "rgba(3,3,10,.7)", backdropFilter: "blur(6px)", display: "grid", placeItems: "center", zIndex: 9999, padding: 16, overflowY: "auto" }}>
           <form onClick={(e) => e.stopPropagation()} onSubmit={save} className="glass" style={{ width: "100%", maxWidth: 440, padding: 24, borderRadius: 18 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <h3 style={{ margin: 0 }}>Add safe zone</h3>
