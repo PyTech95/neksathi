@@ -115,6 +115,9 @@ class AlertOut(BaseModel):
     audio_base64: Optional[str] = None
     created_at: datetime
     contact_channels: List[str] = []
+    # Set when this alert mirrors an actionable incident — lets the feed show the
+    # respond UI (I'm coming / Mark resolved) inline for that item.
+    incident_id: Optional[str] = None
 
 
 class AccidentIn(BaseModel):

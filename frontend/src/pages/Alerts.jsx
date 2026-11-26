@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { Siren, ParkingCircle, Lock, Flame, Truck, Gauge, Video, Bell, MapPin, Phone, RefreshCw, Ban, Check, ChevronDown, Loader2, Lightbulb, PhoneMissed, MessageSquare } from "lucide-react";
+import IncidentCard from "@/components/IncidentCard";
 
 // Load a first page, then a few more on "View more" — a user with thousands of
 // alerts never loads them all at once.
@@ -37,6 +38,23 @@ export default function Alerts() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [blocked, setBlocked] = useState({}); // phone -> true once blocked this session
+  // Actionable incidents (wrong parking etc.), keyed by id — an alert carrying an
+  // incident_id is shown as a collapsible IncidentCard so people can respond here.
+  const [incMap, setIncMap] = useState({});
+  const [openInc, setOpenInc] = useState(() => new Set());
+  const toggleInc = (id) => setOpenInc((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const loadIncidents = async () => {
+    try {
+      const r = await api.get("/incidents");
+      const map = {};
+      (r.data?.results || []).forEach((i) => { map[i.id] = i; });
+      setIncMap(map);
+    } catch { /* feed still works without respond */ }
+  };
+  const respond = async (id, response) => { await api.post(`/incidents/${id}/respond`, { response }); loadIncidents(); };
+  const resolve = async (id) => { await api.post(`/incidents/${id}/resolve`); loadIncidents(); };
+  const extend = async (id) => { await api.post(`/incidents/${id}/extend`); loadIncidents(); };
 
   const load = async () => {
     setLoading(true);
@@ -48,6 +66,7 @@ export default function Alerts() {
       const page = Array.isArray(r.data) ? r.data : [];
       setAlerts(page);
       setTotal(c.data?.total ?? page.length);
+      loadIncidents();
     } finally {
       setLoading(false);
     }
@@ -95,6 +114,12 @@ export default function Alerts() {
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             {alerts.map((a) => {
+              // Actionable incident → show the collapsible respond card right here.
+              const inc = a.incident_id ? incMap[a.incident_id] : null;
+              if (inc) {
+                return <IncidentCard key={a.id} incident={inc} isOpen={openInc.has(inc.id)} onToggle={() => toggleInc(inc.id)}
+                  onRespond={respond} onResolve={resolve} onExtend={extend} />;
+              }
               const m = META[a.type] || { icon: <Bell size={17} />, color: "#ff4d67", label: pretty(a.type) };
               return (
                 <div key={a.id} className="glass" data-testid={`alert-row-${a.id}`} style={{ borderRadius: 14, padding: "12px 14px", display: "flex", gap: 12, alignItems: "flex-start" }}>
