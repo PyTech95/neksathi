@@ -9,6 +9,7 @@ from app.config import log
 from app.db import db
 from app.ratelimit import rate_limit
 from app.routers.commerce import plan_blocked, plan_state
+from app.routers.blocked import is_number_blocked
 from app.schemas import BridgeOut, BridgeReqIn, ClaimIn, PublicVehicleOut, ScanAlertIn
 from app.security import current_user
 from app.services.fcm import send_push
@@ -53,6 +54,10 @@ async def public_qr_alert(request: Request, qr_id: str, payload: ScanAlertIn):
     blocked = plan_blocked(v)
     if blocked:
         raise HTTPException(status_code=403, detail=blocked)
+    # Owner-blocked scanner number: silently drop (no alert, no notify) and return
+    # a benign success so the blocked scanner isn't told they're blocked.
+    if payload.scanner_phone and await is_number_blocked(v["owner_id"], payload.scanner_phone):
+        return {"id": None, "type": payload.type, "ok": True}
     contacts = [c async for c in db.contacts.find({"vehicle_id": v["id"]})]
     channels = []
     if payload.type == "emergency":

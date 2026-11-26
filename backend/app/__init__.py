@@ -25,7 +25,7 @@ from app.startup import on_startup, on_shutdown
 from app.routers import (
     misc, auth, vehicles, scan_public, alerts, incidents, family, circles,
     safezones, safety, tags, cards, devices, calls, integrations, dealer, org,
-    support, community, billing, commerce,
+    support, community, billing, commerce, blocked,
 )
 from app.routers import admin as admin_router
 from app.services.fcm import router as fcm_router
@@ -41,7 +41,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 _API_ROUTERS = [
     misc, auth, vehicles, scan_public, alerts, incidents, family, circles,
     safezones, safety, tags, cards, devices, calls, integrations, dealer, org,
-    support, community, billing, commerce,
+    support, community, billing, commerce, blocked,
 ]
 for _mod in _API_ROUTERS:
     app.include_router(_mod.router, prefix="/api")

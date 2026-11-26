@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { Siren, ParkingCircle, Lock, Flame, Truck, Gauge, Video, Bell, MapPin, Phone, RefreshCw } from "lucide-react";
+import { Siren, ParkingCircle, Lock, Flame, Truck, Gauge, Video, Bell, MapPin, Phone, RefreshCw, Ban, Check } from "lucide-react";
 
 const META = {
   emergency: { icon: <Siren size={18} />, color: "#ff3b5c", label: "Emergency" },
@@ -21,6 +21,7 @@ const fmt = (d) => {
 export default function Alerts() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [blocked, setBlocked] = useState({}); // phone -> true once blocked this session
 
   const load = async () => {
     setLoading(true);
@@ -32,6 +33,14 @@ export default function Alerts() {
     }
   };
   useEffect(() => { load(); }, []);
+
+  const blockNumber = async (phone) => {
+    if (!phone || blocked[phone]) return;
+    try {
+      await api.post("/me/blocked-numbers", { phone });
+      setBlocked((b) => ({ ...b, [phone]: true }));
+    } catch (_) {}
+  };
 
   return (
     <div className="page" data-testid="alerts-page">
@@ -70,6 +79,15 @@ export default function Alerts() {
                         <a href={`tel:${a.scanner_phone}`} className="neon" style={{ fontSize: 13, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
                           <Phone size={13} /> {a.scanner_phone}
                         </a>
+                      )}
+                      {a.scanner_phone && (
+                        blocked[a.scanner_phone] ? (
+                          <span className="muted" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 4 }} data-testid={`blocked-done-${a.id}`}><Check size={13} /> Blocked</span>
+                        ) : (
+                          <button onClick={() => blockNumber(a.scanner_phone)} data-testid={`block-${a.id}`} style={{ background: "none", border: "none", cursor: "pointer", color: "#ff5a74", fontSize: 12.5, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4, padding: 0 }}>
+                            <Ban size={13} /> Block
+                          </button>
+                        )
                       )}
                       {a.scanner_lat != null && a.scanner_lng != null && (
                         <a href={`https://www.openstreetmap.org/?mlat=${a.scanner_lat}&mlon=${a.scanner_lng}#map=17/${a.scanner_lat}/${a.scanner_lng}`} target="_blank" rel="noreferrer" className="muted" style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 4 }}>
