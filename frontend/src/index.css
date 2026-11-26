@@ -269,6 +269,26 @@ h1, h2, h3, .head { font-family: 'Chakra Petch', sans-serif; letter-spacing: -0.
 .card-pad { padding: 22px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; background: rgba(179,18,47,.16); border: 1px solid rgba(179,18,47,.35); color: #ffd0d8; letter-spacing: .04em; text-transform: uppercase; }
 
+/* Branded opening splash: logo zoom-in, tagline + "Made in भारत" fade up. */
+.nk-splash { position: fixed; inset: 0; z-index: 99999; background: var(--bg, #ffffff); color: var(--text, #111); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.nk-splash--leave { animation: nk-splash-out .5s ease forwards; }
+@keyframes nk-splash-out { to { opacity: 0; visibility: hidden; } }
+.nk-splash__center { display: flex; flex-direction: column; align-items: center; }
+.nk-splash__logo { width: 118px; height: 118px; object-fit: contain; border-radius: 26px; animation: nk-logo-zoom .9s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes nk-logo-zoom { 0% { transform: scale(.25); opacity: 0; } 60% { opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+.nk-splash__tag { margin-top: 20px; font-size: 15px; color: var(--muted, #666); opacity: 0; animation: nk-splash-up .5s ease .6s both; }
+.nk-splash__brand { font-size: 34px; font-weight: 800; letter-spacing: -.01em; margin-top: 2px; opacity: 0; animation: nk-splash-up .5s ease .75s both; }
+.nk-splash__brand span { color: #e11d48; }
+.nk-splash__sub { margin-top: 8px; font-size: 13px; color: var(--muted, #666); opacity: 0; animation: nk-splash-up .5s ease .9s both; }
+@keyframes nk-splash-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.nk-splash__made { position: absolute; bottom: 46px; left: 0; right: 0; opacity: 0; animation: nk-splash-up .5s ease 1.15s both; }
+.nk-splash__made span { font-weight: 800; font-size: 14px; letter-spacing: .08em; }
+.nk-splash__flag { display: flex; width: 92px; height: 5px; margin: 7px auto 0; border-radius: 3px; overflow: hidden; }
+.nk-splash__flag i { flex: 1; }
+.nk-splash__flag i:nth-child(1) { background: #FF9933; }
+.nk-splash__flag i:nth-child(2) { background: #ffffff; }
+.nk-splash__flag i:nth-child(3) { background: #138808; }
+
 /* info-row: icon + label on the left (never wraps under the icon), value on the
    right (shrinks/wraps instead). Reusable so every "label · value" line in the
    app lines up the same way on phones and desktop. */

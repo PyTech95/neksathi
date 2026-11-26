@@ -1,5 +1,5 @@
 import "@/App.css";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { getThemePref, resolveTheme, applyTheme } from "@/lib/theme";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -240,10 +240,44 @@ function Shell() {
   );
 }
 
+// Branded opening splash (native app only): the logo zooms in, the tagline and
+// "Made in भारत" fade up, then it hands over to the app after ~2.8s.
+function SplashGate({ children }) {
+  const [show, setShow] = useState(() => { try { return Capacitor.isNativePlatform(); } catch (_) { return false; } });
+  const [leaving, setLeaving] = useState(false);
+  useEffect(() => {
+    if (!show) return;
+    const t1 = setTimeout(() => setLeaving(true), 2300);
+    const t2 = setTimeout(() => setShow(false), 2800);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [show]);
+  return (
+    <>
+      {children}
+      {show && (
+        <div className={"nk-splash" + (leaving ? " nk-splash--leave" : "")} data-testid="app-splash">
+          <div className="nk-splash__center">
+            <img src="/website/logo-mark.png" className="nk-splash__logo" alt="Nek Sathi" />
+            <div className="nk-splash__tag">हर मुश्किल में</div>
+            <div className="nk-splash__brand">Nek <span>Sathi</span></div>
+            <div className="nk-splash__sub">आपकी सुरक्षा, हमारी ज़िम्मेदारी</div>
+          </div>
+          <div className="nk-splash__made">
+            <span>Made in भारत</span>
+            <div className="nk-splash__flag"><i></i><i></i><i></i></div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function App() {
   return (
-    <AuthProvider>
-      <Shell />
-    </AuthProvider>
+    <SplashGate>
+      <AuthProvider>
+        <Shell />
+      </AuthProvider>
+    </SplashGate>
   );
 }
