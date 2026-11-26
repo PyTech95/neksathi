@@ -124,14 +124,35 @@ public class LocationService extends Service implements LocationListener {
         String api = auth.getString("api", "");
         String token = auth.getString("token", "");
         if (api.isEmpty() || token.isEmpty()) return;
-        HttpURLConnection c = null;
         try {
             JSONObject body = new JSONObject();
             body.put("latitude", lat);
             body.put("longitude", lng);
             if (speedKmh >= 0) body.put("speed_kmh", speedKmh);
             if (batt >= 0) body.put("battery", batt);
-            c = (HttpURLConnection) new URL(api + "/me/status").openConnection();
+            doPost(api + "/me/status", token, body.toString());
+        } catch (Exception ignored) {}
+
+        // Also update THIS phone's device record (if one is bound) so a lost
+        // phone can be located from the owner's other device.
+        try {
+            String deviceId = getApplicationContext()
+                    .getSharedPreferences(TheftAdminReceiver.PREFS, Context.MODE_PRIVATE)
+                    .getString("device_id", "");
+            if (deviceId != null && !deviceId.isEmpty()) {
+                JSONObject dbody = new JSONObject();
+                dbody.put("latitude", lat);
+                dbody.put("longitude", lng);
+                if (batt >= 0) dbody.put("battery", batt);
+                doPost(api + "/devices/" + deviceId + "/ping", token, dbody.toString());
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void doPost(String url, String token, String json) {
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(url).openConnection();
             c.setRequestMethod("POST");
             c.setConnectTimeout(TIMEOUT_MS);
             c.setReadTimeout(TIMEOUT_MS);
@@ -139,7 +160,7 @@ public class LocationService extends Service implements LocationListener {
             c.setRequestProperty("Content-Type", "application/json");
             c.setDoOutput(true);
             OutputStream os = c.getOutputStream();
-            os.write(body.toString().getBytes("UTF-8"));
+            os.write(json.getBytes("UTF-8"));
             os.close();
             c.getResponseCode();
         } catch (Exception ignored) {

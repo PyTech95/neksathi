@@ -14,6 +14,12 @@ class DeviceIn(BaseModel):
     super_admin_alerts: bool = True
 
 
+class DevicePingIn(BaseModel):
+    latitude: float
+    longitude: float
+    battery: Optional[int] = Field(default=None, ge=0, le=100)
+
+
 class DeviceOut(BaseModel):
     id: str
     name: str
@@ -25,6 +31,11 @@ class DeviceOut(BaseModel):
     siren_active: bool = False
     created_at: datetime
     last_seen: Optional[datetime] = None
+    # Last-known location for "locate a lost device".
+    last_lat: Optional[float] = None
+    last_lng: Optional[float] = None
+    last_located_at: Optional[datetime] = None
+    last_battery: Optional[int] = None
 
 
 class IntruderIn(BaseModel):

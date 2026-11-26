@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, 
 from app.services.email import send_email
 from app.db import db
 from app.ratelimit import rate_limit
-from app.schemas import DeviceIn, DeviceOut, IntruderEventOut, IntruderIn, SimSwapIn, SirenIn
+from app.schemas import DeviceIn, DeviceOut, DevicePingIn, IntruderEventOut, IntruderIn, SimSwapIn, SirenIn
 from app.security import _prefs, current_user
 from app.services.fcm import send_push
 from app.services.gdrive import _gdrive_autobackup
@@ -57,6 +57,22 @@ async def delete_device(device_id: str, user: dict = Depends(current_user)):
     await db.intruder_events.delete_many({"device_id": device_id, "user_id": user["id"]})
     await db.sim_events.delete_many({"device_id": device_id, "user_id": user["id"]})
     return {"deleted": True}
+
+
+@router.post("/devices/{device_id}/ping", response_model=DeviceOut)
+async def ping_device(device_id: str, payload: DevicePingIn, user: dict = Depends(current_user)):
+    """A device reports its own location so the owner can locate it if it's lost.
+    Updates last-known location + last_seen on the device record."""
+    d = await db.devices.find_one({"id": device_id, "user_id": user["id"]})
+    if not d:
+        raise HTTPException(status_code=404, detail="Device not found")
+    upd = {"last_lat": payload.latitude, "last_lng": payload.longitude,
+           "last_located_at": now_utc(), "last_seen": now_utc()}
+    if payload.battery is not None:
+        upd["last_battery"] = int(payload.battery)
+    await db.devices.update_one({"id": device_id}, {"$set": upd})
+    d.update(upd)
+    return _device_out(d)
 
 
 @router.get("/devices/{device_id}/lock-state")

@@ -3,8 +3,19 @@ import api, { API } from "@/lib/api";
 import { ShieldCheck, Smartphone, Plus, Trash2, Pencil, Lock, Unlock, X, Loader2, MapPin, Camera, AlertTriangle, Info, Volume2, VolumeX, Signal, CheckCircle2, Circle, RefreshCw } from "lucide-react";
 import { isNativeApp, theftStatus, setTheftConfig, requestTheftPermissions, openDeviceAdmin, removeDeviceAdmin, openOverlaySettings, testIntruderCapture, theftReady } from "@/lib/theft";
 import { setCallAuth } from "@/lib/callsetup";
+import { getPosition } from "@/lib/native";
 
 const BOUND_KEY = "nk_theft_device_id";
+
+function timeAgo(iso) {
+  try {
+    const s = Math.max(0, Math.round((Date.now() - new Date(iso)) / 1000));
+    if (s < 60) return "just now";
+    const m = Math.round(s / 60); if (m < 60) return `${m}m ago`;
+    const h = Math.round(m / 60); if (h < 24) return `${h}h ago`;
+    return `${Math.round(h / 24)}d ago`;
+  } catch (_) { return ""; }
+}
 
 // Native-only card: binds THIS phone to one of the registered devices and walks
 // through the three Android permissions the intruder capture needs. The actual
@@ -34,6 +45,21 @@ function ThisPhoneCard({ devices, onCreateDevice, onEvents }) {
       setTheftConfig({ device_id: bound.id, threshold: bound.lock_threshold, enabled: true }).then(setSt);
     }
   }, [bound?.id, bound?.lock_threshold, st?.supported]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep THIS phone's device location fresh while the app is open, so if it's
+  // later lost the owner can locate it from another device. Pings the bound
+  // device only (the background location service keeps it updating when closed).
+  useEffect(() => {
+    const id = st?.device_id || boundId;
+    if (!id || !isNativeApp()) return;
+    let alive = true;
+    const ping = async () => {
+      try { const p = await getPosition({ timeout: 8000 }); if (alive) await api.post(`/devices/${id}/ping`, { latitude: p.latitude, longitude: p.longitude }); } catch (_) {}
+    };
+    ping();
+    const t = setInterval(ping, 90000);
+    return () => { alive = false; clearInterval(t); };
+  }, [st?.device_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const bind = async (id) => {
     let d = devices.find((x) => x.id === id);
@@ -226,6 +252,13 @@ export default function TheftProtection() {
                       : <span style={{ color: "#34d399", fontSize: 12 }}>Active</span>}
                   </div>
                   <div className="muted" style={{ fontSize: 12.5 }}>{d.platform || "device"} · locks after {d.lock_threshold} failed attempts{d.siren_active ? " · 🔊 siren ON" : ""}</div>
+                  {d.last_lat != null && d.last_lng != null ? (
+                    <a href={`https://maps.google.com/?q=${d.last_lat},${d.last_lng}`} target="_blank" rel="noreferrer" className="neon" data-testid={`device-locate-${d.id}`} style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, marginTop: 3 }}>
+                      <MapPin size={12} /> Locate · last seen {d.last_located_at ? timeAgo(d.last_located_at) : ""}{d.last_battery != null ? ` · 🔋${d.last_battery}%` : ""}
+                    </a>
+                  ) : (
+                    <div className="muted" style={{ fontSize: 11.5, marginTop: 3, display: "inline-flex", alignItems: "center", gap: 4 }} data-testid={`device-nolocate-${d.id}`}><MapPin size={11} /> No location yet — open the app on that phone with location on</div>
+                  )}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
