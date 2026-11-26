@@ -8,6 +8,7 @@ import api from "@/lib/api";
 import LiveAlarm from "@/components/LiveAlarm";
 import FamilyAlarm from "@/components/FamilyAlarm";
 import IncomingCall from "@/components/IncomingCall";
+import NotificationBell from "@/components/NotificationBell";
 
 const dropItem = { display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 10, fontSize: 14 };
 
@@ -200,6 +201,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
         )}
       </div>)}
 
+      {user && !user.is_org && !user.is_dealer && <NotificationBell />}
       {user && <LiveAlarm />}
       {!native && (
       <button className="nav-hamburger" data-testid="mobile-menu-btn" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
