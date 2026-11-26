@@ -442,6 +442,12 @@ h1, h2, h3, .head { font-family: 'Chakra Petch', sans-serif; letter-spacing: -0.
 .bn-item.active svg { filter: drop-shadow(0 0 8px rgba(233,37,70,.6)); }
 .bn-item:active { background: rgba(233,37,70,.12); }
 body.has-bottomnav { padding-bottom: 70px; }
+/* Installed app: PIN the header with position:fixed — several Android/iOS
+   webviews let a `position:sticky` header scroll away no matter what. Fixed
+   never does. Reserve its height on the body so content isn't hidden behind it.
+   (The marketing website keeps the plain sticky header above.) */
+body.has-bottomnav .topnav { position: fixed; top: 0; left: 0; right: 0; z-index: 3001; }
+body.has-bottomnav { padding-top: calc(56px + max(16px, env(safe-area-inset-top, 0px))); }
 
 /* ===================== LIGHT THEME =====================
    Applied only when <html data-theme="light"> (set by the in-app theme
