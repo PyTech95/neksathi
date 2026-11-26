@@ -78,3 +78,22 @@ def test_admin_users_pagination(monkeypatch):
 
     p1, p2 = asyncio.run(run())
     assert p1["total"] == 30 and p1["count"] == 25 and p2["count"] == 5
+
+
+def test_admin_users_phone_user_without_email_does_not_crash(monkeypatch):
+    # Regression: OTP / phone-only sign-ups historically had NO `email` key, which
+    # made the list endpoint 500 on u["email"] and the admin table showed empty.
+    # The list must tolerate a doc missing email/name/phone/created_at.
+    db = _db(monkeypatch)
+
+    async def run():
+        await db.users.insert_one({"id": "U_ok", "email": "ok@x.com", "name": "Ok", "phone": "1", "created_at": now_utc()})
+        await db.users.insert_one({"id": "U_otp", "name": "Nek Sathi User", "phone": "+919999999999", "created_at": now_utc()})  # no email
+        await db.users.insert_one({"id": "U_bare", "phone": "+918888888888"})  # no email/name/created_at
+        return await au.admin_users(_={}, q=None, skip=0, limit=25)
+
+    res = asyncio.run(run())
+    assert res["total"] == 3 and res["count"] == 3
+    by_id = {u["id"]: u for u in res["results"]}
+    assert by_id["U_otp"]["email"] == "" and by_id["U_otp"]["name"] == "Nek Sathi User"
+    assert by_id["U_bare"]["email"] == "" and by_id["U_bare"]["name"]  # falls back, never crashes

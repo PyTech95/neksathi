@@ -44,26 +44,47 @@ function MemberActivity({ memberId }) {
 
 // A member's location trail for a chosen day — "9:00 here, 9:30 there" — drawn
 // as a route on the map plus a time-ordered list. Reads /family/member/:id/history.
+// Points load a page at a time (4 per "Next") so a long day never loads at once.
+const TIMELINE_PAGE = 4;
 function MemberTimeline({ memberId, name, onClose }) {
   const [day, setDay] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [points, setPoints] = useState([]);   // accumulated, oldest → newest
+  const [total, setTotal] = useState(0);
+  const [shared, setShared] = useState(true);
+  const [loading, setLoading] = useState(true);     // first page of a day
+  const [loadingMore, setLoadingMore] = useState(false); // a "Next" page
   const mapEl = useRef(null); const mapObj = useRef(null); const layer = useRef(null);
 
   const isToday = new Date().toDateString() === day.toDateString();
   const shiftDay = (n) => setDay((d) => { const x = new Date(d); x.setDate(x.getDate() + n); x.setHours(0, 0, 0, 0); return x; });
 
-  useEffect(() => {
-    setLoading(true);
+  const dayRange = () => {
     const start = new Date(day); start.setHours(0, 0, 0, 0);
     const end = new Date(day); end.setHours(23, 59, 59, 999);
-    api.get(`/family/member/${memberId}/history`, { params: { since: start.toISOString(), until: end.toISOString() } })
-      .then((r) => setData(r.data)).catch(() => setData({ shared: true, points: [] })).finally(() => setLoading(false));
-  }, [memberId, day]);
+    return { since: start.toISOString(), until: end.toISOString() };
+  };
 
+  const fetchPage = (skip, append) => {
+    const setBusy = append ? setLoadingMore : setLoading;
+    setBusy(true);
+    return api.get(`/family/member/${memberId}/history`, { params: { ...dayRange(), skip, limit: TIMELINE_PAGE } })
+      .then((r) => {
+        const d = r.data || {};
+        setShared(d.shared !== false);
+        setTotal(d.total ?? (d.points || []).length);
+        setPoints((prev) => (append ? [...prev, ...(d.points || [])] : (d.points || [])));
+      })
+      .catch(() => { if (!append) { setShared(true); setPoints([]); setTotal(0); } })
+      .finally(() => setBusy(false));
+  };
+
+  // Fresh first page whenever the member or the day changes.
+  useEffect(() => { setPoints([]); setTotal(0); fetchPage(0, false); /* eslint-disable-next-line */ }, [memberId, day]);
+
+  // Map shows every point loaded so far (route builds up as you tap Next).
   useEffect(() => {
-    if (!data || !mapEl.current) return;
-    const pts = (data.points || []).filter((p) => p.lat != null && p.lng != null);
+    if (!mapEl.current) return;
+    const pts = points.filter((p) => p.lat != null && p.lng != null);
     loadLeaflet().then((L) => {
       if (!mapObj.current) {
         mapObj.current = L.map(mapEl.current, { zoomControl: true }).setView(pts[0] ? [pts[0].lat, pts[0].lng] : [20.59, 78.96], pts[0] ? 13 : 4);
@@ -74,16 +95,17 @@ function MemberTimeline({ memberId, name, onClose }) {
       if (pts.length) {
         const ll = pts.map((p) => [p.lat, p.lng]);
         L.polyline(ll, { color: "#e92546", weight: 4, opacity: 0.85 }).addTo(layer.current);
-        L.circleMarker(ll[0], { radius: 7, color: "#10b981", fillColor: "#10b981", fillOpacity: 1 }).addTo(layer.current).bindPopup("Start of day");
+        L.circleMarker(ll[0], { radius: 7, color: "#10b981", fillColor: "#10b981", fillOpacity: 1 }).addTo(layer.current).bindPopup("Earliest");
         L.circleMarker(ll[ll.length - 1], { radius: 7, color: "#e92546", fillColor: "#e92546", fillOpacity: 1 }).addTo(layer.current).bindPopup("Latest");
         try { mapObj.current.fitBounds(ll, { padding: [28, 28] }); } catch (_) {}
       }
     }).catch(() => {});
-  }, [data]);
+  }, [points]);
 
   useEffect(() => () => { if (mapObj.current) { try { mapObj.current.remove(); } catch (_) {} mapObj.current = null; } }, []);
 
-  const pts = (data?.points || []).filter((p) => p.lat != null);
+  const pts = points.filter((p) => p.lat != null);
+  const hasMore = points.length < total;
   const fmtTime = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const dayLabel = isToday ? "Today" : day.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 
@@ -95,26 +117,32 @@ function MemberTimeline({ memberId, name, onClose }) {
           <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close"><X size={16} /></button>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => shiftDay(-1)} data-testid="timeline-prev">‹ Prev</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => shiftDay(-1)} data-testid="timeline-prev">‹ Prev day</button>
           <span style={{ fontWeight: 700 }}>{dayLabel}</span>
-          <button className="btn btn-ghost btn-sm" onClick={() => shiftDay(1)} disabled={isToday} data-testid="timeline-next">Next ›</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => shiftDay(1)} disabled={isToday} data-testid="timeline-next">Next day ›</button>
         </div>
         <div ref={mapEl} style={{ height: 220, borderRadius: 12, overflow: "hidden", marginBottom: 12, background: "rgba(255,255,255,.04)" }} data-testid="timeline-map" />
         {loading ? (
           <div className="center" style={{ padding: 20 }}><Loader2 className="spin" size={22} /></div>
-        ) : data && data.shared === false ? (
+        ) : !shared ? (
           <p className="muted center" style={{ fontSize: 13 }}>This member isn't sharing location.</p>
-        ) : pts.length === 0 ? (
+        ) : total === 0 ? (
           <p className="muted center" style={{ fontSize: 13 }} data-testid="timeline-empty">No location recorded for {dayLabel.toLowerCase()}.</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid="timeline-list">
-            <div className="muted" style={{ fontSize: 12.5 }}>{pts.length} point{pts.length === 1 ? "" : "s"} · {fmtTime(pts[0].at)} – {fmtTime(pts[pts.length - 1].at)}</div>
-            {pts.slice().reverse().map((p, i) => (
+            <div className="muted" style={{ fontSize: 12.5 }}>Showing {pts.length} of {total} point{total === 1 ? "" : "s"}</div>
+            {pts.map((p, i) => (
               <div key={i} className="info-row" style={{ padding: "7px 0", borderTop: i ? "1px solid var(--border, rgba(255,255,255,.06))" : "none" }}>
                 <span className="ir-k" style={{ fontWeight: 700 }}><Clock size={13} /> {fmtTime(p.at)}</span>
                 <a className="btn btn-ghost btn-sm" href={`https://maps.google.com/?q=${p.lat},${p.lng}`} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}><MapPin size={13} /> {p.speed_kmh != null ? `${Math.round(p.speed_kmh)} km/h` : "Map"}</a>
               </div>
             ))}
+            {hasMore && (
+              <button className="btn btn-ghost btn-block btn-sm" style={{ marginTop: 4 }} disabled={loadingMore}
+                onClick={() => fetchPage(points.length, true)} data-testid="timeline-more">
+                {loadingMore ? <Loader2 className="spin" size={15} /> : <>Next {Math.min(TIMELINE_PAGE, total - points.length)} →</>}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -474,7 +502,10 @@ export default function Family() {
                   {data.is_guardian && !m.is_me && <button className="btn btn-ghost btn-sm" onClick={() => requestCheckIn(m.member_id)} data-testid={`member-checkin-${m.member_id}`}><HeartHandshake size={14} /> Check in</button>}
                   {data.is_guardian && !m.is_me && <button className="btn btn-ghost btn-sm" onClick={() => nudgeMember(m.member_id)} data-testid={`member-nudge-${m.member_id}`} title="Ring their phone loudly"><BellRing size={14} /> Nudge</button>}
                   {(data.is_guardian || m.is_me) && <button className="btn btn-ghost btn-sm" onClick={() => setOpenMember(openMember === m.member_id ? null : m.member_id)} data-testid={`member-activity-btn-${m.member_id}`}><Activity size={14} /> Activity</button>}
-                  {m.latitude != null && <button className="btn btn-ghost btn-sm" onClick={() => setTimeline({ id: m.member_id, name: m.name || "Member" })} data-testid={`member-timeline-btn-${m.member_id}`}><Clock size={14} /> Timeline</button>}
+                  {/* Show Timeline for anyone who shares location (or me) — not only
+                      when a current location exists — so a member who simply hasn't
+                      pinged yet still has the button; the panel then explains if empty. */}
+                  {(m.is_me || m.share_location !== false) && <button className="btn btn-ghost btn-sm" onClick={() => setTimeline({ id: m.member_id, name: m.name || "Member" })} data-testid={`member-timeline-btn-${m.member_id}`}><Clock size={14} /> Timeline</button>}
                   {data.is_guardian && m.role !== "guardian" && <button className="btn btn-ghost btn-sm" onClick={() => removeMember(m.member_id)} data-testid={`member-remove-${m.member_id}`}><UserMinus size={14} /> Remove</button>}
                 </div>
                 {openMember === m.member_id && <MemberActivity memberId={m.member_id} />}

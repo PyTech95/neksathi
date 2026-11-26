@@ -211,26 +211,24 @@ async def push_status(payload: StatusIn, user: dict = Depends(current_user)):
     return {"ok": True, "transitions": transitions}
 
 
-# How close together two trail points may be before we drop the newer one, so a
-# day's history stays a readable timeline instead of a flood of near-identical
-# pings: at most one point every ~2 minutes unless the person moved ~120m+.
-_TRAIL_MIN_GAP_S = 120
-_TRAIL_MIN_MOVE_M = 120
+# A trail point is stored at most once every 30 minutes, so a day's history is a
+# clean "9:00 here, 9:30 there, 10:00 there" timeline — a handful of points — not
+# a flood of near-identical pings. (Was 2 min, which produced far too many.)
+_TRAIL_MIN_GAP_S = 1800  # 30 minutes
 
 
 async def record_location_history(user_id: str, lat: Optional[float], lng: Optional[float],
                                   speed_kmh: Optional[float] = None, battery: Optional[int] = None) -> bool:
-    """Append a point to the member's location trail (throttled). Returns True if a
-    point was stored. Used by both /me/status and /me/location so the family
-    history fills whenever the phone reports a location."""
+    """Append a point to the member's location trail (throttled to one per 30 min).
+    Returns True if a point was stored. Used by both /me/status and /me/location so
+    the family history fills whenever the phone reports a location."""
     if lat is None or lng is None:
         return False
     now = now_utc()
     last = await db.location_history.find_one({"user_id": user_id}, sort=[("recorded_at", -1)])
     if last:
         gap = (now - _aware(last["recorded_at"])).total_seconds()
-        moved_m = _haversine_km(lat, lng, last.get("latitude"), last.get("longitude")) * 1000
-        if gap < _TRAIL_MIN_GAP_S and moved_m < _TRAIL_MIN_MOVE_M:
+        if gap < _TRAIL_MIN_GAP_S:
             return False
     await db.location_history.insert_one({
         "id": new_id(), "user_id": user_id, "latitude": lat, "longitude": lng,
@@ -241,10 +239,12 @@ async def record_location_history(user_id: str, lat: Optional[float], lng: Optio
 
 @router.get("/family/member/{member_id}/history")
 async def member_history(member_id: str, since: Optional[str] = None, until: Optional[str] = None,
-                         user: dict = Depends(current_user)):
+                         skip: int = 0, limit: int = 4, user: dict = Depends(current_user)):
     """The day's location trail for one family member — the '9:00 here, 9:30 there'
-    timeline. Everyone in the circle may view everyone (per the product decision),
-    but only members who share their location, and only within our own circle."""
+    timeline. Returned a page at a time (default 4 points) so the app shows a few
+    with a 'Next' button instead of loading a whole day at once. Everyone in the
+    circle may view everyone (per the product decision), but only members who share
+    their location, and only within our own circle."""
     fam = await _my_family(user["id"])
     if not fam:
         raise HTTPException(status_code=400, detail="You are not in a family circle.")
@@ -252,17 +252,20 @@ async def member_history(member_id: str, since: Optional[str] = None, until: Opt
     if not m:
         raise HTTPException(status_code=404, detail="Member not found.")
     if not (m.get("share_location", True) or m["user_id"] == user["id"]):
-        return {"shared": False, "name": m.get("name"), "points": []}
+        return {"shared": False, "name": m.get("name"), "points": [], "total": 0, "skip": 0, "limit": limit}
     start = _parse_iso(since) or (now_utc() - timedelta(hours=24))
     end = _parse_iso(until) or now_utc()
+    skip = max(0, skip)
+    limit = max(1, min(50, limit))
+    filt = {"user_id": m["user_id"], "recorded_at": {"$gte": start, "$lte": end}}
+    total = await db.location_history.count_documents(filt)
     points = []
-    cursor = db.location_history.find(
-        {"user_id": m["user_id"], "recorded_at": {"$gte": start, "$lte": end}}
-    ).sort("recorded_at", 1)
+    cursor = db.location_history.find(filt).sort("recorded_at", 1).skip(skip).limit(limit)
     async for p in cursor:
         points.append({"lat": p.get("latitude"), "lng": p.get("longitude"),
                        "speed_kmh": p.get("speed_kmh"), "at": p.get("recorded_at")})
-    return {"shared": True, "name": m.get("name"), "points": points}
+    return {"shared": True, "name": m.get("name"), "points": points,
+            "total": total, "skip": skip, "limit": limit}
 
 
 def _parse_iso(s: Optional[str]):

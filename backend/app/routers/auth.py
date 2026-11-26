@@ -426,12 +426,15 @@ async def otp_verify(request: Request, payload: OtpVerifyIn):
     is_new = user is None
     if not user:
         # Store the number in +91XXXXXXXXXX form; keep phone_norm (digits) as the
-        # match key. NO synthetic email — a first-time user has no email until
-        # they add a real one on the Profile page (email stays unset).
+        # match key. Give a synthetic phone-based email (same shape as the vendor
+        # activation path) so every user doc has an email — the admin console and
+        # any email-keyed lookup stay consistent. The user can add a real email
+        # later on the Profile page.
         digits = "".join(ch for ch in phone if ch.isdigit())
         last10 = digits[-10:] if len(digits) >= 10 else digits
         user = {
             "id": new_id(),
+            "email": f"{last10}@phone.neksathi.app",
             "name": "Nek Sathi User",
             "phone": "+91" + last10, "phone_norm": phone, "phone_verified": True,
             "password_hash": "", "is_admin": False,

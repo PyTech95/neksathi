@@ -9,12 +9,13 @@ function Badge({ n }) {
   return <span data-testid="hub-badge" style={{ marginLeft: 8, background: "#ff3b5c", color: "#fff", borderRadius: 999, padding: "1px 8px", fontSize: 12, fontWeight: 700 }}>{n}</span>;
 }
 
-function Stat({ icon, label, value, color }) {
+function Stat({ icon, label, value, color, onClick }) {
   return (
-    <div className="glass card-pad" data-testid={`stat-${label}`}>
+    <div className={`glass card-pad${onClick ? " glass-hover" : ""}`} data-testid={`stat-${label}`}
+      onClick={onClick} style={onClick ? { cursor: "pointer" } : undefined}>
       <div style={{ color, marginBottom: 8 }}>{icon}</div>
       <div className="stat-num">{value ?? "—"}</div>
-      <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>{label}</div>
+      <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>{label}{onClick && value ? " ·  view" : ""}</div>
     </div>
   );
 }
@@ -36,8 +37,13 @@ export default function Admin() {
   const loadStats = async () => setStats((await api.get("/admin/stats")).data);
   const loadUsers = async (query = "", sk = 0, lim = 25) => {
     const p = new URLSearchParams(); if (query) p.set("q", query); p.set("skip", sk); p.set("limit", lim);
-    const r = (await api.get(`/admin/users?${p.toString()}`)).data;
-    setUsers(r.results); setUTotal(r.total ?? r.results.length);
+    try {
+      const r = (await api.get(`/admin/users?${p.toString()}`)).data;
+      const rows = Array.isArray(r.results) ? r.results : [];
+      setUsers(rows); setUTotal(r.total ?? rows.length);
+    } catch {
+      setUsers([]); setUTotal(0);
+    }
   };
   const loadAlerts = async (type = aType, days = aDays, query = aq) => {
     const params = new URLSearchParams();
@@ -120,7 +126,8 @@ export default function Admin() {
         </div>
 
         <div className="grid grid-4" style={{ marginBottom: 16 }}>
-          <Stat icon={<Users size={22} />} label="Users" value={stats?.users} color="#e92546" />
+          <Stat icon={<Users size={22} />} label="Users" value={stats?.users} color="#e92546"
+            onClick={() => document.getElementById("admin-users-section")?.scrollIntoView({ behavior: "smooth", block: "start" })} />
           <Stat icon={<Car size={22} />} label="Vehicles" value={stats?.vehicles} color="#ff4d67" />
           <Stat icon={<Bell size={22} />} label="Alerts (total)" value={stats?.alerts_total} color="#f5a524" />
           <Stat icon={<ShieldAlert size={22} />} label="Alerts 24h" value={stats?.alerts_24h} color="#ff3b5c" />
@@ -132,9 +139,9 @@ export default function Admin() {
           <Stat icon={<Video size={22} />} label="SOS videos" value={stats?.sos_videos} color="#e92546" />
         </div>
 
-        <div className="glass card-pad" style={{ padding: 24 }}>
+        <div className="glass card-pad" id="admin-users-section" style={{ padding: 24, scrollMarginTop: 80 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-            <h2 style={{ fontSize: 22 }}>Users</h2>
+            <h2 style={{ fontSize: 22 }}>Users {uTotal ? <span className="muted" style={{ fontSize: 15, fontWeight: 400 }}>({uTotal})</span> : null}</h2>
             <input className="input" style={{ maxWidth: 280 }} placeholder="Search name / email / phone" value={q}
               onChange={(e) => { setQ(e.target.value); setUSkip(0); loadUsers(e.target.value, 0, uLimit); }} data-testid="admin-user-search" />
           </div>

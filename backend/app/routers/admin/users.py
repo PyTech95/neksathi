@@ -67,16 +67,19 @@ async def admin_users(_: dict = Depends(require_admin), q: Optional[str] = None,
                 plan_name = doc.get("plan_name")
                 plan_expires = doc.get("plan_expires_at")
         users.append({
-            "id": u["id"],
-            "email": u["email"],
-            "name": u["name"],
-            "phone": u["phone"],
+            "id": u.get("id"),
+            # OTP / phone-only sign-ups have no email, and older docs may miss a
+            # field — never index with u["..."] here, or one bad doc 500s the
+            # whole list and the admin table shows empty.
+            "email": u.get("email") or "",
+            "name": u.get("name") or "Nek Sathi User",
+            "phone": u.get("phone") or "",
             "is_admin": bool(u.get("is_admin", False)),
             "suspended": bool(u.get("suspended", False)),
             "vehicles": v_count,
             "plan_name": plan_name,
             "plan_expires_at": plan_expires,
-            "created_at": u["created_at"],
+            "created_at": u.get("created_at"),
         })
     return {"total": total, "count": len(users), "results": users}
 

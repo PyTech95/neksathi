@@ -2,15 +2,26 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { Car, Plus, Trash2, ShieldAlert, ShieldCheck, ChevronRight, ChevronDown, X, Phone, PhoneMissed, PhoneOff, PhoneOutgoing, Bike, Tractor, Truck, CircleHelp, Check, Siren, ScanLine, Users, QrCode } from "lucide-react";
+import { Car, Plus, Trash2, ShieldAlert, ShieldCheck, ChevronRight, ChevronDown, X, Phone, PhoneMissed, PhoneOff, PhoneOutgoing, Bike, Tractor, Truck, CircleHelp, Check, Siren, ScanLine, Users, MapPin, Lock, Radar, AlertTriangle } from "lucide-react";
 import BottomSheet from "@/components/BottomSheet";
 import VehicleFields, { tidyVehicle } from "@/components/VehicleFields";
 
+// Top strip — the four things people reach for first. Each points at a real page.
 const QUICK_ACTIONS = [
-  { to: "/safety", icon: Siren, label: "SOS", accent: "#ff3b5c", primary: true },
-  { to: "/scanner", icon: ScanLine, label: "Scan QR", accent: "#e92546" },
-  { to: "/family", icon: Users, label: "Family", accent: "#ff4d67" },
-  { to: "/tags", icon: QrCode, label: "Tags", accent: "#e92546" },
+  { to: "/theft-protection", icon: Lock, label: "Anti-Theft" },
+  { to: "/family", icon: MapPin, label: "Live Location" },
+  { to: "/scanner", icon: ScanLine, label: "Scan QR" },
+  { to: "/safety", icon: Siren, label: "SOS", primary: true },
+];
+
+// Clean services grid (like the "More" tiles) — every card opens its real page.
+const SERVICES = [
+  { to: "/safety", icon: AlertTriangle, title: "Accident Safety", desc: "Auto-alert on a crash" },
+  { to: "/theft-protection", icon: Lock, title: "Anti-Theft", desc: "Lock, siren & intruder" },
+  { to: "/safe-zones", icon: Radar, title: "Safe Zones", desc: "Geo-fence alerts" },
+  { to: "/family", icon: Users, title: "Family", desc: "Live location & trail" },
+  { to: "/tags", icon: ScanLine, title: "Smart QR / Tags", desc: "Bags, pets & luggage" },
+  { to: "/helplines", icon: Phone, title: "Helplines", desc: "Police, ambulance, fire" },
 ];
 
 function greeting() {
@@ -46,6 +57,15 @@ const CALL_STATUS = {
   ended: { label: "Answered", color: "#34d399", icon: <PhoneOutgoing size={16} /> },
   accepted: { label: "Answered", color: "#34d399", icon: <Phone size={16} /> },
 };
+
+// Small status pill for a vehicle card.
+function vehicleStatus(v) {
+  if (!v.qr_ordered) return { text: "Set up QR", cls: "pill-warn" };
+  if (v.plan_status === "active") return { text: `Active · ${v.plan_days_left}d`, cls: "pill-ok" };
+  if (v.plan_status === "grace") return { text: "Expired (grace)", cls: "pill-warn" };
+  if (v.plan_status === "expired" || v.plan_status === "none") return { text: "Expired", cls: "pill-danger" };
+  return { text: "Active", cls: "pill-ok" };
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -105,45 +125,63 @@ export default function Dashboard() {
 
   return (
     <div className="page" data-testid="dashboard-page">
-      <div className="container-nk">
-        {/* Home hero: greeting + safety status + quick actions */}
-        <div className="glass card-pad" data-testid="home-hero" style={{ padding: 22, marginBottom: 22, position: "relative", overflow: "hidden" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <span style={{ width: 48, height: 48, borderRadius: 14, flexShrink: 0, display: "grid", placeItems: "center", overflow: "hidden", background: "linear-gradient(135deg,#b3122f,#e92546)", color: "#fff", fontWeight: 800, fontSize: 20 }}>
-              {user?.avatar_base64 ? <img src={user.avatar_base64} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (user?.name?.[0] || "?")}
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="muted" style={{ fontSize: 13 }}>{greeting()},</div>
-              <h1 style={{ fontSize: 23, margin: "1px 0 0", lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.name?.split(" ")[0] || "there"}</h1>
-            </div>
-            <span data-testid="protection-status" className="pill" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5, ...(isProtected ? { background: "rgba(52,211,153,.14)", borderColor: "rgba(52,211,153,.4)", color: "#34d399" } : { background: "rgba(245,165,36,.14)", borderColor: "rgba(245,165,36,.4)", color: "#f5a524" }) }}>
-              {isProtected ? <><ShieldCheck size={13} /> Protected</> : <><ShieldAlert size={13} /> Set up</>}
-            </span>
+      <div className="container-nk" style={{ paddingTop: 16 }}>
+        <style>{`.vrow::-webkit-scrollbar{display:none}`}</style>
+
+        {/* Greeting row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+          <span style={{ width: 44, height: 44, borderRadius: 13, flexShrink: 0, display: "grid", placeItems: "center", overflow: "hidden", background: "linear-gradient(135deg,#b3122f,#e92546)", color: "#fff", fontWeight: 800, fontSize: 18 }}>
+            {user?.avatar_base64 ? <img src={user.avatar_base64} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (user?.name?.[0] || "?")}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="muted" style={{ fontSize: 12.5 }}>{greeting()},</div>
+            <h1 style={{ fontSize: 21, margin: "1px 0 0", lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.name?.split(" ")[0] || "there"}</h1>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginTop: 18 }}>
-            {QUICK_ACTIONS.map(({ to, icon: Icon, label, accent, primary }) => (
-              <Link key={to} to={to} data-testid={`quick-${label.toLowerCase().replace(/\s+/g, "-")}`}
-                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 7, textDecoration: "none", color: "var(--text)" }}>
-                <span style={{ width: "100%", aspectRatio: "1", maxWidth: 62, borderRadius: 16, display: "grid", placeItems: "center",
-                  background: primary ? "linear-gradient(135deg,#b3122f,#e92546)" : `${accent}18`,
-                  color: primary ? "#fff" : accent,
-                  border: primary ? "none" : `1px solid ${accent}3a` }}>
-                  <Icon size={22} />
-                </span>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>{label}</span>
-              </Link>
-            ))}
-          </div>
+          <span data-testid="protection-status" className="pill" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5, ...(isProtected ? { background: "rgba(52,211,153,.14)", borderColor: "rgba(52,211,153,.4)", color: "#34d399" } : { background: "rgba(245,165,36,.14)", borderColor: "rgba(245,165,36,.4)", color: "#f5a524" }) }}>
+            {isProtected ? <><ShieldCheck size={13} /> Protected</> : <><ShieldAlert size={13} /> Set up</>}
+          </span>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <h2 style={{ fontSize: 21, margin: 0, display: "inline-flex", alignItems: "center", gap: 8 }}><Car size={19} className="neon" /> Your <span className="neon">garage</span></h2>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)} data-testid="add-vehicle-btn"><Plus size={16} /> Add vehicle</button>
+        {/* Quick actions strip */}
+        <div className="glass" data-testid="home-quick-actions" style={{ padding: "14px 8px", borderRadius: 18, display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6, marginBottom: 18 }}>
+          {QUICK_ACTIONS.map(({ to, icon: Icon, label, primary }) => (
+            <Link key={label} to={to} data-testid={`quick-${label.toLowerCase().replace(/\s+/g, "-")}`}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 7, textDecoration: "none", color: "var(--text)", padding: "4px 2px" }}>
+              <span style={{ width: 48, height: 48, borderRadius: 15, display: "grid", placeItems: "center",
+                background: primary ? "linear-gradient(135deg,#b3122f,#e92546)" : "rgba(233,37,70,.12)",
+                color: primary ? "#fff" : "#ff5a74",
+                border: primary ? "none" : "1px solid rgba(233,37,70,.32)",
+                boxShadow: primary ? "0 6px 16px rgba(233,37,70,.35)" : "none" }}>
+                <Icon size={22} />
+              </span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, textAlign: "center", lineHeight: 1.15, color: primary ? "#ff5a74" : "var(--text)" }}>{label}</span>
+            </Link>
+          ))}
+        </div>
+
+        {/* Hero banner */}
+        <Link to="/safety" data-testid="home-hero" style={{ textDecoration: "none", display: "block", marginBottom: 6 }}>
+          <div style={{ position: "relative", overflow: "hidden", borderRadius: 20, padding: "22px 20px", color: "#fff", background: "linear-gradient(120deg,#7a0f23 0%,#b3122f 45%,#e92546 100%)" }}>
+            <div style={{ position: "absolute", right: -40, top: -30, width: 170, height: 170, borderRadius: "50%", background: "rgba(255,255,255,.12)" }} />
+            <div style={{ position: "absolute", right: 14, bottom: -46, width: 120, height: 120, borderRadius: "50%", background: "rgba(255,255,255,.09)" }} />
+            <span style={{ position: "absolute", right: 18, top: "50%", transform: "translateY(-50%)", width: 72, height: 72, borderRadius: 18, background: "rgba(255,255,255,.16)", border: "1px solid rgba(255,255,255,.35)", display: "grid", placeItems: "center" }}>
+              <ScanLine size={34} color="#fff" />
+            </span>
+            <h2 style={{ fontSize: 21, lineHeight: 1.15, fontWeight: 800, margin: 0, maxWidth: 240 }}>Every journey, protected.</h2>
+            <p style={{ margin: "7px 0 0", fontSize: 13, opacity: 0.92, maxWidth: 230, lineHeight: 1.4 }}>A QR on your vehicle — the moment someone scans it, you get an instant alert with live location.</p>
+            <span style={{ marginTop: 14, display: "inline-flex", alignItems: "center", gap: 7, background: "#fff", color: "#b3122f", fontWeight: 700, fontSize: 13, padding: "9px 15px", borderRadius: 11 }}>Learn more <ChevronRight size={15} /></span>
+          </div>
+        </Link>
+
+        {/* My Vehicles */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "24px 2px 12px" }}>
+          <h2 style={{ fontSize: 18, margin: 0, fontWeight: 800 }}>My Vehicles</h2>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowAdd(true)} data-testid="add-vehicle-btn" style={{ color: "#ff5a74", fontWeight: 700 }}><Plus size={15} /> Add</button>
         </div>
 
         {user && !user.phone_verified && (
           <Link to="/settings" data-testid="dashboard-verify-banner" style={{ textDecoration: "none", color: "inherit" }}>
-            <div className="glass card-pad glass-hover" style={{ padding: 14, marginBottom: 20, borderColor: "rgba(245,165,36,.5)", display: "flex", alignItems: "center", gap: 12 }}>
+            <div className="glass card-pad glass-hover" style={{ padding: 14, marginBottom: 14, borderColor: "rgba(245,165,36,.5)", display: "flex", alignItems: "center", gap: 12 }}>
               <ShieldAlert size={20} style={{ color: "#f5a524", flexShrink: 0 }} />
               <div style={{ flex: 1 }}>
                 <b style={{ fontSize: 14.5 }}>Verify your mobile number</b>
@@ -157,52 +195,61 @@ export default function Dashboard() {
         {loading ? (
           <div className="spinner" />
         ) : vehicles.length === 0 ? (
-          <div className="glass card-pad center" style={{ padding: 50 }} data-testid="empty-vehicles">
-            <Car size={44} color="#b3122f" />
-            <h3 style={{ fontSize: 22, margin: "14px 0 6px" }}>No vehicles yet</h3>
-            <p className="muted" style={{ marginBottom: 20 }}>Add your first vehicle to generate a QR safety sticker.</p>
+          <div className="glass card-pad center" style={{ padding: 40 }} data-testid="empty-vehicles">
+            <Car size={40} color="#e92546" />
+            <h3 style={{ fontSize: 20, margin: "12px 0 6px" }}>No vehicles yet</h3>
+            <p className="muted" style={{ marginBottom: 18 }}>Add your first vehicle to generate a QR safety sticker.</p>
             <button className="btn btn-primary" onClick={() => setShowAdd(true)} data-testid="empty-add-btn"><Plus size={18} /> Add vehicle</button>
           </div>
         ) : (
-          <div className="grid grid-3">
-            {vehicles.map((v) => (
-              <div key={v.id} className="glass glass-hover card-pad" data-testid={`vehicle-card-${v.number_plate}`}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div className="brand-badge" style={{ borderRadius: 12 }}><Car size={18} /></div>
-                  {v.lost_mode && <span className="chip" style={{ background: "rgba(255,59,92,.16)", borderColor: "rgba(255,59,92,.4)", color: "#ffb3c0" }}><ShieldAlert size={12} /> Lost</span>}
-                </div>
-                <h3 style={{ fontSize: 24, margin: "14px 0 4px", letterSpacing: ".02em" }}>{v.number_plate}</h3>
-                <p className="muted" style={{ fontSize: 14, textTransform: "capitalize" }}>{v.vehicle_type}{v.make_model ? ` · ${v.make_model}` : ""}{v.color ? ` · ${v.color}` : ""}</p>
-                {v.qr_ordered ? (
-                  <>
-                    {v.plan_status && v.plan_status !== "none" && (
-                      <div style={{ marginTop: 14 }}>
-                        <span className={`pill ${v.plan_status === "active" ? "pill-ok" : v.plan_status === "grace" ? "pill-warn" : "pill-danger"}`} data-testid={`plan-pill-${v.number_plate}`}>
-                          {v.plan_status === "active" ? `Active · ${v.plan_days_left}d left` : v.plan_status === "grace" ? "Expired (grace)" : "Expired"}
-                        </span>
-                      </div>
-                    )}
-                    <Link to={`/vehicle/${v.id}`} className="btn btn-primary btn-sm btn-block" style={{ marginTop: 12 }} data-testid={`manage-vehicle-${v.number_plate}`}>
-                      Manage <ChevronRight size={15} />
-                    </Link>
-                  </>
-                ) : (
-                  <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
-                    <Link to={`/buy-qr/${v.id}`} className="btn btn-primary btn-sm" style={{ flex: 1, justifyContent: "center" }} data-testid={`order-qr-${v.number_plate}`}>Order QR / Plan</Link>
-                    <button className="btn btn-ghost btn-sm" onClick={() => remove(v.id)} data-testid={`delete-vehicle-${v.number_plate}`} style={{ padding: "8px 12px" }}>
-                      <Trash2 size={15} color="#ff3b5c" />
-                    </button>
+          <div className="vrow" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "2px 2px 6px", scrollbarWidth: "none" }}>
+            {vehicles.map((v) => {
+              const M = VEHICLE_TYPE_META[v.vehicle_type] || VEHICLE_TYPE_META.car;
+              const VIcon = M.icon;
+              const st = vehicleStatus(v);
+              // Whole card is tappable → opens that vehicle (order page if no QR yet).
+              const to = v.qr_ordered ? `/vehicle/${v.id}` : `/buy-qr/${v.id}`;
+              return (
+                <Link key={v.id} to={to} data-testid={`vehicle-card-${v.number_plate}`}
+                  className="glass glass-hover" style={{ flex: "0 0 180px", padding: 15, borderRadius: 18, textDecoration: "none", color: "var(--text)", position: "relative" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ width: 42, height: 42, borderRadius: 12, display: "grid", placeItems: "center", background: "rgba(233,37,70,.12)", border: "1px solid rgba(233,37,70,.32)", color: "#ff5a74" }}><VIcon size={21} /></span>
+                    {v.lost_mode ? <span className="chip" style={{ background: "rgba(255,59,92,.16)", borderColor: "rgba(255,59,92,.4)", color: "#ffb3c0" }}><ShieldAlert size={12} /> Lost</span> : <ChevronRight size={18} className="muted" />}
                   </div>
-                )}
-              </div>
-            ))}
+                  <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: ".03em", margin: "13px 0 3px" }}>{v.number_plate}</div>
+                  <div className="muted" style={{ fontSize: 12.5, textTransform: "capitalize", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.vehicle_type}{v.make_model ? ` · ${v.make_model}` : ""}</div>
+                  <span className={`pill ${st.cls}`} data-testid={`plan-pill-${v.number_plate}`} style={{ marginTop: 12, display: "inline-flex" }}>{st.text}</span>
+                </Link>
+              );
+            })}
+            {/* Add vehicle card */}
+            <button onClick={() => setShowAdd(true)} data-testid="add-vehicle-card"
+              style={{ flex: "0 0 128px", borderRadius: 18, border: "1.6px dashed var(--panel-brd)", background: "transparent", color: "#ff5a74", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 9, cursor: "pointer" }}>
+              <span style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(233,37,70,.12)", display: "grid", placeItems: "center" }}><Plus size={20} /></span>
+              <span style={{ fontSize: 12.5, fontWeight: 700 }}>Add vehicle</span>
+            </button>
           </div>
         )}
 
+        {/* Safety services */}
+        <h2 style={{ fontSize: 18, fontWeight: 800, margin: "26px 2px 12px" }}>Safety services</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          {SERVICES.map(({ to, icon: Icon, title, desc }) => (
+            <Link key={title} to={to} className="glass glass-hover" data-testid={`service-${title.toLowerCase().replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "")}`}
+              style={{ padding: 15, borderRadius: 16, textDecoration: "none", color: "var(--text)", display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ width: 42, height: 42, borderRadius: 12, display: "grid", placeItems: "center", background: "rgba(233,37,70,.12)", border: "1px solid rgba(233,37,70,.32)", color: "#ff5a74", marginBottom: 9 }}>
+                <Icon size={21} />
+              </span>
+              <b style={{ fontSize: 14.5 }}>{title}</b>
+              <small className="muted" style={{ fontSize: 11.5, lineHeight: 1.3 }}>{desc}</small>
+            </Link>
+          ))}
+        </div>
+
         {shared.length > 0 && (
-          <div style={{ marginTop: 40 }} data-testid="shared-section">
-            <h2 style={{ fontSize: 24, marginBottom: 4 }}>Shared <span className="neon">with me</span></h2>
-            <p className="muted" style={{ marginBottom: 16 }}>Vehicles family members invited you to follow.</p>
+          <div style={{ marginTop: 34 }} data-testid="shared-section">
+            <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Shared with me</h2>
+            <p className="muted" style={{ marginBottom: 14, fontSize: 13 }}>Vehicles family members invited you to follow.</p>
             <div className="grid grid-3">
               {shared.map((v) => (
                 <div key={v.id} className="glass card-pad" data-testid={`shared-card-${v.number_plate}`}>
@@ -217,16 +264,16 @@ export default function Dashboard() {
         )}
 
         {!loading && calls.length > 0 && (
-          <div style={{ marginTop: 40 }} id="recent-calls" data-testid="recent-calls-section">
-            <h2 style={{ fontSize: 24, marginBottom: 4, display: "flex", alignItems: "center", gap: 10 }}>
-              <Phone size={20} className="neon" /> Recent <span className="neon">calls</span>
+          <div style={{ marginTop: 34 }} id="recent-calls" data-testid="recent-calls-section">
+            <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 4, display: "flex", alignItems: "center", gap: 10 }}>
+              <Phone size={18} className="neon" /> Recent calls
               {calls.filter((c) => c.status === "missed").length > 0 && (
                 <span className="chip" data-testid="missed-count" style={{ background: "rgba(255,59,92,.16)", borderColor: "rgba(255,59,92,.4)", color: "#ffb3c0" }}>
                   {calls.filter((c) => c.status === "missed").length} missed
                 </span>
               )}
             </h2>
-            <p className="muted" style={{ marginBottom: 16 }}>People who scanned your vehicle QR and tried to call you in the app.</p>
+            <p className="muted" style={{ marginBottom: 14, fontSize: 13 }}>People who scanned your vehicle QR and tried to call you in the app.</p>
             <div style={{ display: "grid", gap: 8 }}>
               {calls.map((c) => {
                 const s = CALL_STATUS[c.status] || { label: c.status, color: "#9aa4b2", icon: <Phone size={16} /> };

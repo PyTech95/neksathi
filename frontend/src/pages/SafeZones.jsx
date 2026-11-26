@@ -16,8 +16,12 @@ export default function SafeZones() {
   const mapEl = useRef(null);
   const mapObj = useRef(null);
   const layer = useRef(null);
-  const pickMarker = useRef(null);
   const centered = useRef(false);
+  // Separate Leaflet instance used INSIDE the add-zone modal to pick the center.
+  // The page map sits behind the full-screen modal and can't be tapped, so the
+  // modal gets its own map the user can actually touch.
+  const pickEl = useRef(null);
+  const pickObj = useRef(null); // { L, map, dot, ring }
 
   const load = async () => {
     try {
@@ -27,7 +31,7 @@ export default function SafeZones() {
   };
   useEffect(() => { load(); }, []);
 
-  // init + redraw map
+  // init + redraw the page (view-only) map
   useEffect(() => {
     loadLeaflet().then((L) => {
       if (!mapEl.current) return;
@@ -35,13 +39,12 @@ export default function SafeZones() {
         const center = zones[0] ? [zones[0].latitude, zones[0].longitude] : [20.5937, 78.9629];
         const map = L.map(mapEl.current, { zoomControl: true }).setView(center, zones[0] ? 14 : 5);
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }).addTo(map);
-        map.on("click", (e) => setForm((f) => ({ ...f, latitude: e.latlng.lat, longitude: e.latlng.lng })));
         mapObj.current = { L, map };
       }
       draw();
     });
     // eslint-disable-next-line
-  }, [zones, form.latitude, form.longitude, form.radius_m]);
+  }, [zones]);
 
   const draw = () => {
     const ctx = mapObj.current; if (!ctx) return;
@@ -55,15 +58,50 @@ export default function SafeZones() {
       map.setView([zones[0].latitude, zones[0].longitude], 14);
       centered.current = true;
     }
-    if (form.latitude != null && form.longitude != null) {
-      L.circle([form.latitude, form.longitude], { radius: form.radius_m, color: "#f5a524", fillColor: "#f5a524", fillOpacity: 0.15, weight: 2, dashArray: "6" }).addTo(layer.current);
-    }
   };
+
+  // Build / tear down the modal picker map as the modal opens and closes.
+  useEffect(() => {
+    if (!show) {
+      if (pickObj.current) { try { pickObj.current.map.remove(); } catch { /* noop */ } pickObj.current = null; }
+      return;
+    }
+    let cancelled = false;
+    loadLeaflet().then((L) => {
+      if (cancelled || !pickEl.current || pickObj.current) return;
+      const start = (form.latitude != null) ? [form.latitude, form.longitude]
+        : zones[0] ? [zones[0].latitude, zones[0].longitude] : [20.5937, 78.9629];
+      const map = L.map(pickEl.current, { zoomControl: true }).setView(start, form.latitude != null ? 15 : (zones[0] ? 14 : 5));
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }).addTo(map);
+      map.on("click", (e) => setForm((f) => ({ ...f, latitude: e.latlng.lat, longitude: e.latlng.lng })));
+      pickObj.current = { L, map, dot: null, ring: null };
+      // Leaflet needs a size recalc once the modal has laid out.
+      setTimeout(() => { try { map.invalidateSize(); } catch { /* noop */ } }, 120);
+      drawPick();
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line
+  }, [show]);
+
+  // Keep the picker's center dot + radius ring in sync with the form.
+  const drawPick = () => {
+    const ctx = pickObj.current; if (!ctx) return;
+    const { L, map } = ctx;
+    if (ctx.dot) { ctx.dot.remove(); ctx.dot = null; }
+    if (ctx.ring) { ctx.ring.remove(); ctx.ring = null; }
+    if (form.latitude == null || form.longitude == null) return;
+    ctx.ring = L.circle([form.latitude, form.longitude], { radius: form.radius_m, color: "#e92546", fillColor: "#e92546", fillOpacity: 0.14, weight: 2 }).addTo(map);
+    ctx.dot = L.circleMarker([form.latitude, form.longitude], { radius: 6, color: "#b3122f", fillColor: "#e92546", fillOpacity: 1, weight: 2 }).addTo(map);
+  };
+  useEffect(() => { if (show) drawPick(); /* eslint-disable-next-line */ }, [form.latitude, form.longitude, form.radius_m, show]);
 
   const useMyLocation = () => {
     navigator.geolocation.getCurrentPosition(
-      (p) => { setForm((f) => ({ ...f, latitude: p.coords.latitude, longitude: p.coords.longitude })); if (mapObj.current) mapObj.current.map.setView([p.coords.latitude, p.coords.longitude], 15); },
-      () => setErr("Location permission denied."), { enableHighAccuracy: true, timeout: 8000 }
+      (p) => {
+        setForm((f) => ({ ...f, latitude: p.coords.latitude, longitude: p.coords.longitude }));
+        if (pickObj.current) pickObj.current.map.setView([p.coords.latitude, p.coords.longitude], 16);
+      },
+      () => setErr("Location permission denied. Tap on the map to set the center instead."), { enableHighAccuracy: true, timeout: 8000 }
     );
   };
 
@@ -160,8 +198,14 @@ export default function SafeZones() {
               <label>Zone name</label>
               <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required data-testid="zone-name-input" placeholder="e.g. Home" />
             </div>
-            <button type="button" className="btn btn-ghost btn-block" style={{ marginBottom: 12 }} onClick={useMyLocation} data-testid="zone-use-location-btn"><LocateFixed size={15} /> Use my current location as center</button>
-            <p className="muted" style={{ fontSize: 12.5, marginTop: -4, marginBottom: 12 }}>{form.latitude != null ? `Center: ${form.latitude.toFixed(4)}, ${form.longitude.toFixed(4)}` : "…or tap anywhere on the map to set the center."}</p>
+
+            {/* Tappable picker map — this is what fixes "can't mark a zone": the center
+                is set by tapping here, so it never depends on GPS working. */}
+            <label style={{ fontSize: 13, fontWeight: 600, display: "block", marginBottom: 6 }}>Tap the map to set the center</label>
+            <div ref={pickEl} data-testid="zone-pick-map" style={{ height: 220, borderRadius: 12, overflow: "hidden", border: "1px solid var(--panel-brd)", marginBottom: 8 }} />
+            <button type="button" className="btn btn-ghost btn-block btn-sm" style={{ marginBottom: 8 }} onClick={useMyLocation} data-testid="zone-use-location-btn"><LocateFixed size={15} /> Use my current location</button>
+            <p className="muted" style={{ fontSize: 12.5, marginTop: 0, marginBottom: 12 }}>{form.latitude != null ? `Center set: ${form.latitude.toFixed(4)}, ${form.longitude.toFixed(4)}` : "No center yet — tap the map above."}</p>
+
             <div className="field" style={{ marginBottom: 16 }}>
               <label>Radius: {form.radius_m} m</label>
               <input type="range" min={50} max={5000} step={50} value={form.radius_m} onChange={(e) => setForm({ ...form, radius_m: Number(e.target.value) })} data-testid="zone-radius-input" style={{ width: "100%" }} />
