@@ -41,6 +41,7 @@ import AdminContacts from "@/pages/AdminContacts";
 import AdminCalls from "@/pages/AdminCalls";
 import Settings from "@/pages/Settings";
 import Safety from "@/pages/Safety";
+import Helplines from "@/pages/Helplines";
 import Scanner from "@/pages/Scanner";
 import LiveView from "@/pages/LiveView";
 import Community from "@/pages/Community";
@@ -211,6 +212,7 @@ function Shell() {
           <Route path="/transactions" element={<Protected><Transactions /></Protected>} />
           <Route path="/referral" element={<Protected><Referral /></Protected>} />
           <Route path="/safety" element={<Protected><Safety /></Protected>} />
+          <Route path="/helplines" element={<Protected><Helplines /></Protected>} />
           <Route path="/privacy" element={<LegalPage title="Privacy policy"><PrivacyPolicy /></LegalPage>} />
           <Route path="/delete-account" element={<LegalPage title="Account deletion"><DeleteAccount /></LegalPage>} />
           <Route path="/scanner" element={<Protected><Scanner /></Protected>} />

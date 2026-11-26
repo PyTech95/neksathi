@@ -31,6 +31,7 @@ const ASSET_LINKS = [
   { to: "/safe-zones", icon: <MapPin size={18} />, title: "Safe Zones", desc: "Geo-fence alerts", accent: "#e92546", tid: "nav-a-zones" },
 ];
 const MORE_LINKS = [
+  { to: "/helplines", icon: <Siren size={18} />, title: "Helplines", desc: "Police, ambulance, fire & more", accent: "#ff3b5c", tid: "nav-m-helplines" },
   { to: "/alerts", icon: <Bell size={18} />, title: "Alerts", desc: "Your alert feed", accent: "#f5a524", tid: "nav-m-alerts" },
   { to: "/circles", icon: <Clock size={18} />, title: "Temporary circles", desc: "Time-boxed sharing", accent: "#ff4d67", tid: "nav-m-circles" },
   { to: "/incidents", icon: <FileWarning size={18} />, title: "Incidents", desc: "History & status", accent: "#ff3b5c", tid: "nav-m-incidents" },
@@ -240,6 +241,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
                   <Link to="/theft-protection" data-testid="m-theft"><Lock size={18} /> Anti-Theft</Link>
                   <Link to="/safe-zones" data-testid="m-zones"><MapPin size={18} /> Safe Zones</Link>
                   <div className="mobile-drawer-sep">More</div>
+                  <Link to="/helplines" data-testid="m-helplines"><Siren size={18} /> Helplines</Link>
                   <Link to="/alerts" data-testid="m-alerts"><Bell size={18} /> Alerts</Link>
                   <Link to="/circles" data-testid="m-circles"><Clock size={18} /> Temporary circles</Link>
                   <Link to="/incidents" data-testid="m-incidents"><FileWarning size={18} /> Incidents</Link>

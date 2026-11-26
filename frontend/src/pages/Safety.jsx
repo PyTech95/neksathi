@@ -713,6 +713,12 @@ export default function Safety() {
         <p className="muted" style={{ marginTop: 6 }}>Your personal panic button, trusted contacts, siren and helplines — all in one place.</p>
       </div>
 
+      <Link to="/helplines" data-testid="safety-helplines-link" className="glass glass-hover" style={{ display: "flex", alignItems: "center", gap: 13, padding: "14px 16px", borderRadius: 16, marginBottom: 18, textDecoration: "none", color: "var(--text)", border: "1px solid var(--panel-brd)" }}>
+        <span style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, display: "grid", placeItems: "center", background: "rgba(255,59,92,.14)", color: "#ff3b5c", border: "1px solid rgba(255,59,92,.4)" }}><Phone size={20} /></span>
+        <span style={{ flex: 1 }}><b style={{ fontSize: 15.5 }}>Emergency helplines</b><div className="muted" style={{ fontSize: 13 }}>Police, ambulance, fire, women & child — one tap to dial</div></span>
+        <ChevronRight size={18} className="muted" />
+      </Link>
+
       {isNativeApp() && <VolumeSosCard recipientCount={recipientCount} onSent={load} />}
       {isNativeApp() && <SosDisplayCard />}
 

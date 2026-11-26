@@ -571,18 +571,22 @@ async def nearby_police(request: Request, lat: float, lng: float, radius: int = 
 # ---- Emergency numbers (shown as Call Police / Call Ambulance on an SOS) -----
 # Defaults are India's unified numbers; the admin can change them without a
 # deploy (stored in system_config, id "emergency_numbers").
+# India's national helpline defaults. All admin-configurable (system_config,
+# id "emergency_numbers"). police/ambulance kept first for backward compatibility
+# with older app builds that only read those two.
 DEFAULT_EMERGENCY_NUMBERS = {
     "police": os.environ.get("POLICE_NUMBER", "112").strip() or "112",
     "ambulance": os.environ.get("AMBULANCE_NUMBER", "108").strip() or "108",
+    "fire": os.environ.get("FIRE_NUMBER", "101").strip() or "101",
+    "women": os.environ.get("WOMEN_HELPLINE", "1091").strip() or "1091",
+    "child": os.environ.get("CHILD_HELPLINE", "1098").strip() or "1098",
 }
+_EMERGENCY_KEYS = ("police", "ambulance", "fire", "women", "child")
 
 
 async def get_emergency_numbers() -> dict:
     doc = await db.system_config.find_one({"id": "emergency_numbers"}) or {}
-    return {
-        "police": (doc.get("police") or DEFAULT_EMERGENCY_NUMBERS["police"]),
-        "ambulance": (doc.get("ambulance") or DEFAULT_EMERGENCY_NUMBERS["ambulance"]),
-    }
+    return {k: (doc.get(k) or DEFAULT_EMERGENCY_NUMBERS[k]) for k in _EMERGENCY_KEYS}
 
 
 @router.get("/public/emergency-numbers")
@@ -593,15 +597,25 @@ async def public_emergency_numbers():
 class EmergencyNumbersIn(BaseModel):
     police: str = Field(min_length=2, max_length=20)
     ambulance: str = Field(min_length=2, max_length=20)
+    # Added helplines are optional so an older admin client sending only
+    # police+ambulance still succeeds; unset ones keep their current/default value.
+    fire: Optional[str] = Field(default=None, max_length=20)
+    women: Optional[str] = Field(default=None, max_length=20)
+    child: Optional[str] = Field(default=None, max_length=20)
 
 
 @router.put("/admin/emergency-numbers")
 async def set_emergency_numbers(payload: EmergencyNumbersIn, user: dict = Depends(require_admin)):
-    clean_p = "".join(ch for ch in payload.police if ch.isdigit() or ch == "+")
-    clean_a = "".join(ch for ch in payload.ambulance if ch.isdigit() or ch == "+")
-    if len(clean_p) < 2 or len(clean_a) < 2:
-        raise HTTPException(status_code=400, detail="Enter valid phone numbers.")
-    await db.system_config.update_one({"id": "emergency_numbers"},
-                                      {"$set": {"id": "emergency_numbers", "police": clean_p, "ambulance": clean_a,
-                                                "updated_at": now_utc(), "updated_by": user["id"]}}, upsert=True)
+    def _clean(v):
+        return "".join(ch for ch in (v or "") if ch.isdigit() or ch == "+")
+    update = {"id": "emergency_numbers", "updated_at": now_utc(), "updated_by": user["id"]}
+    for key in _EMERGENCY_KEYS:
+        raw = getattr(payload, key, None)
+        if raw is None:
+            continue
+        c = _clean(raw)
+        if len(c) < 2:
+            raise HTTPException(status_code=400, detail=f"Enter a valid {key} number.")
+        update[key] = c
+    await db.system_config.update_one({"id": "emergency_numbers"}, {"$set": update}, upsert=True)
     return await get_emergency_numbers()
