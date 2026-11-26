@@ -42,6 +42,11 @@ async function main(){
   let moved=false;
   try{if(fs.existsSync(downloads)){fs.renameSync(downloads,hold);moved=true;}run(win?'npx.cmd':'npx',['--no-install','cap','sync','android']);}
   finally{if(moved)fs.renameSync(hold,downloads);}
+  // Apply the native-android customisations (MainActivity back button, foreground
+  // LocationService, manifest, etc.) AFTER cap sync — cap sync restores Capacitor's
+  // defaults, so without this the debug APK ships the stock native code and the
+  // back button / background features are missing. (build-aab already does this.)
+  run('node',['scripts/apply-native.cjs']);
   const android=path.join(root,'android');const jar=path.join(android,'gradle','wrapper','gradle-wrapper.jar');
   if(!fs.existsSync(jar)){
     console.log('Restoring missing Gradle 8.2.1 wrapper from official Gradle sources...');
