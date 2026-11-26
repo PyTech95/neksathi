@@ -7,6 +7,7 @@ import TopNav from "@/components/TopNav";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
+import GuestHome from "@/pages/GuestHome";
 import Dashboard from "@/pages/Dashboard";
 import VehicleDetail from "@/pages/VehicleDetail";
 import Alerts from "@/pages/Alerts";
@@ -122,10 +123,12 @@ function WebOnly({ children }) {
 // On the installed app, opening it sends you to Login (or Home if already signed
 // in) instead of the marketing site. On the web it still shows the landing page.
 function Home() {
-  const { user, loading } = useAuth();
+  const { user, loading, isGuest } = useAuth();
   if (Capacitor.isNativePlatform()) {
     if (loading) return <div className="spinner" data-testid="home-loading" />;
-    return <Navigate to={user ? "/dashboard" : "/login"} replace />;
+    if (user) return <Navigate to="/dashboard" replace />;
+    if (isGuest) return <Navigate to="/explore" replace />;
+    return <Navigate to="/login" replace />;
   }
   return <Landing />;
 }
@@ -169,6 +172,7 @@ function Shell() {
           <Route path="/otp-login" element={<OtpLogin />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/explore" element={<GuestHome />} />
           <Route path="/scan/:qrId" element={<PublicScan />} />
           <Route path="/contact" element={<WebOnly><Contact /></WebOnly>} />
           <Route path="/partner" element={<WebOnly><PartnerPage /></WebOnly>} />

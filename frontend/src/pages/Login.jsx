@@ -2,10 +2,10 @@ import { useState } from "react";
 import Copyright from "@/components/Copyright";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { LogIn, Smartphone } from "lucide-react";
+import { LogIn, Smartphone, Compass } from "lucide-react";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, enterGuest } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
   const next = new URLSearchParams(loc.search).get("next");
@@ -57,6 +57,15 @@ export default function Login() {
           <p className="muted center" style={{ marginTop: 18, fontSize: 14 }}>
             No account? <Link to="/register" className="neon" style={{ fontWeight: 700 }}>Create one</Link>
           </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "16px 0 4px" }}>
+            <span style={{ flex: 1, height: 1, background: "var(--panel-brd)" }} />
+            <span className="muted" style={{ fontSize: 12 }}>or</span>
+            <span style={{ flex: 1, height: 1, background: "var(--panel-brd)" }} />
+          </div>
+          <button type="button" className="btn btn-ghost btn-block" data-testid="explore-guest"
+            onClick={() => { enterGuest(); nav("/explore"); }}>
+            <Compass size={16} /> Explore the app first
+          </button>
         </div>
         <Copyright />
       </div>

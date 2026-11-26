@@ -8,6 +8,13 @@ const AuthCtx = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Guest mode: a visitor who tapped "Explore the app" can look around without
+  // an account. Persisted per device so reopening keeps them in explore mode.
+  const [isGuest, setIsGuest] = useState(() => {
+    try { return !localStorage.getItem("nk_token") && localStorage.getItem("nk_guest") === "1"; } catch (_) { return false; }
+  });
+  const enterGuest = () => { try { localStorage.setItem("nk_guest", "1"); } catch (_) {} setIsGuest(true); };
+  const exitGuest = () => { try { localStorage.removeItem("nk_guest"); } catch (_) {} setIsGuest(false); };
 
   useEffect(() => {
     const t = localStorage.getItem("nk_token");
@@ -44,6 +51,7 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const r = await api.post("/auth/login", { email, password });
     localStorage.setItem("nk_token", r.data.access_token);
+    exitGuest();
     setUser(r.data.user);
     return r.data.user;
   };
@@ -51,24 +59,27 @@ export function AuthProvider({ children }) {
   const register = async (payload) => {
     const r = await api.post("/auth/register", payload);
     localStorage.setItem("nk_token", r.data.access_token);
+    exitGuest();
     setUser(r.data.user);
     return r.data.user;
   };
 
   const logout = () => {
     localStorage.removeItem("nk_token");
+    exitGuest();
     cacheClear(); // drop cached tab data so the next account never sees it
     setUser(null);
   };
 
   const loginWithToken = (token, u) => {
     localStorage.setItem("nk_token", token);
+    exitGuest();
     setUser(u);
     return u;
   };
 
   return (
-    <AuthCtx.Provider value={{ user, loading, login, register, logout, loginWithToken, setUser }}>
+    <AuthCtx.Provider value={{ user, loading, isGuest, enterGuest, exitGuest, login, register, logout, loginWithToken, setUser }}>
       {children}
     </AuthCtx.Provider>
   );
