@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { QrCode, LogOut, ChevronDown, School, HeartPulse, Briefcase, ShieldAlert, Users, Car, MoreHorizontal, Settings as SettingsIcon, Siren, Lock, MapPin, Bell, FileWarning, LifeBuoy, CreditCard, Menu, X, ScanLine, Clock, Building2, ArrowRight } from "lucide-react";
+import { QrCode, LogOut, ChevronDown, School, HeartPulse, Briefcase, ShieldAlert, Users, Car, MoreHorizontal, Settings as SettingsIcon, Siren, Lock, MapPin, Bell, FileWarning, LifeBuoy, CreditCard, Menu, X, ScanLine, Clock, Building2, ArrowRight, BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Capacitor } from "@capacitor/core";
@@ -32,6 +32,7 @@ const ASSET_LINKS = [
 ];
 const MORE_LINKS = [
   { to: "/helplines", icon: <Siren size={18} />, title: "Helplines", desc: "Police, ambulance, fire & more", accent: "#ff3b5c", tid: "nav-m-helplines" },
+  { to: "/my-story", icon: <BookOpen size={18} />, title: "My Story", desc: "Your captured photos, audio & video", accent: "#e92546", tid: "nav-m-story" },
   { to: "/alerts", icon: <Bell size={18} />, title: "Alerts", desc: "Your alert feed", accent: "#f5a524", tid: "nav-m-alerts" },
   { to: "/circles", icon: <Clock size={18} />, title: "Temporary circles", desc: "Time-boxed sharing", accent: "#ff4d67", tid: "nav-m-circles" },
   { to: "/incidents", icon: <FileWarning size={18} />, title: "Incidents", desc: "History & status", accent: "#ff3b5c", tid: "nav-m-incidents" },
@@ -242,6 +243,7 @@ export default function TopNav() {  const { user, logout } = useAuth();
                   <Link to="/safe-zones" data-testid="m-zones"><MapPin size={18} /> Safe Zones</Link>
                   <div className="mobile-drawer-sep">More</div>
                   <Link to="/helplines" data-testid="m-helplines"><Siren size={18} /> Helplines</Link>
+                  <Link to="/my-story" data-testid="m-story"><BookOpen size={18} /> My Story</Link>
                   <Link to="/alerts" data-testid="m-alerts"><Bell size={18} /> Alerts</Link>
                   <Link to="/circles" data-testid="m-circles"><Clock size={18} /> Temporary circles</Link>
                   <Link to="/incidents" data-testid="m-incidents"><FileWarning size={18} /> Incidents</Link>

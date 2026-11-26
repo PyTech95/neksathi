@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 import asyncio
 import base64
 import hashlib
@@ -19,7 +19,7 @@ from app.services.fcm import send_push
 from app.services.gdrive import _gdrive_autobackup
 from app.services.geo import _evaluate_geofences, _haversine_km
 from app.services.notify import notify_whatsapp, send_sms
-from app.utils import clean, new_id, now_utc
+from app.utils import _aware, clean, new_id, now_utc
 
 router = APIRouter()
 
@@ -227,6 +227,38 @@ async def list_sos_events(user: dict = Depends(current_user), limit: int = 30):
         e.pop("photo_base64", None)
         items.append(SOSEventOut(**e))
     return items
+
+
+@router.get("/me/story")
+async def my_story(user: dict = Depends(current_user), limit: int = 40):
+    """My Story: one chronological timeline of everything this user has captured
+    — SOS front-camera photos, audio evidence and SOS videos — newest first.
+    Media bytes are NOT included; each item carries the URL to fetch them."""
+    uid = user["id"]
+    limit = max(1, min(limit, 100))
+    items = []
+    async for e in db.sos_events.find({"user_id": uid}).sort("created_at", -1).limit(60):
+        has_photo = bool(e.get("photo_base64") or e.get("has_photo"))
+        items.append({
+            "kind": "sos", "id": e.get("id"), "created_at": e.get("created_at"),
+            "has_photo": has_photo,
+            "latitude": e.get("latitude"), "longitude": e.get("longitude"),
+            "media_url": f"/me/sos-events/{e.get('id')}/photo" if has_photo else None,
+        })
+    async for a in db.audio_evidence.find({"user_id": uid}).sort("created_at", -1).limit(60):
+        items.append({
+            "kind": "audio", "id": a.get("id"), "created_at": a.get("created_at"),
+            "duration_ms": a.get("duration_ms"),
+            "media_url": f"/me/audio-evidence/{a.get('id')}/play",
+        })
+    async for v in db.sos_videos.find({"user_id": uid}, {"video_base64": 0}).sort("created_at", -1).limit(60):
+        items.append({
+            "kind": "video", "id": v.get("id"), "created_at": v.get("created_at"),
+            "media_url": f"/sos-video/{v.get('id')}",
+        })
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    items.sort(key=lambda x: _aware(x.get("created_at")) or epoch, reverse=True)
+    return {"items": items[:limit], "total": len(items)}
 
 
 @router.get("/me/sos-events/{event_id}/photo")
