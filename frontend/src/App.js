@@ -65,6 +65,7 @@ import LiveAlarm from "./components/LiveAlarm";
 import FamilyAlarm from "./components/FamilyAlarm";
 import IncomingCall from "./components/IncomingCall";
 import BottomNav from "@/components/BottomNav";
+import Onboarding from "@/components/Onboarding";
 import More from "@/pages/More";
 import BuyQR from "@/pages/BuyQR";
 import BuyTagQR from "@/pages/BuyTagQR";
@@ -239,6 +240,7 @@ function Shell() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <AppChrome />
+        <Onboarding />
       </BrowserRouter>
     </>
   );
