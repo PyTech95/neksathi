@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import CameraCapture from "@/components/CameraCapture";
 import InAppCall from "@/components/InAppCall";
 import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare, Volume2, Key, Bike, Package, Video } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 // Reliable scan location. In the native app the Capacitor Geolocation plugin
 // is used (much more dependable inside the WebView); otherwise the browser API
@@ -55,6 +56,7 @@ function softBeep(freq = 880, dur = 0.35) {
 // Visible circular countdown for the 15-minute owner window, with soft beeps
 // near the end so the waiting reporter knows time is almost up.
 function CountdownRing({ expiresAt, minutesLeft }) {
+  const { t } = useT();
   // End time comes from the server's expires_at (precise); if it ever fails to
   // parse, fall back to the server-computed minutes_left. Re-synced whenever the
   // 5s poll delivers a new value, so an owner's "+10 min" extension shows within
@@ -77,8 +79,8 @@ function CountdownRing({ expiresAt, minutesLeft }) {
     endRef.current = endAt();
     const tick = () => setLeft(Math.max(0, Math.round((endRef.current - Date.now()) / 1000)));
     tick();
-    const t = setInterval(tick, 1000);
-    return () => clearInterval(t);
+    const tmr = setInterval(tick, 1000);
+    return () => clearInterval(tmr);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expiresAt, minutesLeft]);
   useEffect(() => {
@@ -100,7 +102,7 @@ function CountdownRing({ expiresAt, minutesLeft }) {
       </svg>
       <div style={{ marginTop: -92, textAlign: "center", height: 80, display: "grid", placeItems: "center" }}>
         <div style={{ fontSize: 26, fontWeight: 800, fontFamily: "Chakra Petch", color: col }} data-testid="countdown-time">{left > 0 ? `${mm}:${ss}` : "00:00"}</div>
-        <div className="muted" style={{ fontSize: 11 }}>{left > 0 ? "window left" : "window over"}</div>
+        <div className="muted" style={{ fontSize: 11 }}>{left > 0 ? t("ps.windowLeft") : t("ps.windowOver")}</div>
       </div>
     </div>
   );
@@ -113,17 +115,17 @@ const CALL_ENABLED = false;
 
 const WINDOW_TYPES = ["wrong_parking", "vehicle_blocking"];
 const REASONS = [
-  { key: "wrong_parking", label: "Wrong Parking", icon: <ParkingCircle size={26} />, grad: "linear-gradient(100deg,#f59e0b,#f5a524)", desc: "Alert the owner to move their vehicle. A 15-minute window starts once you alert them." },
-  { key: "vehicle_blocking", label: "Vehicle Blocking", icon: <Ban size={26} />, grad: "linear-gradient(100deg,#f97316,#fb923c)", desc: "This vehicle is blocking the way. Ask the owner to move it — a 15-minute window starts." },
-  { key: "headlight_on", label: "Headlight ON", icon: <Lightbulb size={26} />, grad: "linear-gradient(100deg,#ca8a04,#eab308)", desc: "The headlights are left ON. Let the owner know before the battery drains." },
-  { key: "door_open", label: "Door / Window Open", icon: <DoorOpen size={26} />, grad: "linear-gradient(100deg,#b3122f,#e92546)", desc: "A door or window is left open. Notify the owner to secure the vehicle." },
-  { key: "keys_left", label: "Keys Left in Vehicle", icon: <Key size={26} />, grad: "linear-gradient(100deg,#ca8a04,#f59e0b)", desc: "The keys are left in the vehicle. Let the owner know before someone takes it." },
-  { key: "bike_fallen", label: "Bike Fallen / Falling", icon: <Bike size={26} />, grad: "linear-gradient(100deg,#d97706,#f97316)", desc: "This two-wheeler has fallen or is about to. Alert the owner to come set it right." },
-  { key: "load_problem", label: "Load / Cargo Problem", icon: <Package size={26} />, grad: "linear-gradient(100deg,#b45309,#f59e0b)", desc: "A problem with the load or cargo. Notify the owner to check it." },
-  { key: "emergency", label: "Emergency", icon: <Siren size={26} />, grad: "linear-gradient(100deg,#e11d48,#ff3b5c)", urgent: true, photoOptional: true, desc: "Urgent! Notify the owner & family immediately." },
-  { key: "vehicle_damage", label: "Vehicle Damage", icon: <AlertTriangle size={26} />, grad: "linear-gradient(100deg,#dc2626,#f97316)", desc: "The vehicle appears damaged. Report it to the owner with a photo." },
-  { key: "other", label: "Other", icon: <MessageSquare size={26} />, grad: "linear-gradient(100deg,#b3122f,#ff4d67)", desc: "Something else about this vehicle — leave a note for the owner." },
-  { key: "theft", label: "Theft / Suspicious", icon: <ShieldAlert size={26} />, grad: "linear-gradient(100deg,#6d28d9,#ff4d67)", desc: "Report suspicious activity or theft. The owner & family are alerted immediately." },
+  { key: "wrong_parking", lkey: "ps.r.wrong_parking", dkey: "ps.r.wrong_parking.d", icon: <ParkingCircle size={26} />, grad: "linear-gradient(100deg,#f59e0b,#f5a524)" },
+  { key: "vehicle_blocking", lkey: "ps.r.vehicle_blocking", dkey: "ps.r.vehicle_blocking.d", icon: <Ban size={26} />, grad: "linear-gradient(100deg,#f97316,#fb923c)" },
+  { key: "headlight_on", lkey: "ps.r.headlight_on", dkey: "ps.r.headlight_on.d", icon: <Lightbulb size={26} />, grad: "linear-gradient(100deg,#ca8a04,#eab308)" },
+  { key: "door_open", lkey: "ps.r.door_open", dkey: "ps.r.door_open.d", icon: <DoorOpen size={26} />, grad: "linear-gradient(100deg,#b3122f,#e92546)" },
+  { key: "keys_left", lkey: "ps.r.keys_left", dkey: "ps.r.keys_left.d", icon: <Key size={26} />, grad: "linear-gradient(100deg,#ca8a04,#f59e0b)" },
+  { key: "bike_fallen", lkey: "ps.r.bike_fallen", dkey: "ps.r.bike_fallen.d", icon: <Bike size={26} />, grad: "linear-gradient(100deg,#d97706,#f97316)" },
+  { key: "load_problem", lkey: "ps.r.load_problem", dkey: "ps.r.load_problem.d", icon: <Package size={26} />, grad: "linear-gradient(100deg,#b45309,#f59e0b)" },
+  { key: "emergency", lkey: "ps.r.emergency", dkey: "ps.r.emergency.d", icon: <Siren size={26} />, grad: "linear-gradient(100deg,#e11d48,#ff3b5c)", urgent: true, photoOptional: true },
+  { key: "vehicle_damage", lkey: "ps.r.vehicle_damage", dkey: "ps.r.vehicle_damage.d", icon: <AlertTriangle size={26} />, grad: "linear-gradient(100deg,#dc2626,#f97316)" },
+  { key: "other", lkey: "ps.r.other", dkey: "ps.r.other.d", icon: <MessageSquare size={26} />, grad: "linear-gradient(100deg,#b3122f,#ff4d67)" },
+  { key: "theft", lkey: "ps.r.theft", dkey: "ps.r.theft.d", icon: <ShieldAlert size={26} />, grad: "linear-gradient(100deg,#6d28d9,#ff4d67)" },
 ];
 
 // Which reasons show for which vehicle type. Universal reasons (parking,
@@ -143,6 +145,7 @@ function reasonsFor(vtype) {
 }
 
 export default function PublicScan() {
+  const { t } = useT();
   const { qrId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const [vehicle, setVehicle] = useState(null);
@@ -261,7 +264,7 @@ export default function PublicScan() {
       setScreen("waiting");
       setSearchParams({ incident: r.data.id }, { replace: true });
       startPolling(r.data.id);
-    } catch (e) { alert(e?.response?.data?.detail || "Could not send"); } finally { setBusy(false); }
+    } catch (e) { alert(e?.response?.data?.detail || t("ps.couldNotSend")); } finally { setBusy(false); }
   };
 
   const goChoose = () => { setScreen("choose"); setCarPhoto(null); setSelfiePhoto(null); };
@@ -276,7 +279,7 @@ export default function PublicScan() {
   const dialValid = phone.replace(/\D/g, "").length >= 10;
   const dialPad = () => (
     <>
-      <div className="dial-display" data-testid="dial-display">{phone || <span style={{ opacity: 0.4 }}>Enter your mobile number</span>}</div>
+      <div className="dial-display" data-testid="dial-display">{phone || <span style={{ opacity: 0.4 }}>{t("ps.dialPh")}</span>}</div>
       <div className="dial-grid">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "0", "back"].map((k) => (
           <button
@@ -295,7 +298,7 @@ export default function PublicScan() {
   if (loading) return <div className="page"><div className="spinner" /></div>;
   if (notFound) return (
     <div className="page container-nk center"><div className="glass card-pad" style={{ maxWidth: 460, margin: "40px auto", padding: 40 }} data-testid="scan-not-found">
-      <h1 style={{ fontSize: 28 }}>QR not found</h1><p className="muted">This sticker is not registered or the vehicle was removed.</p>
+      <h1 style={{ fontSize: 28 }}>{t("ps.notFound")}</h1><p className="muted">{t("ps.notFoundSub")}</p>
     </div></div>
   );
   // Owner paused this QR: show a neutral "temporarily unavailable" screen and no
@@ -303,13 +306,12 @@ export default function PublicScan() {
   if (vehicle && vehicle.qr_paused) return (
     <div className="page container-nk center"><div className="glass card-pad" style={{ maxWidth: 460, margin: "40px auto", padding: 40 }} data-testid="scan-paused">
       <div className="brand-badge" style={{ width: 54, height: 54, borderRadius: 14, margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center" }}><Car size={26} /></div>
-      <h1 style={{ fontSize: 24, marginBottom: 10 }}>Temporarily unavailable</h1>
+      <h1 style={{ fontSize: 24, marginBottom: 10 }}>{t("ps.paused")}</h1>
       <p className="muted" style={{ lineHeight: 1.6 }}>
-        This Nek Sathi QR is currently paused by its owner, so it isn't accepting
-        alerts right now. Please check back later.
+        {t("ps.pausedSub")}
       </p>
       <p className="muted" style={{ fontSize: 13, marginTop: 14 }}>
-        If this is an emergency, please contact local authorities.
+        {t("ps.emergencyNote")}
       </p>
     </div></div>
   );
@@ -319,13 +321,12 @@ export default function PublicScan() {
     <div className="page container-nk center"><div className="glass card-pad" style={{ maxWidth: 460, margin: "40px auto", padding: 40 }} data-testid="scan-expired">
       <div className="brand-badge" style={{ width: 54, height: 54, borderRadius: 14, margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center" }}><Car size={26} /></div>
       <div className="chip" style={{ display: "inline-block", marginBottom: 14 }}>{vehicle.number_plate}</div>
-      <h1 style={{ fontSize: 24, marginBottom: 10 }}>Protection expired</h1>
+      <h1 style={{ fontSize: 24, marginBottom: 10 }}>{t("ps.expired")}</h1>
       <p className="muted" style={{ lineHeight: 1.6 }}>
-        This vehicle's Nek Sathi protection has expired, so alerts and calls are paused.
-        The owner needs to renew the subscription to reactivate it.
+        {t("ps.expiredSub")}
       </p>
       <p className="muted" style={{ fontSize: 13, marginTop: 14 }}>
-        If this is an emergency, please contact local authorities.
+        {t("ps.emergencyNote")}
       </p>
     </div></div>
   );
@@ -337,13 +338,13 @@ export default function PublicScan() {
         <div><div className="chip" data-testid="scan-plate">{vehicle.number_plate}</div>
           <p className="muted" style={{ marginTop: 6, fontSize: 13, textTransform: "capitalize" }}>{vehicle.vehicle_type}{vehicle.make_model ? ` · ${vehicle.make_model}` : ""}</p></div>
       </div>
-      <p className="muted" style={{ marginTop: 12, fontSize: 13 }}><MapPin size={12} style={{ verticalAlign: "-2px" }} /> {coords ? <span style={{ color: "#16a34a", fontWeight: 700 }}>Location ready ✓</span> : <span style={{ color: "#f5a524" }}>Getting your location…</span>} · Owner's number stays private</p>
+      <p className="muted" style={{ marginTop: 12, fontSize: 13 }}><MapPin size={12} style={{ verticalAlign: "-2px" }} /> {coords ? <span style={{ color: "#16a34a", fontWeight: 700 }}>{t("ps.locReady")}</span> : <span style={{ color: "#f5a524" }}>{t("ps.locGetting")}</span>} · {t("ps.ownerPrivate")}</p>
     </div>
   );
 
   const photoBlock = (required) => (
     <div className="glass card-pad" style={{ padding: 18, marginTop: 14 }} data-testid="scan-photo-block">
-      <label style={{ display: "block", marginBottom: 10, fontSize: 14, fontWeight: 700 }}>Add a photo of the vehicle {required && <span style={{ color: "#ff3b5c" }}>*</span>}</label>
+      <label style={{ display: "block", marginBottom: 10, fontSize: 14, fontWeight: 700 }}>{t("ps.addPhoto")} {required && <span style={{ color: "#ff3b5c" }}>*</span>}</label>
       {carPhoto ? (
         <div className="photo-thumb" data-testid="scan-photo-preview">
           <img src={carPhoto} alt="Vehicle evidence" />
@@ -351,10 +352,10 @@ export default function PublicScan() {
         </div>
       ) : (
         <button className="btn btn-ghost btn-block" onClick={() => setShowCam(true)} data-testid="scan-photo-add" style={{ padding: 16, borderColor: required ? "rgba(255,59,92,.5)" : undefined }}>
-          <Camera size={18} /> {required ? "Take a photo (required)" : "Take a photo (optional)"}
+          <Camera size={18} /> {required ? t("ps.takeRequired") : t("ps.takeOptional")}
         </button>
       )}
-      <p className="muted" style={{ fontSize: 12, marginTop: 8 }}><ImagePlus size={12} style={{ verticalAlign: "-2px" }} /> {required ? "A photo is required to send this alert — stronger proof for the owner." : "A clear photo helps the owner act faster."}</p>
+      <p className="muted" style={{ fontSize: 12, marginTop: 8 }}><ImagePlus size={12} style={{ verticalAlign: "-2px" }} /> {required ? t("ps.photoReqNote") : t("ps.photoOptNote")}</p>
     </div>
   );
 
@@ -365,11 +366,11 @@ export default function PublicScan() {
 
         {screen === "choose" && (
           <div data-testid="scan-choose">
-            <h2 className="center" style={{ fontSize: 24, marginBottom: 16 }}>How can we help?</h2>
+            <h2 className="center" style={{ fontSize: 24, marginBottom: 16 }}>{t("ps.howHelp")}</h2>
             <div className="grid" style={{ gap: 12 }}>
               {reasonsFor(vehicle?.vehicle_type).map((r) => (
                 <button key={r.key} className="big-action" style={{ background: r.grad }} onClick={() => { setScreen(r.key); setShowCam(true); }} data-testid={`choose-${r.key}`}>
-                  {r.icon} {r.label}
+                  {r.icon} {t(r.lkey)}
                 </button>
               ))}
             </div>
@@ -382,56 +383,56 @@ export default function PublicScan() {
           const windowed = WINDOW_TYPES.includes(r.key);
           return (
             <div data-testid={`scan-${r.key}`}>
-              <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={goChoose}><ArrowLeft size={15} /> Back</button>
+              <button className="nav-link" style={{ display: "inline-flex", marginBottom: 8 }} onClick={goChoose}><ArrowLeft size={15} /> {t("common.back")}</button>
               {r.urgent ? (
                 <div className="glass card-pad center" style={{ padding: 26, borderColor: "rgba(255,59,92,.5)" }}>
                   <Siren size={48} color="#ff3b5c" />
-                  <h2 style={{ fontSize: 26, margin: "12px 0 6px", color: "#ff3b5c" }}>{r.label}</h2>
-                  <p className="muted">{r.desc}</p>
+                  <h2 style={{ fontSize: 26, margin: "12px 0 6px", color: "#ff3b5c" }}>{t(r.lkey)}</h2>
+                  <p className="muted">{t(r.dkey)}</p>
                 </div>
               ) : (
                 <>
-                  <h2 style={{ fontSize: 22, marginBottom: 6 }}>{r.label}</h2>
-                  <p className="muted" style={{ marginBottom: 4 }}>{r.desc}</p>
+                  <h2 style={{ fontSize: 22, marginBottom: 6 }}>{t(r.lkey)}</h2>
+                  <p className="muted" style={{ marginBottom: 4 }}>{t(r.dkey)}</p>
                 </>
               )}
               {photoBlock(true)}
               <div className="glass card-pad" style={{ padding: 18, marginTop: 14 }} data-testid="scan-note-block">
-                <label style={{ display: "block", marginBottom: 8, fontSize: 14, fontWeight: 700 }}>Message for the owner (optional)</label>
+                <label style={{ display: "block", marginBottom: 8, fontSize: 14, fontWeight: 700 }}>{t("ps.msgOwner")}</label>
                 <textarea
                   className="input"
                   data-testid="scan-note-input"
                   value={note}
                   onChange={(e) => setNote(e.target.value.slice(0, 300))}
-                  placeholder="e.g. Your car is blocking the gate — please move it."
+                  placeholder={t("ps.msgPh")}
                   rows={2}
                   style={{ resize: "vertical", width: "100%" }}
                 />
-                <label style={{ display: "block", margin: "12px 0 8px", fontSize: 14, fontWeight: 700 }}>Your mobile number (optional)</label>
+                <label style={{ display: "block", margin: "12px 0 8px", fontSize: 14, fontWeight: 700 }}>{t("ps.yourMobile")}</label>
                 <input
                   className="input"
                   data-testid="scan-phone-input"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, "").slice(0, 15))}
-                  placeholder="So the owner can call you back"
+                  placeholder={t("ps.mobilePh")}
                   inputMode="tel"
                   style={{ width: "100%" }}
                 />
-                <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Add your number so the owner can call you back if needed.</p>
+                <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>{t("ps.mobileNote")}</p>
               </div>
               <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
                 <button className="big-action" style={{ background: r.grad, opacity: !carPhoto ? 0.55 : 1 }} disabled={busy || !carPhoto} onClick={() => createIncident(r.key)} data-testid={`alert-${r.key}-btn`}>
                   {busy ? <Loader2 size={24} className="spin" /> : (r.urgent ? <Siren size={26} /> : <BellRing size={26} />)}
-                  {r.urgent ? " Send emergency alert" : windowed ? " Alert owner (15-min)" : " Alert owner"}
+                  {r.urgent ? ` ${t("ps.sendEmergency")}` : windowed ? ` ${t("ps.alertOwner15")}` : ` ${t("ps.alertOwner")}`}
                 </button>
                 <button className="big-action" style={{ background: "linear-gradient(100deg,#b3122f,#e92546)" }} onClick={() => { setCallVideo(false); setShowCall(true); }} data-testid={`call-${r.key}-btn`}>
-                  <Phone size={24} /> Call owner (live)
+                  <Phone size={24} /> {t("ps.callOwner")}
                 </button>
                 <button className="big-action" style={{ background: "linear-gradient(100deg,#1d4ed8,#2563eb)" }} onClick={() => { setCallVideo(true); setShowCall(true); }} data-testid={`videocall-${r.key}-btn`}>
-                  <Video size={24} /> Video call owner
+                  <Video size={24} /> {t("ps.videoCall")}
                 </button>
               </div>
-              {!carPhoto && <p className="center muted" style={{ fontSize: 12, marginTop: 8 }}>Take a photo to alert the owner — you can call any time.</p>}
+              {!carPhoto && <p className="center muted" style={{ fontSize: 12, marginTop: 8 }}>{t("ps.takePhotoFirst")}</p>}
             </div>
           );
         })()}
@@ -442,46 +443,46 @@ export default function PublicScan() {
               // Resolved is terminal — it must win even after the owner said "coming"
               // (resolving does not clear owner_response, so this check comes first).
               <div className="glass card-pad center" style={{ padding: 34 }} data-testid="incident-resolved">
-                <CheckCircle2 size={56} color="#e92546" /><h2 style={{ fontSize: 24, marginTop: 12 }}>Resolved</h2>
-                <p className="muted">The owner marked this issue as resolved. Thank you!</p>
+                <CheckCircle2 size={56} color="#e92546" /><h2 style={{ fontSize: 24, marginTop: 12 }}>{t("ps.resolved")}</h2>
+                <p className="muted">{t("ps.resolvedSub")}</p>
               </div>
             ) : incident.owner_response === "coming" ? (
               <div className="glass card-pad center" style={{ padding: 34, borderColor: "rgba(233,37,70,.5)" }} data-testid="owner-coming">
                 <CheckCircle2 size={56} color="#e92546" />
-                <h2 style={{ fontSize: 24, margin: "12px 0 8px" }}>Owner is coming!</h2>
-                <p className="muted">The vehicle owner has been notified and is coming within 15 minutes. Please wait.</p>
+                <h2 style={{ fontSize: 24, margin: "12px 0 8px" }}>{t("ps.ownerComing")}</h2>
+                <p className="muted">{t("ps.ownerComingSub")}</p>
                 {WINDOW_TYPES.includes(incident.type) && incident.expires_at && <CountdownRing expiresAt={incident.expires_at} minutesLeft={incident.minutes_left} />}
-                <button className="btn btn-ghost btn-sm" onClick={playArrivalAlarm} data-testid="owner-coming-replay" style={{ marginTop: 12 }}><Volume2 size={15} /> Play alert again</button>
+                <button className="btn btn-ghost btn-sm" onClick={playArrivalAlarm} data-testid="owner-coming-replay" style={{ marginTop: 12 }}><Volume2 size={15} /> {t("ps.playAgain")}</button>
               </div>
             ) : (
               <div className="glass card-pad center" style={{ padding: 30 }} data-testid="alert-sent">
                 <BellRing size={48} color="#f5a524" />
-                <h2 style={{ fontSize: 23, margin: "12px 0 6px" }}>Owner alerted</h2>
+                <h2 style={{ fontSize: 23, margin: "12px 0 6px" }}>{t("ps.ownerAlerted")}</h2>
                 <p className="muted">
                   {WINDOW_TYPES.includes(incident.type)
-                    ? "We've notified the owner & family. Waiting for them to respond…"
-                    : "The owner & family have been notified."}
+                    ? t("ps.notifiedWaiting")
+                    : t("ps.notified")}
                 </p>
                 {WINDOW_TYPES.includes(incident.type) && incident.expires_at && (
                   <CountdownRing expiresAt={incident.expires_at} minutesLeft={incident.minutes_left} />
                 )}
                 {WINDOW_TYPES.includes(incident.type) && (
-                  <div className="chip" style={{ marginTop: 6 }}><Clock size={13} /> {incident.status === "no_response" ? "No response yet" : "Alert sent"}</div>
+                  <div className="chip" style={{ marginTop: 6 }}><Clock size={13} /> {incident.status === "no_response" ? t("ps.noResponse") : t("ps.alertSent")}</div>
                 )}
               </div>
             )}
 
             <p className="center" data-testid="scan-thanks" style={{ marginTop: 16, fontSize: 14, fontWeight: 800, color: "#16a34a" }}>
-              🙏 Thanks for choosing Nek Sathi
+              {t("ps.thanks")}
             </p>
 
             {incident.status !== "resolved" && (
               <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
                 <button className="big-action" style={{ background: "linear-gradient(100deg,#b3122f,#e92546)" }} onClick={() => { setCallVideo(false); setShowCall(true); }} data-testid="waiting-call-owner-btn">
-                  <Phone size={24} /> Call owner now (live, private)
+                  <Phone size={24} /> {t("ps.callNow")}
                 </button>
                 <button className="big-action" style={{ background: "linear-gradient(100deg,#1d4ed8,#2563eb)" }} onClick={() => { setCallVideo(true); setShowCall(true); }} data-testid="waiting-videocall-owner-btn">
-                  <Video size={24} /> Video call owner
+                  <Video size={24} /> {t("ps.videoCall")}
                 </button>
               </div>
             )}
@@ -526,7 +527,7 @@ export default function PublicScan() {
           </div>
         )}
 
-        <p className="center muted" style={{ marginTop: 26, fontSize: 12 }}>Powered by Nek Sathi · No owner personal data is exposed.</p>
+        <p className="center muted" style={{ marginTop: 26, fontSize: 12 }}>{t("ps.poweredBy")}</p>
       </div>
       {showCam && (
         <CameraCapture
