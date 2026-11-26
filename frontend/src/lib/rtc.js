@@ -60,6 +60,24 @@ export async function getMic() {
   }
 }
 
+// Camera + mic for a video doorbell call. Falls back to audio-only if the
+// camera can't be opened, so a video call still connects as voice.
+export async function getCamera({ facingMode = "user" } = {}) {
+  releaseAllStreams();
+  try {
+    return registerStream(await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 640 }, height: { ideal: 480 } },
+    }));
+  } catch (e) {
+    if (e && (e.name === "NotFoundError" || e.name === "OverconstrainedError")) {
+      // No camera / unsupported constraints — degrade to voice.
+      return getMic();
+    }
+    throw e;
+  }
+}
+
 export async function getIceConfig() {
   try {
     const { data } = await api.get("/turn-credentials");

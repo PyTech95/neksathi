@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import api, { API } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { RTC_CONFIG, getIceConfig, makeRingtone, vibrate, stopVibrate, getMic, releaseAllStreams } from "@/lib/rtc";
+import { RTC_CONFIG, getIceConfig, makeRingtone, vibrate, stopVibrate, getMic, getCamera, releaseAllStreams } from "@/lib/rtc";
 import { notifyCallEnded, notifyCallConnected, setCallAuth, isNativeApp } from "@/lib/callsetup";
-import { Phone, PhoneOff, Mic, MicOff, ShieldCheck, Car, Volume2, VolumeX } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, ShieldCheck, Car, Volume2, VolumeX, Video, VideoOff } from "lucide-react";
 
 // WhatsApp-style round call-control button (Mute / Speaker / End).
 function CallBtn({ onClick, on, danger, icon: Icon, label, testid }) {
@@ -30,6 +30,11 @@ export default function IncomingCall() {
   const [active, setActive] = useState(null);      // {call_id, number_plate}
   const [status, setStatus] = useState("idle");    // idle | connecting | connected | ended
   const [muted, setMuted] = useState(false);
+  const [camOff, setCamOff] = useState(false);
+  const [isVideo, setIsVideo] = useState(false);
+  const videoCallRef = useRef(false); // stable flag for accept()'s async flow
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
   const [seconds, setSeconds] = useState(0);
   const [answering, setAnswering] = useState(false); // native lock-screen "Answer" tapped → show Connecting… at once
   const ringRef = useRef(null);
@@ -98,7 +103,9 @@ export default function IncomingCall() {
         const c = items.find((x) => x.has_offer) || items[0];
         if (c && !rejectedIds.current.has(c.call_id)) {
           busyId.current = c.call_id;
-          setIncoming({ call_id: c.call_id, number_plate: c.number_plate });
+          videoCallRef.current = !!c.video;
+          setIsVideo(!!c.video);
+          setIncoming({ call_id: c.call_id, number_plate: c.number_plate, video: !!c.video });
           // If the user already tapped "Answer" on the native lock-screen call,
           // pick up immediately and do NOT start the in-app ringtone (the native
           // screen already handled ringing). Otherwise ring and wait for a tap.
@@ -186,7 +193,7 @@ export default function IncomingCall() {
     remoteSet.current = false; appliedCands.current = 0;
   };
 
-  const reset = () => { cleanup(); busyId.current = null; acceptingRef.current = false; setIncoming(null); setActive(null); setStatus("idle"); setSeconds(0); setMuted(false); setAnswering(false); endedRef.current = false; try { localStorage.removeItem("nk_answer_call_id"); } catch (_) {} notifyCallEnded(); };
+  const reset = () => { cleanup(); busyId.current = null; acceptingRef.current = false; videoCallRef.current = false; setIsVideo(false); setCamOff(false); setIncoming(null); setActive(null); setStatus("idle"); setSeconds(0); setMuted(false); setAnswering(false); endedRef.current = false; try { localStorage.removeItem("nk_answer_call_id"); } catch (_) {} notifyCallEnded(); };
 
   const reject = async () => {
     stopRing();
@@ -216,12 +223,16 @@ export default function IncomingCall() {
     setStatus("connecting");
     let acceptedOk = false; // did OUR accept win the race?
     try {
-      const stream = await getMic(); // releases leftover streams, retries once if the mic is busy
+      const stream = videoCallRef.current ? await getCamera() : await getMic(); // releases leftover streams, retries once if the mic is busy
       streamRef.current = stream;
+      if (videoCallRef.current && localVideoRef.current) { try { localVideoRef.current.srcObject = stream; } catch (_) {} }
       const pc = new RTCPeerConnection(await getIceConfig());
       pcRef.current = pc;
       stream.getTracks().forEach((t) => pc.addTrack(t, stream));
-      pc.ontrack = (e) => { if (remoteRef.current) remoteRef.current.srcObject = e.streams[0]; };
+      pc.ontrack = (e) => {
+        const el = videoCallRef.current ? remoteVideoRef.current : remoteRef.current;
+        if (el) el.srcObject = e.streams[0];
+      };
       pc.onicecandidate = (e) => {
         if (e.candidate) api.post(`/me/calls/${id}/candidate`, { candidate: e.candidate.toJSON() }).catch(() => {});
       };
@@ -300,6 +311,11 @@ export default function IncomingCall() {
     const on = !muted; setMuted(on);
     s.getAudioTracks().forEach((t) => { t.enabled = !on; });
   };
+  const toggleCam = () => {
+    const s = streamRef.current; if (!s) return;
+    const off = !camOff; setCamOff(off);
+    s.getVideoTracks().forEach((t) => { t.enabled = !off; });
+  };
   const [speakerOn, setSpeakerOn] = useState(true);
   const toggleSpeaker = () => {
     const on = !speakerOn; setSpeakerOn(on);
@@ -313,15 +329,46 @@ export default function IncomingCall() {
 
   if (!incoming && !active && !answering) return null;
 
+  // Owner-side video layout once the video call is being answered / is active.
+  if ((active || answering) && isVideo) {
+    return (
+      <div data-testid="incoming-videocall-overlay" style={{ position: "fixed", inset: 0, background: "#05060c", zIndex: 6000, display: "flex", flexDirection: "column" }}>
+        <video ref={remoteVideoRef} autoPlay playsInline data-testid="incoming-video-remote"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", background: "#05060c", opacity: status === "connected" ? 1 : 0.15 }} />
+        <video ref={localVideoRef} autoPlay playsInline muted data-testid="incoming-video-local"
+          style={{ position: "absolute", top: 16, right: 16, width: 108, height: 150, objectFit: "cover", borderRadius: 14, border: "2px solid rgba(255,255,255,.3)", background: "#111", zIndex: 2, display: camOff ? "none" : "block" }} />
+        <div style={{ position: "relative", zIndex: 3, padding: "22px 20px", textAlign: "center", color: "#fff", textShadow: "0 1px 10px rgba(0,0,0,.6)" }}>
+          <p style={{ fontSize: 12.5, letterSpacing: 1, textTransform: "uppercase", margin: 0, opacity: .85 }}>Video call</p>
+          <h2 style={{ fontSize: 20, margin: "4px 0 0" }} data-testid="incoming-videocall-status">{status === "connected" ? "Connected" : status === "ended" ? "Call ended" : "Connecting…"}</h2>
+          <p style={{ fontSize: 13, opacity: .8, margin: "2px 0 0" }}>{status === "connected" ? fmt(seconds) : `Caller about ${active?.number_plate || "your vehicle"}`}</p>
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ position: "relative", zIndex: 3, display: "flex", gap: 22, justifyContent: "center", padding: "24px 20px 34px", flexWrap: "wrap" }}>
+          {status !== "ended" && (
+            <>
+              {status === "connected" && (
+                <>
+                  <CallBtn onClick={toggleMute} on={muted} icon={muted ? MicOff : Mic} label={muted ? "Unmute" : "Mute"} testid="incoming-video-mute" />
+                  <CallBtn onClick={toggleCam} on={camOff} icon={camOff ? VideoOff : Video} label={camOff ? "Camera on" : "Camera off"} testid="incoming-video-cam" />
+                </>
+              )}
+              <CallBtn onClick={hangup} danger icon={PhoneOff} label="End" testid="incoming-video-hangup" />
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div data-testid="incoming-call-overlay" style={{ position: "fixed", inset: 0, background: "rgba(4,6,14,.82)", backdropFilter: "blur(8px)", zIndex: 6000, display: "grid", placeItems: "center", padding: 20 }}>
       <audio ref={remoteRef} autoPlay data-testid="incoming-call-audio" />
       {incoming && !active && !answering ? (
         <div className="glass card-pad" data-testid="incoming-call-ringing" style={{ width: "min(420px, 94vw)", padding: 30, textAlign: "center", borderRadius: 22, border: "1px solid rgba(233,37,70,.45)" }}>
           <div style={{ width: 84, height: 84, borderRadius: "50%", margin: "0 auto 16px", display: "grid", placeItems: "center", background: "linear-gradient(135deg,#b3122f,#e92546)", animation: "sosPulse 1.3s ease-in-out infinite" }}>
-            <Phone size={34} color="#fff" />
+            {isVideo ? <Video size={34} color="#fff" /> : <Phone size={34} color="#fff" />}
           </div>
-          <p className="muted" style={{ fontSize: 12.5, letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>Incoming call</p>
+          <p className="muted" style={{ fontSize: 12.5, letterSpacing: 1, textTransform: "uppercase", margin: 0 }}>{isVideo ? "Incoming video call" : "Incoming call"}</p>
           <h2 style={{ fontSize: 22, margin: "6px 0 4px" }}>Someone scanned your vehicle</h2>
           <p className="muted" style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}><Car size={14} /> {incoming.number_plate}</p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 22 }}>

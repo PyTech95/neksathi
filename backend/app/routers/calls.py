@@ -28,7 +28,7 @@ async def vobiz_sos_answer(token: str = ""):
 
 @router.post("/public/qr/{qr_id}/call/start")
 @rate_limit("15/minute")
-async def rtc_call_start(request: Request, qr_id: str):
+async def rtc_call_start(request: Request, qr_id: str, video: bool = False):
     v = await db.vehicles.find_one({"qr_id": qr_id})
     if not v:
         raise HTTPException(status_code=404, detail="QR not found or vehicle removed")
@@ -43,6 +43,7 @@ async def rtc_call_start(request: Request, qr_id: str):
         "id": new_id(), "qr_id": qr_id, "vehicle_id": v["id"], "number_plate": v["number_plate"],
         "owner_id": v["owner_id"], "callee_ids": callee_ids, "answered_by": None, "rejected_by": [],
         "status": "ringing",
+        "video": bool(video),  # video doorbell call when true; audio otherwise
         "caller_offer": None, "callee_answer": None,
         "caller_candidates": [], "callee_candidates": [],
         "created_at": now, "updated_at": now, "answered_at": None, "ended_at": None,
@@ -54,11 +55,13 @@ async def rtc_call_start(request: Request, qr_id: str):
             "type": "incoming_call",
             "call_id": call["id"],
             "number_plate": v["number_plate"],
-            "title": "📞 Incoming call", "message": f"Someone is calling about {v['number_plate']}",
+            "video": "1" if video else "0",
+            "title": ("📹 Incoming video call" if video else "📞 Incoming call"),
+            "message": f"Someone is {'video-' if video else ''}calling about {v['number_plate']}",
             "action_url": "/dashboard"}, idempotency_key="ring-" + call["id"], data_only=True)
     except Exception:
         pass
-    return {"call_id": call["id"]}
+    return {"call_id": call["id"], "video": bool(video)}
 
 
 @router.post("/public/call/{call_id}/offer")
@@ -113,7 +116,8 @@ async def rtc_incoming_calls(user: dict = Depends(current_user)):
     q = {**_callee_filter(user["id"]), "status": "ringing", "rejected_by": {"$nin": [user["id"]]}}
     async for c in db.webrtc_calls.find(q).sort("created_at", -1):
         out.append({"call_id": c["id"], "number_plate": c["number_plate"],
-                    "created_at": c["created_at"], "has_offer": bool(c.get("caller_offer"))})
+                    "created_at": c["created_at"], "has_offer": bool(c.get("caller_offer")),
+                    "video": bool(c.get("video"))})
     return {"items": out}
 
 
@@ -138,6 +142,7 @@ async def rtc_owner_poll(call_id: str, user: dict = Depends(current_user)):
         raise HTTPException(status_code=404, detail="Call not found")
     ab = c.get("answered_by")
     return {"status": c["status"], "offer": c.get("caller_offer"), "caller_candidates": c.get("caller_candidates", []),
+            "video": bool(c.get("video")),
             # Lets a still-ringing phone know another family member already picked up.
             "answered_by_me": (ab == user["id"]) if ab else None}
 

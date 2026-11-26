@@ -4,7 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import api from "@/lib/api";
 import CameraCapture from "@/components/CameraCapture";
 import InAppCall from "@/components/InAppCall";
-import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare, Volume2, Key, Bike, Package } from "lucide-react";
+import { Car, ParkingCircle, Siren, ShieldAlert, Phone, BellRing, CheckCircle2, Clock, MapPin, Loader2, ArrowLeft, Camera, ImagePlus, X, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare, Volume2, Key, Bike, Package, Video } from "lucide-react";
 
 // Reliable scan location. In the native app the Capacitor Geolocation plugin
 // is used (much more dependable inside the WebView); otherwise the browser API
@@ -159,6 +159,7 @@ export default function PublicScan() {
   const [selfiePhoto, setSelfiePhoto] = useState(null);
   const [showCam, setShowCam] = useState(false);
   const [showCall, setShowCall] = useState(false);
+  const [callVideo, setCallVideo] = useState(false);
   const poll = useRef(null);
   const arrivalAnnounced = useRef(false);
 
@@ -423,8 +424,11 @@ export default function PublicScan() {
                   {busy ? <Loader2 size={24} className="spin" /> : (r.urgent ? <Siren size={26} /> : <BellRing size={26} />)}
                   {r.urgent ? " Send emergency alert" : windowed ? " Alert owner (15-min)" : " Alert owner"}
                 </button>
-                <button className="big-action" style={{ background: "linear-gradient(100deg,#b3122f,#e92546)" }} onClick={() => setShowCall(true)} data-testid={`call-${r.key}-btn`}>
+                <button className="big-action" style={{ background: "linear-gradient(100deg,#b3122f,#e92546)" }} onClick={() => { setCallVideo(false); setShowCall(true); }} data-testid={`call-${r.key}-btn`}>
                   <Phone size={24} /> Call owner (live)
+                </button>
+                <button className="big-action" style={{ background: "linear-gradient(100deg,#1d4ed8,#2563eb)" }} onClick={() => { setCallVideo(true); setShowCall(true); }} data-testid={`videocall-${r.key}-btn`}>
+                  <Video size={24} /> Video call owner
                 </button>
               </div>
               {!carPhoto && <p className="center muted" style={{ fontSize: 12, marginTop: 8 }}>Take a photo to alert the owner — you can call any time.</p>}
@@ -472,9 +476,14 @@ export default function PublicScan() {
             </p>
 
             {incident.status !== "resolved" && (
-              <button className="big-action" style={{ background: "linear-gradient(100deg,#b3122f,#e92546)", marginTop: 14 }} onClick={() => setShowCall(true)} data-testid="waiting-call-owner-btn">
-                <Phone size={24} /> Call owner now (live, private)
-              </button>
+              <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                <button className="big-action" style={{ background: "linear-gradient(100deg,#b3122f,#e92546)" }} onClick={() => { setCallVideo(false); setShowCall(true); }} data-testid="waiting-call-owner-btn">
+                  <Phone size={24} /> Call owner now (live, private)
+                </button>
+                <button className="big-action" style={{ background: "linear-gradient(100deg,#1d4ed8,#2563eb)" }} onClick={() => { setCallVideo(true); setShowCall(true); }} data-testid="waiting-videocall-owner-btn">
+                  <Video size={24} /> Video call owner
+                </button>
+              </div>
             )}
 
             {CALL_ENABLED && (call ? (
@@ -525,7 +534,7 @@ export default function PublicScan() {
           onCancel={() => setShowCam(false)}
         />
       )}
-      {showCall && <InAppCall qrId={qrId} onClose={() => setShowCall(false)} />}
+      {showCall && <InAppCall qrId={qrId} video={callVideo} onClose={() => setShowCall(false)} />}
     </div>
   );
 }

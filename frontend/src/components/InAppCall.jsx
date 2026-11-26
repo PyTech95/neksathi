@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
-import { RTC_CONFIG, getIceConfig, getMic, releaseAllStreams } from "@/lib/rtc";
-import { Phone, PhoneOff, Mic, MicOff, Loader2, ShieldCheck, PhoneMissed, X, Volume2, VolumeX } from "lucide-react";
+import { RTC_CONFIG, getIceConfig, getMic, getCamera, releaseAllStreams } from "@/lib/rtc";
+import { Phone, PhoneOff, Mic, MicOff, Loader2, ShieldCheck, PhoneMissed, X, Volume2, VolumeX, Video, VideoOff } from "lucide-react";
 
 // WhatsApp-style round call-control button (Mute / Speaker / End).
 function CallBtn({ onClick, on, danger, icon: Icon, label, testid }) {
@@ -21,7 +21,7 @@ function CallBtn({ onClick, on, danger, icon: Icon, label, testid }) {
 
 // Anonymous scanner side of the in-app live voice call. Places a real WebRTC
 // call to the vehicle owner — connects inside the app, no phone numbers shared.
-export default function InAppCall({ qrId, onClose }) {
+export default function InAppCall({ qrId, onClose, video = false }) {
   const [status, setStatus] = useState("connecting"); // connecting | ringing | connected | ended | missed | rejected | error | denied
   // Human reason + raw detail (stage · error) so a failed call says exactly WHY.
   const [reason, setReason] = useState("");
@@ -44,6 +44,7 @@ export default function InAppCall({ qrId, onClose }) {
     return "Something went wrong starting the call.";
   };
   const [muted, setMuted] = useState(false);
+  const [camOff, setCamOff] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(true);
   const [seconds, setSeconds] = useState(0);
   const pcRef = useRef(null);
@@ -51,6 +52,8 @@ export default function InAppCall({ qrId, onClose }) {
   const callIdRef = useRef(null);
   const pollRef = useRef(null);
   const remoteRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
   const remoteSet = useRef(false);
   const pendingCands = useRef([]);
   const appliedCands = useRef(0);
@@ -91,14 +94,18 @@ export default function InAppCall({ qrId, onClose }) {
           throw new Error(typeof window !== "undefined" && window.isSecureContext === false ? "not a secure context (page is not https)" : "getUserMedia unavailable in this browser");
         }
         stageRef.current = "mic";
-        const stream = await getMic(); // releases leftover streams, retries once if the mic is busy
+        const stream = video ? await getCamera() : await getMic(); // releases leftover streams, retries once if the mic is busy
         if (stopped) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
+        if (video && localVideoRef.current) { try { localVideoRef.current.srcObject = stream; } catch (_) {} }
         stageRef.current = "ice";
         const pc = new RTCPeerConnection(await getIceConfig());
         pcRef.current = pc;
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
-        pc.ontrack = (e) => { if (remoteRef.current) remoteRef.current.srcObject = e.streams[0]; };
+        pc.ontrack = (e) => {
+          const el = video ? remoteVideoRef.current : remoteRef.current;
+          if (el) el.srcObject = e.streams[0];
+        };
         pc.onicecandidate = (e) => {
           if (e.candidate && callIdRef.current) {
             api.post(`/public/call/${callIdRef.current}/candidate`, { candidate: e.candidate.toJSON() }).catch(() => {});
@@ -111,13 +118,13 @@ export default function InAppCall({ qrId, onClose }) {
         };
 
         stageRef.current = "start";
-        const { call_id } = (await api.post(`/public/qr/${qrId}/call/start`)).data;
+        const { call_id } = (await api.post(`/public/qr/${qrId}/call/start${video ? "?video=1" : ""}`)).data;
         callIdRef.current = call_id;
         // Remember OUR outgoing call so this same device's incoming-call poller
         // never treats it as a call to answer (e.g. owner testing with their own
         // account on two phones, or a family member scanning a family vehicle).
         try { localStorage.setItem("nk_outgoing_call_id", call_id); } catch (_) {}
-        const offer = await pc.createOffer({ offerToReceiveAudio: true });
+        const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: !!video });
         await pc.setLocalDescription(offer);
         stageRef.current = "offer";
         await api.post(`/public/call/${call_id}/offer`, { sdp: { type: offer.type, sdp: offer.sdp } });
@@ -163,6 +170,12 @@ export default function InAppCall({ qrId, onClose }) {
     s.getAudioTracks().forEach((t) => { t.enabled = !on; });
   };
 
+  const toggleCam = () => {
+    const s = streamRef.current; if (!s) return;
+    const off = !camOff; setCamOff(off);
+    s.getVideoTracks().forEach((t) => { t.enabled = !off; });
+  };
+
   // Speaker toggle. In the native WebView, call audio already plays on the
   // loudspeaker; this flips the state and nudges the audio element accordingly.
   const toggleSpeaker = () => {
@@ -176,6 +189,51 @@ export default function InAppCall({ qrId, onClose }) {
 
   const fmt = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
   const done = ["ended", "missed", "rejected", "error", "denied"].includes(status);
+
+  // ---- Video doorbell layout (full-screen remote video + local preview) ----
+  if (video) {
+    const vlabel = {
+      connecting: "Starting secure video call…", ringing: "Ringing the owner…", connected: "Connected",
+      ended: "Call ended", missed: "Owner didn't answer", rejected: "Owner declined",
+      error: "Couldn't connect the call", denied: "Camera/mic access is needed",
+    }[status];
+    return (
+      <div data-testid="inapp-videocall-overlay" style={{ position: "fixed", inset: 0, background: "#05060c", zIndex: 6000, display: "flex", flexDirection: "column" }}>
+        <video ref={remoteVideoRef} autoPlay playsInline data-testid="inapp-video-remote"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", background: "#05060c", opacity: status === "connected" ? 1 : 0.15 }} />
+        <video ref={localVideoRef} autoPlay playsInline muted data-testid="inapp-video-local"
+          style={{ position: "absolute", top: 16, right: 16, width: 108, height: 150, objectFit: "cover", borderRadius: 14, border: "2px solid rgba(255,255,255,.3)", background: "#111", zIndex: 2, display: camOff ? "none" : "block" }} />
+        <div style={{ position: "relative", zIndex: 3, padding: "22px 20px", textAlign: "center", color: "#fff", textShadow: "0 1px 10px rgba(0,0,0,.6)" }}>
+          <p style={{ fontSize: 12.5, letterSpacing: 1, textTransform: "uppercase", margin: 0, opacity: .85 }}>Video call</p>
+          <h2 style={{ fontSize: 20, margin: "4px 0 0" }} data-testid="inapp-videocall-status">{vlabel}</h2>
+          <p style={{ fontSize: 13, opacity: .8, margin: "2px 0 0" }}>{status === "connected" ? fmt(seconds) : "Private in-app call · owner's number stays hidden"}</p>
+        </div>
+        <div style={{ flex: 1 }} />
+        {(status === "connecting" || status === "ringing") && (
+          <div style={{ position: "relative", zIndex: 3, textAlign: "center", color: "#fff" }}><Loader2 className="spin" size={26} /></div>
+        )}
+        <div style={{ position: "relative", zIndex: 3, display: "flex", gap: 22, justifyContent: "center", padding: "24px 20px 34px", flexWrap: "wrap" }}>
+          {!done ? (
+            <>
+              {status === "connected" && (
+                <>
+                  <CallBtn onClick={toggleMute} on={muted} icon={muted ? MicOff : Mic} label={muted ? "Unmute" : "Mute"} testid="inapp-video-mute" />
+                  <CallBtn onClick={toggleCam} on={camOff} icon={camOff ? VideoOff : Video} label={camOff ? "Camera on" : "Camera off"} testid="inapp-video-cam" />
+                </>
+              )}
+              <CallBtn onClick={() => hangup("ended")} danger icon={PhoneOff} label={status === "connected" ? "End" : "Cancel"} testid="inapp-video-hangup" />
+            </>
+          ) : (
+            <div style={{ textAlign: "center", color: "#fff" }}>
+              {(status === "error" || status === "denied") && <p className="muted" style={{ fontSize: 12.5, marginBottom: 6, color: "#ffd0d8" }} data-testid="inapp-video-reason">{reason}</p>}
+              {status === "missed" && <p style={{ fontSize: 12.5, marginBottom: 12, opacity: .85 }}>We've alerted the owner about your call.</p>}
+              <button className="btn btn-primary" onClick={onClose} data-testid="inapp-video-close"><X size={16} /> Close</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const label = {
     connecting: "Starting secure call…",
