@@ -12,7 +12,11 @@ class RegisterIn(BaseModel):
 
 
 class LoginIn(BaseModel):
-    email: EmailStr
+    # Accepts an email OR a mobile number. `email` is kept (now a plain str, not
+    # EmailStr) so an existing client that sends a mobile here still works;
+    # `identifier` is the explicit field a newer client can use.
+    email: Optional[str] = None
+    identifier: Optional[str] = None
     password: str
 
 

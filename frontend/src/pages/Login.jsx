@@ -36,8 +36,8 @@ export default function Login() {
           <p className="muted" style={{ marginBottom: 22 }}>Log in to manage your safety QRs.</p>
           <form onSubmit={submit}>
             <div className="field">
-              <label>Email</label>
-              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required data-testid="login-email" placeholder="you@example.com" />
+              <label>Email or mobile number</label>
+              <input className="input" type="text" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} required data-testid="login-email" placeholder="you@example.com  or  9876543210" />
             </div>
             <div className="field">
               <label>Password</label>

@@ -56,6 +56,16 @@ async def admin_users(_: dict = Depends(require_admin), q: Optional[str] = None,
     users = []
     async for u in db.users.find(filt).sort("created_at", -1).skip(skip).limit(limit):
         v_count = await db.vehicles.count_documents({"owner_id": u["id"]})
+        # The user's best current plan = latest expiry across their vehicles + tags.
+        plan_name, plan_expires = None, None
+        for coll in (db.vehicles, db.tags):
+            doc = await coll.find_one(
+                {"owner_id": u["id"], "plan_expires_at": {"$ne": None}},
+                sort=[("plan_expires_at", -1)],
+            )
+            if doc and (plan_expires is None or (doc.get("plan_expires_at") and doc["plan_expires_at"] > plan_expires)):
+                plan_name = doc.get("plan_name")
+                plan_expires = doc.get("plan_expires_at")
         users.append({
             "id": u["id"],
             "email": u["email"],
@@ -64,6 +74,8 @@ async def admin_users(_: dict = Depends(require_admin), q: Optional[str] = None,
             "is_admin": bool(u.get("is_admin", False)),
             "suspended": bool(u.get("suspended", False)),
             "vehicles": v_count,
+            "plan_name": plan_name,
+            "plan_expires_at": plan_expires,
             "created_at": u["created_at"],
         })
     return {"total": total, "count": len(users), "results": users}

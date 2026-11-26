@@ -24,7 +24,7 @@ export default function Admin() {
   const [users, setUsers] = useState([]);
   const [q, setQ] = useState("");
   const [uSkip, setUSkip] = useState(0);
-  const [uLimit, setULimit] = useState(50);
+  const [uLimit, setULimit] = useState(25);
   const [uTotal, setUTotal] = useState(0);
   const [alerts, setAlerts] = useState([]);
   const [aType, setAType] = useState("");
@@ -34,7 +34,7 @@ export default function Admin() {
   const [inbox, setInbox] = useState({ open_tickets: 0, new_enquiries: 0 });
 
   const loadStats = async () => setStats((await api.get("/admin/stats")).data);
-  const loadUsers = async (query = "", sk = 0, lim = 50) => {
+  const loadUsers = async (query = "", sk = 0, lim = 25) => {
     const p = new URLSearchParams(); if (query) p.set("q", query); p.set("skip", sk); p.set("limit", lim);
     const r = (await api.get(`/admin/users?${p.toString()}`)).data;
     setUsers(r.results); setUTotal(r.total ?? r.results.length);
@@ -142,7 +142,7 @@ export default function Admin() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
                 <tr style={{ textAlign: "left", color: "var(--muted)" }}>
-                  <th style={th}>Name</th><th style={th}>Email</th><th style={th}>Phone</th><th style={th}>Vehicles</th><th style={th}>Status</th><th style={th}></th>
+                  <th style={th}>Name</th><th style={th}>Email</th><th style={th}>Phone</th><th style={th}>Plan</th><th style={th}>Valid till</th><th style={th}>Created</th><th style={th}>Vehicles</th><th style={th}>Status</th><th style={th}></th>
                 </tr>
               </thead>
               <tbody>
@@ -151,6 +151,9 @@ export default function Admin() {
                     <td style={td}>{u.name}{u.is_admin && <span className="chip" style={{ marginLeft: 8, padding: "2px 8px" }}>admin</span>}</td>
                     <td style={td}>{u.email}</td>
                     <td style={td}>{u.phone}</td>
+                    <td style={td}>{u.plan_name ? <span className="chip" style={{ padding: "2px 8px" }}>{u.plan_name}</span> : <span className="muted">—</span>}</td>
+                    <td style={td} className="muted">{u.plan_expires_at ? new Date(u.plan_expires_at).toLocaleDateString() : "—"}</td>
+                    <td style={td} className="muted">{u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}</td>
                     <td style={td}>{u.vehicles}</td>
                     <td style={td}>
                       {u.suspended

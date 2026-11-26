@@ -52,10 +52,16 @@ async def register(request: Request, payload: RegisterIn):
 @router.post("/auth/login", response_model=TokenOut)
 @rate_limit("10/minute")
 async def login(request: Request, payload: LoginIn):
-    email = payload.email.lower().strip()
-    user = await db.users.find_one({"email": email})
+    # Log in with either an email or a mobile number + password.
+    ident = (payload.identifier or payload.email or "").strip()
+    if not ident:
+        raise HTTPException(status_code=422, detail="Enter your email or mobile number")
+    if "@" in ident:
+        user = await db.users.find_one({"email": ident.lower()})
+    else:
+        user = await db.users.find_one({"phone_norm": canon_phone(ident)})
     if not user or not verify_password(payload.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Incorrect email or password")
+        raise HTTPException(status_code=401, detail="Incorrect email / mobile or password")
     if user.get("suspended"):
         raise HTTPException(status_code=403, detail="Account suspended")
     token = create_access_token(user["id"])
