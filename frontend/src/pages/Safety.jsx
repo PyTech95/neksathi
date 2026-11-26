@@ -130,6 +130,9 @@ function Sos({ recipientCount, inFamily, onSent }) {
   const [count, setCount] = useState(3);
   const timer = useRef(null);
   const firedRef = useRef(false);
+  // Which camera the auto SOS photo uses — the person's choice, remembered.
+  const [cam, setCam] = useState(() => { try { return localStorage.getItem("nk_sos_cam") || "user"; } catch { return "user"; } });
+  const setCamPref = (v) => { setCam(v); try { localStorage.setItem("nk_sos_cam", v); } catch { /* ignore */ } };
 
   const fire = async () => {
     setBusy(true); setResult(null);
@@ -149,7 +152,7 @@ function Sos({ recipientCount, inFamily, onSent }) {
       // Auto silent front photo, fire-and-forget. Native captures + uploads it
       // itself and only when the phone is unlocked; web grabs a selfie and we
       // attach it here. Either way it never delays or blocks the SOS.
-      captureSosPhoto(ev.id).then((webPhoto) => {
+      captureSosPhoto(ev.id, cam).then((webPhoto) => {
         if (webPhoto) {
           api.post(`/me/sos-events/${ev.id}/photo`, { photo_base64: webPhoto })
             .then(() => setResult((x) => (x && x.id === ev.id ? { ...x, _photo: webPhoto } : x)))
@@ -217,10 +220,20 @@ function Sos({ recipientCount, inFamily, onSent }) {
         <button className="btn btn-ghost" data-testid="sos-cancel-btn" onClick={cancel} style={{ margin: "6px auto 0" }}>Cancel</button>
       ) : (
         <>
-          <p className="muted" data-testid="sos-photo-note" style={{ fontSize: 12.5, marginTop: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Camera size={14} /> A front-camera photo is sent automatically (when your phone is unlocked).
+          <p className="muted" data-testid="sos-photo-note" style={{ fontSize: 12.5, marginTop: 10, display: "flex", alignItems: "flex-start", justifyContent: "center", gap: 6, maxWidth: 330, marginLeft: "auto", marginRight: "auto", textAlign: "left" }}>
+            <Camera size={14} style={{ flexShrink: 0, marginTop: 1 }} /> <span>A {cam === "environment" ? "back" : "front"}-camera photo is sent automatically (when your phone is unlocked).</span>
           </p>
-          <p className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>A 3-second countdown protects against accidental taps.</p>
+          {/* Front / back camera chooser for the auto SOS photo */}
+          <div style={{ display: "inline-flex", gap: 6, marginTop: 10, background: "rgba(255,255,255,.04)", border: "1px solid var(--panel-brd)", borderRadius: 11, padding: 4 }} data-testid="sos-cam-chooser">
+            {[["user", "Front"], ["environment", "Back"]].map(([v, l]) => (
+              <button key={v} type="button" onClick={() => setCamPref(v)} data-testid={`sos-cam-${v}`}
+                style={{ border: "none", cursor: "pointer", fontSize: 12.5, fontWeight: 700, padding: "6px 16px", borderRadius: 8,
+                  background: cam === v ? "linear-gradient(135deg,#b3122f,#e92546)" : "transparent", color: cam === v ? "#fff" : "var(--muted)" }}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <p className="muted" style={{ fontSize: 12.5, marginTop: 10 }}>A 3-second countdown protects against accidental taps.</p>
         </>
       )}
 

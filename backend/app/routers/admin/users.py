@@ -42,14 +42,22 @@ async def admin_stats(_: dict = Depends(require_admin)):
 
 
 @router.get("/admin/users")
-async def admin_users(_: dict = Depends(require_admin), q: Optional[str] = None, skip: int = 0, limit: int = 50):
+async def admin_users(_: dict = Depends(require_admin), q: Optional[str] = None,
+                      status: Optional[str] = None, skip: int = 0, limit: int = 50):
     filt: dict = {}
     if q:
-        filt = {"$or": [
+        filt["$or"] = [
             {"email": {"$regex": q, "$options": "i"}},
             {"name": {"$regex": q, "$options": "i"}},
             {"phone": {"$regex": q, "$options": "i"}},
-        ]}
+        ]
+    # Optional status filter for the Users page chips (All / Active / Suspended / Admins).
+    if status == "suspended":
+        filt["suspended"] = True
+    elif status == "active":
+        filt["suspended"] = {"$ne": True}
+    elif status in ("admin", "admins"):
+        filt["is_admin"] = True
     skip = max(0, skip)
     limit = max(1, min(200, limit))
     total = await db.users.count_documents(filt)

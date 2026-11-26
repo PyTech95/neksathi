@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { Car, Plus, Trash2, ShieldAlert, ShieldCheck, ChevronRight, ChevronDown, X, Phone, PhoneMissed, PhoneOff, PhoneOutgoing, Bike, Tractor, Truck, CircleHelp, Check, Siren, ScanLine, Users, MapPin, Lock, Radar, AlertTriangle } from "lucide-react";
+import { Car, Plus, Trash2, ShieldAlert, ShieldCheck, ChevronRight, ChevronDown, X, Phone, Bike, Tractor, Truck, CircleHelp, Check, Siren, ScanLine, Users, MapPin, Lock, Radar, AlertTriangle } from "lucide-react";
 import BottomSheet from "@/components/BottomSheet";
 import VehicleFields, { tidyVehicle } from "@/components/VehicleFields";
 
@@ -41,23 +41,6 @@ const VEHICLE_TYPE_META = {
   other: { label: "Other", icon: CircleHelp },
 };
 
-function timeAgo(iso) {
-  const s = Math.max(0, Math.round((Date.now() - new Date(iso)) / 1000));
-  if (s < 60) return "just now";
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
-
-const CALL_STATUS = {
-  missed: { label: "Missed", color: "#ff3b5c", icon: <PhoneMissed size={16} /> },
-  rejected: { label: "Declined", color: "#f5a524", icon: <PhoneOff size={16} /> },
-  ended: { label: "Answered", color: "#34d399", icon: <PhoneOutgoing size={16} /> },
-  accepted: { label: "Answered", color: "#34d399", icon: <Phone size={16} /> },
-};
-
 // Small status pill for a vehicle card.
 function vehicleStatus(v) {
   if (!v.qr_ordered) return { text: "Set up QR", cls: "pill-warn" };
@@ -71,7 +54,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [vehicles, setVehicles] = useState([]);
   const [shared, setShared] = useState([]);
-  const [calls, setCalls] = useState([]);
+  const [summary, setSummary] = useState({ family: 0, zones: 0 });
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ number_plate: "", vehicle_type: "car", brand: "", model: "", color: "", speed_limit_kmh: 80 });
@@ -82,10 +65,12 @@ export default function Dashboard() {
   const load = async () => {
     setLoading(true);
     try {
-      const [rv, rs, rc] = await Promise.all([api.get("/vehicles"), api.get("/shared-vehicles"), api.get("/me/calls/recent")]);
+      const [rv, rs] = await Promise.all([api.get("/vehicles"), api.get("/shared-vehicles")]);
       setVehicles(rv.data);
       setShared(rs.data);
-      setCalls(rc.data.items || []);
+      // Light extras for the protection summary — never block the page on these.
+      api.get("/family").then((r) => setSummary((s) => ({ ...s, family: (r.data?.members || []).length }))).catch(() => {});
+      api.get("/me/safe-zones").then((r) => setSummary((s) => ({ ...s, zones: Array.isArray(r.data) ? r.data.length : 0 }))).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -263,34 +248,32 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && calls.length > 0 && (
-          <div style={{ marginTop: 34 }} id="recent-calls" data-testid="recent-calls-section">
-            <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 4, display: "flex", alignItems: "center", gap: 10 }}>
-              <Phone size={18} className="neon" /> Recent calls
-              {calls.filter((c) => c.status === "missed").length > 0 && (
-                <span className="chip" data-testid="missed-count" style={{ background: "rgba(255,59,92,.16)", borderColor: "rgba(255,59,92,.4)", color: "#ffb3c0" }}>
-                  {calls.filter((c) => c.status === "missed").length} missed
-                </span>
-              )}
-            </h2>
-            <p className="muted" style={{ marginBottom: 14, fontSize: 13 }}>People who scanned your vehicle QR and tried to call you in the app.</p>
-            <div style={{ display: "grid", gap: 8 }}>
-              {calls.map((c) => {
-                const s = CALL_STATUS[c.status] || { label: c.status, color: "#9aa4b2", icon: <Phone size={16} /> };
-                return (
-                  <div key={c.id} data-testid={`call-row-${c.id}`} className="glass" style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 12, borderLeft: `3px solid ${s.color}` }}>
-                    <span style={{ color: s.color, flexShrink: 0 }}>{s.icon}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15 }}>{c.number_plate}</div>
-                      <div className="muted" style={{ fontSize: 12.5 }}>{timeAgo(c.created_at)}</div>
-                    </div>
-                    <span style={{ color: s.color, fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{s.label}</span>
-                  </div>
-                );
-              })}
+        {/* Protection summary — a clean "you're covered" panel (replaced the old recent-calls list) */}
+        <h2 style={{ fontSize: 18, fontWeight: 800, margin: "30px 2px 12px" }}>Your protection</h2>
+        <div className="glass" style={{ padding: 16, borderRadius: 18 }} data-testid="protection-summary">
+          <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
+            <span style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: isProtected ? "rgba(52,211,153,.14)" : "rgba(245,165,36,.14)", color: isProtected ? "#34d399" : "#f5a524", border: `1px solid ${isProtected ? "rgba(52,211,153,.4)" : "rgba(245,165,36,.4)"}` }}>
+              <ShieldCheck size={20} />
+            </span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 15 }}>{isProtected ? "You're protected" : "Finish setting up"}</div>
+              <div className="muted" style={{ fontSize: 12.5 }}>{isProtected ? "Your vehicles & family are being watched." : "Add a QR plan to activate protection."}</div>
             </div>
           </div>
-        )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+            {[
+              { to: "/dashboard", icon: Car, n: vehicles.length, l: "Vehicles" },
+              { to: "/family", icon: Users, n: summary.family, l: "Family" },
+              { to: "/safe-zones", icon: Radar, n: summary.zones, l: "Safe zones" },
+            ].map(({ to, icon: Icon, n, l }) => (
+              <Link key={l} to={to} data-testid={`summary-${l.toLowerCase().replace(/\s+/g, "-")}`} style={{ textDecoration: "none", color: "var(--text)", background: "rgba(233,37,70,.06)", border: "1px solid var(--panel-brd)", borderRadius: 14, padding: "13px 10px", textAlign: "center" }}>
+                <Icon size={18} style={{ color: "#ff5a74" }} />
+                <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6, lineHeight: 1 }}>{n}</div>
+                <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>{l}</div>
+              </Link>
+            ))}
+          </div>
+        </div>
       </div>
 
       {showAdd && (

@@ -19,16 +19,26 @@
       html, body { margin: 0; background: #07070d; color: #e8e8f5;
         font-family: 'Manrope', system-ui, -apple-system, sans-serif; }
       #boot { position: fixed; inset: 0; display: flex; align-items: center;
-        justify-content: center; flex-direction: column; gap: 14px; background: #07070d; }
-      #boot .ring { width: 42px; height: 42px; border-radius: 50%;
-        border: 3px solid rgba(233,37,70,.25); border-top-color: #e92546;
-        animation: bootspin 1s linear infinite; }
-      #boot p { color: #9a9ab5; font-size: 13px; margin: 0; letter-spacing: .04em; }
-      @keyframes bootspin { to { transform: rotate(360deg); } }
+        justify-content: center; flex-direction: column; gap: 18px; background: #07070d; }
+      /* Transparent brand logo with a slow, gentle zoom-in — then a soft breathe.
+         Deliberately unhurried so it feels calm on every device. */
+      #boot img { width: 96px; height: 96px; object-fit: contain;
+        animation: bootZoom 1.8s cubic-bezier(.2,.7,.2,1) both, bootBreathe 3.2s ease-in-out 1.8s infinite; }
+      #boot .wm { font-size: 20px; font-weight: 800; letter-spacing: -.01em; color: #edeef6;
+        opacity: 0; animation: bootFade .6s ease .7s forwards; }
+      #boot .wm b { color: #e92546; }
+      #boot .bar { width: 120px; height: 3px; border-radius: 3px; overflow: hidden;
+        background: rgba(233,37,70,.18); opacity: 0; animation: bootFade .6s ease 1s forwards; }
+      #boot .bar i { display: block; width: 40%; height: 100%; border-radius: 3px;
+        background: linear-gradient(90deg,#b3122f,#e92546); animation: bootSlide 1.2s ease-in-out infinite; }
+      @keyframes bootZoom { from { opacity: 0; transform: scale(.80); } to { opacity: 1; transform: scale(1); } }
+      @keyframes bootBreathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+      @keyframes bootFade { to { opacity: 1; } }
+      @keyframes bootSlide { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
     </style>
   </head>
   <body>
     <noscript>Enable JavaScript to use Nek Sathi. The website brings together personal safety tools, family sharing and Smart QR.</noscript>
-    <div id="root"><div id="boot"><div class="ring"></div><p>Nek Sathi…</p></div></div>
+    <div id="root"><div id="boot"><img src="%PUBLIC_URL%/website/logo-mark.png" alt="Nek Sathi" /><div class="wm">Nek <b>Sathi</b></div><div class="bar"><i></i></div></div></div>
   </body>
 </html>

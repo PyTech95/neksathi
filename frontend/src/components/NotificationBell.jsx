@@ -110,9 +110,9 @@ export default function NotificationBell() {
 
       {open && (
         <div
-          className="glass"
           data-testid="notif-panel"
-          style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 340, maxWidth: "calc(100vw - 24px)", zIndex: 95, borderRadius: 16, overflow: "hidden", boxShadow: "0 18px 50px rgba(0,0,0,.35)" }}
+          style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 340, maxWidth: "calc(100vw - 24px)", zIndex: 1000, borderRadius: 16, overflow: "hidden",
+            background: "var(--bg-2)", border: "1px solid var(--panel-brd)", boxShadow: "0 24px 60px rgba(0,0,0,.55)" }}
         >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", borderBottom: "1px solid var(--panel-brd)" }}>
             <b style={{ fontSize: 15, display: "inline-flex", alignItems: "center", gap: 7 }}><Bell size={16} /> Notifications</b>

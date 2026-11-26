@@ -9,7 +9,7 @@ import BottomSheet from "@/components/BottomSheet";
 import Modal from "@/components/Modal";
 import { openCallSetup, isNativeApp } from "@/lib/callsetup";
 import { getThemePref, setThemePref } from "@/lib/theme";
-import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink, Phone, Play, Square, Upload, ChevronDown, Check, LogOut, Receipt, ChevronRight, Gift, Sun, Moon, Monitor, Ban, Wallet as WalletIcon } from "lucide-react";
+import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink, Phone, Play, Square, Upload, ChevronDown, Check, LogOut, Receipt, ChevronRight, Gift, Sun, Moon, Monitor, Wallet as WalletIcon } from "lucide-react";
 
 const DEFAULT_PREFS = { whatsapp: true, email: true, push: true, incident_alerts: true, speed_alerts: true, marketing: false, ringtone: "classic" };
 
@@ -322,45 +322,17 @@ export default function Settings() {
         <span className="chip"><UserCog size={13} /> Account</span>
         <h1 style={{ fontSize: 34, marginTop: 12, marginBottom: 20 }}>Profile & <span className="neon">preferences</span></h1>
 
-        <button type="button" className="glass glass-hover" onClick={() => navigate("/wallet")} data-testid="go-wallet"
-          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 18, display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(245,165,36,.16)", border: "1px solid rgba(245,165,36,.4)", color: "#f5a524" }}><WalletIcon size={18} /></span>
-          <span style={{ flex: 1 }}><b>My wallet</b><div className="muted" style={{ fontSize: 13 }}>Nek Coins balance &amp; history</div></span>
-          <ChevronRight size={18} className="muted" />
-        </button>
-
-        <button type="button" className="glass glass-hover" onClick={() => navigate("/transactions")} data-testid="go-transactions"
-          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 18, display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(233,37,70,.14)", border: "1px solid rgba(233,37,70,.4)", color: "#ff5a74" }}><Receipt size={18} /></span>
-          <span style={{ flex: 1 }}><b>Transaction history</b><div className="muted" style={{ fontSize: 13 }}>Your payments & downloadable bills</div></span>
-          <ChevronRight size={18} className="muted" />
-        </button>
-
-        <button type="button" className="glass glass-hover" onClick={() => navigate("/referral")} data-testid="go-referral"
-          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 18, display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(233,37,70,.14)", border: "1px solid rgba(233,37,70,.4)", color: "#ff5a74" }}><Gift size={18} /></span>
-          <span style={{ flex: 1 }}><b>Refer &amp; earn</b><div className="muted" style={{ fontSize: 13 }}>Invite friends, earn tokens &amp; get discounts</div></span>
-          <ChevronRight size={18} className="muted" />
-        </button>
-
-        <button type="button" className="glass glass-hover" onClick={() => navigate("/blocked-numbers")} data-testid="go-blocked"
-          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 18, display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(255,59,92,.14)", border: "1px solid rgba(255,59,92,.4)", color: "#ff5a74" }}><Ban size={18} /></span>
-          <span style={{ flex: 1 }}><b>Blocked numbers</b><div className="muted" style={{ fontSize: 13 }}>Stop alerts from numbers you've blocked</div></span>
-          <ChevronRight size={18} className="muted" />
-        </button>
-
         <form onSubmit={save} className="glass card-pad" style={{ padding: 26, marginBottom: 18 }}>
           <h2 style={{ fontSize: 20, marginBottom: 14 }}>Your details</h2>
-          <div style={{ display: "flex", gap: 18, alignItems: "center", marginBottom: 18 }}>
-            <div data-testid="avatar-preview" style={{ width: 84, height: 84, borderRadius: "50%", background: "linear-gradient(135deg,#b3122f,#e92546)", display: "grid", placeItems: "center", overflow: "hidden", fontFamily: "Chakra Petch", fontSize: 34, fontWeight: 700, flexShrink: 0, border: "2px solid rgba(255,255,255,.15)" }}>
+          {/* Avatar centered; only an "Add photo" button underneath. */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginBottom: 18 }}>
+            <div data-testid="avatar-preview" style={{ width: 92, height: 92, borderRadius: "50%", background: "linear-gradient(135deg,#b3122f,#e92546)", display: "grid", placeItems: "center", overflow: "hidden", fontFamily: "Chakra Petch", fontSize: 36, fontWeight: 700, flexShrink: 0, border: "2px solid rgba(255,255,255,.15)" }}>
               {avatar ? <img src={avatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (name?.[0] || user?.name?.[0] || "?")}
             </div>
-            <div>
+            <div style={{ textAlign: "center" }}>
               <input ref={fileRef} type="file" accept="image/*" onChange={pickAvatar} style={{ display: "none" }} data-testid="avatar-input" />
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileRef.current?.click()} data-testid="upload-avatar-btn"><Camera size={15} /> {avatar ? "Change photo" : "Add photo"}</button>
               {avatar && <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={() => setAvatar("")} data-testid="remove-avatar-btn"><Trash2 size={14} color="#ff3b5c" /> Remove</button>}
-              <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Shown on your account and used on your Share-Tap cards.</p>
             </div>
           </div>
           <div className="grid grid-2">
@@ -534,8 +506,30 @@ export default function Settings() {
           <button className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16 }} data-testid="save-settings">{busy ? <Loader2 size={16} className="spin" /> : <Save size={16} />} {busy ? "Saving…" : "Save changes"}</button>
         </form>
 
+        {/* Wallet / transactions / refer — placed below "Your details" so the user reaches them after their profile. */}
+        <button type="button" className="glass glass-hover" onClick={() => navigate("/wallet")} data-testid="go-wallet"
+          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(245,165,36,.16)", border: "1px solid rgba(245,165,36,.4)", color: "#f5a524" }}><WalletIcon size={18} /></span>
+          <span style={{ flex: 1 }}><b>My wallet</b><div className="muted" style={{ fontSize: 13 }}>Nek Coins balance &amp; history</div></span>
+          <ChevronRight size={18} className="muted" />
+        </button>
+
+        <button type="button" className="glass glass-hover" onClick={() => navigate("/transactions")} data-testid="go-transactions"
+          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(233,37,70,.14)", border: "1px solid rgba(233,37,70,.4)", color: "#ff5a74" }}><Receipt size={18} /></span>
+          <span style={{ flex: 1 }}><b>Transaction history</b><div className="muted" style={{ fontSize: 13 }}>Your payments & downloadable bills</div></span>
+          <ChevronRight size={18} className="muted" />
+        </button>
+
+        <button type="button" className="glass glass-hover" onClick={() => navigate("/referral")} data-testid="go-referral"
+          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 18, display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(233,37,70,.14)", border: "1px solid rgba(233,37,70,.4)", color: "#ff5a74" }}><Gift size={18} /></span>
+          <span style={{ flex: 1 }}><b>Refer &amp; earn</b><div className="muted" style={{ fontSize: 13 }}>Invite friends, earn tokens &amp; get discounts</div></span>
+          <ChevronRight size={18} className="muted" />
+        </button>
+
         <div className="glass card-pad" style={{ padding: 26, marginBottom: 18 }} data-testid="appearance-card">
-          <h2 style={{ fontSize: 20, marginBottom: 6 }}><Sun size={18} style={{ verticalAlign: "-3px" }} /> Appearance</h2>
+          <h2 style={{ fontSize: 20, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}><Sun size={18} /> Appearance</h2>
           <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>Choose how Nek Sathi looks on this device.</p>
           <div style={{ display: "grid", gap: 10 }}>
             {[
@@ -587,7 +581,7 @@ export default function Settings() {
         <GoogleDriveCard />
 
         <form onSubmit={changePassword} className="glass card-pad" style={{ padding: 26 }}>
-          <h2 style={{ fontSize: 20, marginBottom: 14 }}><KeyRound size={18} style={{ verticalAlign: "-3px" }} /> Change password</h2>
+          <h2 style={{ fontSize: 20, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}><KeyRound size={18} /> Change password</h2>
           <div className="grid grid-2">
             <div className="field"><label>Current password</label><input className="input" type="password" value={pwd.old_password} onChange={(e) => setPwd({ ...pwd, old_password: e.target.value })} required data-testid="settings-old-password" /></div>
             <div className="field"><label>New password</label><input className="input" type="password" value={pwd.new_password} onChange={(e) => setPwd({ ...pwd, new_password: e.target.value })} required minLength={6} data-testid="settings-new-password" placeholder="min 6 chars" /></div>
@@ -598,7 +592,7 @@ export default function Settings() {
         </form>
 
         <div className="glass card-pad" data-testid="account-card" style={{ padding: 26, borderColor: "rgba(255,59,92,.35)" }}>
-          <h2 style={{ fontSize: 20, marginBottom: 14 }}><LogOut size={18} style={{ verticalAlign: "-3px" }} /> Account</h2>
+          <h2 style={{ fontSize: 20, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}><LogOut size={18} /> Account</h2>
           <button className="btn btn-ghost btn-block" data-testid="settings-logout" onClick={() => { logout(); navigate("/login"); }} style={{ justifyContent: "center", color: "#ff7591" }}>
             <LogOut size={16} /> Logout
           </button>

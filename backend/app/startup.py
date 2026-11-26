@@ -73,14 +73,25 @@ async def on_startup():
     await db.alerts.create_index([("vehicle_id", 1), ("created_at", -1)])
     await db.sos_videos.create_index([("vehicle_id", 1), ("created_at", -1)])
     await db.sos_videos.create_index([("user_id", 1), ("created_at", -1)])
-    # Family location trail: fast per-member day queries + auto-delete after 8 days.
+    # Family location trail: fast per-member day queries + auto-delete after 7 days
+    # (keep a rolling week — on day 8 the oldest day drops off the server by itself).
     # Guarded: an index failure here must NEVER abort startup (that would take the
     # whole API — and OTP/login — down), so log and carry on like the email index.
+    _TRAIL_TTL_S = 7 * 24 * 3600
     try:
         await db.location_history.create_index([("user_id", 1), ("recorded_at", 1)])
-        await db.location_history.create_index("recorded_at", expireAfterSeconds=8 * 24 * 3600)
+        await db.location_history.create_index("recorded_at", expireAfterSeconds=_TRAIL_TTL_S)
     except Exception as _e:
-        log.warning("location_history index create failed (continuing): %s", _e)
+        # Index already exists with a different TTL (e.g. the old 8-day value):
+        # create_index raises IndexOptionsConflict, so update it in place via collMod.
+        log.warning("location_history TTL create conflicted, updating in place: %s", _e)
+        try:
+            await db.command({
+                "collMod": "location_history",
+                "index": {"keyPattern": {"recorded_at": 1}, "expireAfterSeconds": _TRAIL_TTL_S},
+            })
+        except Exception as _e2:
+            log.warning("location_history TTL collMod failed (continuing): %s", _e2)
     await db.sos_chunks.create_index([("upload_id", 1), ("index", 1)], unique=True)
     await db.sos_uploads.create_index("user_id")
     await db.password_resets.create_index("token", unique=True)

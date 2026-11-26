@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import api from "@/lib/api";
-import { ParkingCircle, Siren, ShieldAlert, Check, X, CheckCircle2, Clock, MapPin, Phone, RefreshCw, BellRing, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare, Key, Bike, Package } from "lucide-react";
+import { ParkingCircle, Siren, ShieldAlert, Check, X, CheckCircle2, Clock, MapPin, Phone, RefreshCw, BellRing, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare, Key, Bike, Package, ChevronDown } from "lucide-react";
+
+const FIRST = 8;   // show this many, then "View more" reveals a few more
+const MORE = 4;
 
 const META = {
   wrong_parking: { icon: <ParkingCircle size={18} />, color: "#f5a524", label: "Wrong parking" },
@@ -21,6 +24,9 @@ const statusLabel = (s) => ({ alert_sent: "Alert sent", coming: "You're coming",
 export default function Incidents() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(() => new Set()); // which incidents are expanded
+  const [visible, setVisible] = useState(FIRST);      // how many rows are rendered
+  const toggle = (id) => setOpen((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const itemsRef = useRef([]);
   useEffect(() => { itemsRef.current = items; }, [items]);
@@ -76,80 +82,86 @@ export default function Incidents() {
                 {Object.entries(items.reduce((a, it) => { a[it.type] = (a[it.type] || 0) + 1; return a; }, {})).sort((x, y) => y[1] - x[1]).map(([t, c]) => {
                   const m = META[t] || META.wrong_parking;
                   return (
-                    <span key={t} className="chip" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${m.color}18`, borderColor: `${m.color}55`, color: "#fff" }} data-testid={`reason-stat-${t}`}>
-                      <span style={{ color: m.color, display: "inline-flex" }}>{m.icon}</span> {m.label} · <b>{c}</b>
+                    <span key={t} className="chip" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${m.color}1f`, borderColor: `${m.color}66`, color: "var(--text)" }} data-testid={`reason-stat-${t}`}>
+                      <span style={{ color: m.color, display: "inline-flex" }}>{m.icon}</span> {m.label} · <b style={{ color: m.color }}>{c}</b>
                     </span>
                   );
                 })}
               </div>
             </div>
-            <div className="grid" style={{ gap: 14 }}>
-            {items.map((it) => {
+            <div className="grid" style={{ gap: 12 }}>
+            {items.slice(0, visible).map((it) => {
               const m = META[it.type] || META.wrong_parking;
               const pending = !it.resolved && (it.status === "alert_sent" || it.status === "no_response");
+              const hasTimer = (it.type === "wrong_parking" || it.type === "vehicle_blocking") && !it.resolved;
+              const isOpen = open.has(it.id);
               return (
-                <div key={it.id} className="glass card-pad" style={{ padding: 20 }} data-testid={`incident-${it.id}`}>
-                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    <div className="alert-ico" style={{ background: `${m.color}22`, color: m.color }}>{m.icon}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
-                        <span style={{ fontWeight: 700 }}>{m.label} · {it.number_plate}</span>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                          <span className="chip" style={{ padding: "2px 10px", fontSize: 11, background: it.resolved ? "rgba(233,37,70,.16)" : `${m.color}22`, borderColor: it.resolved ? "rgba(233,37,70,.4)" : `${m.color}55`, color: it.resolved ? "#e92546" : "#fff" }}>{statusLabel(it.status)}</span>
-                          {/* Location icon on EVERY incident: opens the scan spot in Maps when the
-                              reporter's GPS was captured; greyed out when it wasn't. */}
-                          {it.scanner_lat != null ? (
-                            <a href={`https://maps.google.com/?q=${it.scanner_lat},${it.scanner_lng}`} target="_blank" rel="noreferrer" title="Scan location on map" aria-label="Scan location on map" data-testid={`incident-map-${it.id}`}
-                               style={{ width: 36, height: 36, borderRadius: "50%", display: "grid", placeItems: "center", background: "linear-gradient(135deg,#b3122f,#e92546)", color: "#fff", flexShrink: 0, boxShadow: "0 4px 14px rgba(233,37,70,.35)" }}>
-                              <MapPin size={18} />
-                            </a>
-                          ) : (
-                            <button type="button" title="Location was not captured for this scan" aria-label="Location not captured" data-testid={`incident-map-none-${it.id}`}
-                                    onClick={() => alert("Location was not captured for this scan — the reporter's phone had no GPS fix at the time.")}
-                                    style={{ width: 36, height: 36, borderRadius: "50%", display: "grid", placeItems: "center", background: "linear-gradient(135deg,#b3122f,#e92546)", color: "#fff", flexShrink: 0, border: "none", cursor: "pointer", boxShadow: "0 4px 14px rgba(233,37,70,.35)" }}>
-                              <MapPin size={18} />
-                            </button>
-                          )}
-                        </span>
+                <div key={it.id} className="glass" style={{ borderRadius: 16, overflow: "hidden", borderColor: isOpen ? "rgba(233,37,70,.45)" : undefined }} data-testid={`incident-${it.id}`}>
+                  {/* Collapsed header — tap to expand / collapse */}
+                  <button type="button" onClick={() => toggle(it.id)} data-testid={`incident-head-${it.id}`}
+                    style={{ width: "100%", display: "flex", gap: 12, alignItems: "center", padding: "13px 14px", background: "none", border: "none", cursor: "pointer", color: "var(--text)", textAlign: "left" }}>
+                    <span className="alert-ico" style={{ background: `${m.color}22`, color: m.color, flexShrink: 0 }}>{m.icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.label} · {it.number_plate}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 5, flexWrap: "wrap" }}>
+                        <span className="pill" style={{ background: it.resolved ? "rgba(233,37,70,.14)" : `${m.color}22`, color: it.resolved ? "var(--accent)" : m.color }}>{statusLabel(it.status)}</span>
+                        {hasTimer && <span className="pill" style={{ background: "rgba(255,59,92,.14)", color: "var(--danger)" }}><Clock size={11} /> {it.minutes_left} min left</span>}
                       </div>
-                      {it.scanner_note && <p className="muted" style={{ fontSize: 14, marginTop: 6 }}>{it.scanner_note}</p>}
+                    </div>
+                    {it.evidence_photo_base64 && !isOpen && <img src={it.evidence_photo_base64} alt="" style={{ width: 38, height: 38, borderRadius: 9, objectFit: "cover", flexShrink: 0 }} />}
+                    <ChevronDown size={18} className="muted" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .2s ease", flexShrink: 0 }} />
+                  </button>
+
+                  {/* Expanded body — photos, location, respond buttons */}
+                  {isOpen && (
+                    <div style={{ padding: "2px 14px 16px", borderTop: "1px solid var(--panel-brd)" }}>
+                      {it.scanner_note && <p className="muted" style={{ fontSize: 14, margin: "12px 0 0" }}>{it.scanner_note}</p>}
                       {(it.evidence_photo_base64 || it.reporter_photo_base64) && (
-                        <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }} data-testid={`incident-photos-${it.id}`}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }} data-testid={`incident-photos-${it.id}`}>
                           {it.evidence_photo_base64 && (
-                            <a href={it.evidence_photo_base64} target="_blank" rel="noreferrer" title="Vehicle photo" data-testid={`incident-evidence-${it.id}`}>
-                              <img src={it.evidence_photo_base64} alt="Vehicle" style={{ width: 92, height: 92, objectFit: "cover", borderRadius: 12, border: "1px solid rgba(233,37,70,.4)" }} />
-                              <span className="muted" style={{ display: "block", fontSize: 11, marginTop: 3 }}>Vehicle</span>
+                            <a href={it.evidence_photo_base64} target="_blank" rel="noreferrer" data-testid={`incident-evidence-${it.id}`}>
+                              <img src={it.evidence_photo_base64} alt="Vehicle" style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 12, border: "1px solid rgba(233,37,70,.4)" }} />
+                              <span className="muted" style={{ display: "block", fontSize: 11.5, marginTop: 4, textAlign: "center" }}>Vehicle</span>
                             </a>
                           )}
                           {it.reporter_photo_base64 && (
-                            <a href={it.reporter_photo_base64} target="_blank" rel="noreferrer" title="Reporter photo" data-testid={`incident-reporter-${it.id}`}>
-                              <img src={it.reporter_photo_base64} alt="Reporter" style={{ width: 92, height: 92, objectFit: "cover", borderRadius: 12, border: "1px solid rgba(245,165,36,.5)" }} />
-                              <span className="muted" style={{ display: "block", fontSize: 11, marginTop: 3 }}>Reporter</span>
+                            <a href={it.reporter_photo_base64} target="_blank" rel="noreferrer" data-testid={`incident-reporter-${it.id}`}>
+                              <img src={it.reporter_photo_base64} alt="Reporter" style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 12, border: "1px solid rgba(245,165,36,.5)" }} />
+                              <span className="muted" style={{ display: "block", fontSize: 11.5, marginTop: 4, textAlign: "center" }}>Reporter</span>
                             </a>
                           )}
                         </div>
                       )}
-                      <div style={{ display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap", fontSize: 13 }}>
-                        {(it.type === "wrong_parking" || it.type === "vehicle_blocking") && !it.resolved && <span className="muted"><Clock size={13} style={{ verticalAlign: "-2px" }} /> {it.minutes_left} min left</span>}
-                        {it.scanner_phone && <a href={`tel:${it.scanner_phone}`} className="neon" style={{ fontWeight: 700 }}><Phone size={12} style={{ verticalAlign: "-1px" }} /> Reporter: {it.scanner_phone}</a>}
-                      </div>
-                      <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                      {it.scanner_lat != null ? (
+                        <a href={`https://maps.google.com/?q=${it.scanner_lat},${it.scanner_lng}`} target="_blank" rel="noreferrer" className="btn btn-ghost btn-block btn-sm" style={{ marginTop: 12 }} data-testid={`incident-map-${it.id}`}><MapPin size={15} /> View location on map</a>
+                      ) : (
+                        <div className="muted" style={{ fontSize: 12.5, marginTop: 12, display: "flex", alignItems: "center", gap: 6 }}><MapPin size={14} /> Location was not captured for this scan.</div>
+                      )}
+                      {it.scanner_phone && <a href={`tel:${it.scanner_phone}`} className="btn btn-ghost btn-block btn-sm" style={{ marginTop: 10, color: "#ff5a74" }} data-testid={`incident-call-${it.id}`}><Phone size={14} /> Call reporter · {it.scanner_phone}</a>}
+
+                      <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
                         {pending && (
                           <>
-                            <button className="btn btn-primary btn-sm" onClick={() => respond(it.id, "coming")} data-testid={`coming-${it.id}`}><Check size={15} /> I AM COMING</button>
-                            <button className="btn btn-ghost btn-sm" onClick={() => respond(it.id, "cant")} data-testid={`cant-${it.id}`}><X size={15} /> Can't respond</button>
+                            <button className="btn btn-primary btn-block btn-sm" onClick={() => respond(it.id, "coming")} data-testid={`coming-${it.id}`}><Check size={15} /> I'm coming</button>
+                            <button className="btn btn-ghost btn-block btn-sm" onClick={() => respond(it.id, "cant")} data-testid={`cant-${it.id}`}><X size={15} /> Can't respond</button>
                           </>
                         )}
-                        {!it.resolved && (it.type === "wrong_parking" || it.type === "vehicle_blocking") && (
-                          <button className="btn btn-ghost btn-sm" onClick={() => extend(it.id)} data-testid={`extend-${it.id}`}><Clock size={15} color="#f5a524" /> Need more time (+10 min)</button>
+                        {hasTimer && (
+                          <button className="btn btn-ghost btn-block btn-sm" onClick={() => extend(it.id)} data-testid={`extend-${it.id}`}><Clock size={15} color="#f5a524" /> Need more time (+10 min)</button>
                         )}
-                        {!it.resolved && <button className="btn btn-ghost btn-sm" onClick={() => resolve(it.id)} data-testid={`resolve-${it.id}`}><CheckCircle2 size={15} color="#e92546" /> Mark resolved</button>}
+                        {!it.resolved && <button className="btn btn-ghost btn-block btn-sm" onClick={() => resolve(it.id)} data-testid={`resolve-${it.id}`}><CheckCircle2 size={15} color="#34d399" /> Mark resolved</button>}
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
+            {items.length > visible && (
+              <button type="button" onClick={() => setVisible((v) => v + MORE)} data-testid="incidents-view-more"
+                style={{ padding: 12, background: "rgba(233,37,70,.06)", border: "1px solid var(--panel-brd)", borderRadius: 12, color: "var(--accent)", fontWeight: 700, fontSize: 13.5, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+                View more ({items.length - visible} left) <ChevronDown size={15} />
+              </button>
+            )}
             </div>
           </>
         )}

@@ -69,15 +69,16 @@ export async function openLocationSettings() {
   } catch (_) { return false; }
 }
 
-// Captures a front-camera selfie and returns a JPEG data URL, or null on failure/denial.
-export async function captureSelfie() {
+// Captures a selfie and returns a JPEG data URL, or null on failure/denial.
+// facing: "user" (front, default) or "environment" (back).
+export async function captureSelfie(facing = "user") {
   if (isNative) {
     try {
       const photo = await Camera.getPhoto({
         quality: 60,
         resultType: CameraResultType.DataUrl,
         source: CameraSource.Camera,
-        direction: CameraDirection.Front,
+        direction: facing === "environment" ? CameraDirection.Rear : CameraDirection.Front,
         allowEditing: false,
         saveToGallery: false,
       });
@@ -86,7 +87,7 @@ export async function captureSelfie() {
   }
   // Web fallback: silent grab via getUserMedia + canvas.
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing } });
     const video = document.createElement("video");
     video.srcObject = stream; video.muted = true; await video.play();
     await new Promise((r) => setTimeout(r, 450));
@@ -104,13 +105,13 @@ export async function captureSelfie() {
 // locked screen), so this returns null — nothing for JS to upload. On the web it
 // grabs a silent selfie and returns the data URL for the caller to attach to the
 // SOS event. Always best-effort: never throws, never blocks the SOS alert.
-export async function captureSosPhoto(eventId) {
+export async function captureSosPhoto(eventId, facing = "user") {
   if (!eventId) return null;
   if (isNative) {
-    try { await NekNative.captureSosPhoto({ eventId }); } catch (_) {}
+    try { await NekNative.captureSosPhoto({ eventId, facing }); } catch (_) {}
     return null;
   }
-  try { return await captureSelfie(); } catch (_) { return null; }
+  try { return await captureSelfie(facing); } catch (_) { return null; }
 }
 
 // Records a short SOS video clip and returns { video_base64, duration_ms }, or

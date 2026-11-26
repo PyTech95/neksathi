@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
-import Pager from "@/components/Pager";
-import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Ban, CheckCircle2, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox, Mail, Building2, Phone, MessageSquare, HardDrive, Truck, Tags as TagsIcon, Smartphone } from "lucide-react";
+import { Users, Car, Bell, ShieldAlert, Siren, ParkingCircle, Video, Download, Filter, QrCode, Store, BellRing, CreditCard, Inbox, Mail, Building2, Phone, MessageSquare, HardDrive, Truck, Tags as TagsIcon, Smartphone } from "lucide-react";
 
 function Badge({ n }) {
   if (!n) return null;
@@ -21,12 +20,8 @@ function Stat({ icon, label, value, color, onClick }) {
 }
 
 export default function Admin() {
+  const nav = useNavigate();
   const [stats, setStats] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [q, setQ] = useState("");
-  const [uSkip, setUSkip] = useState(0);
-  const [uLimit, setULimit] = useState(25);
-  const [uTotal, setUTotal] = useState(0);
   const [alerts, setAlerts] = useState([]);
   const [aType, setAType] = useState("");
   const [aDays, setADays] = useState(30);
@@ -35,16 +30,6 @@ export default function Admin() {
   const [inbox, setInbox] = useState({ open_tickets: 0, new_enquiries: 0 });
 
   const loadStats = async () => setStats((await api.get("/admin/stats")).data);
-  const loadUsers = async (query = "", sk = 0, lim = 25) => {
-    const p = new URLSearchParams(); if (query) p.set("q", query); p.set("skip", sk); p.set("limit", lim);
-    try {
-      const r = (await api.get(`/admin/users?${p.toString()}`)).data;
-      const rows = Array.isArray(r.results) ? r.results : [];
-      setUsers(rows); setUTotal(r.total ?? rows.length);
-    } catch {
-      setUsers([]); setUTotal(0);
-    }
-  };
   const loadAlerts = async (type = aType, days = aDays, query = aq) => {
     const params = new URLSearchParams();
     if (type) params.set("type", type);
@@ -53,7 +38,7 @@ export default function Admin() {
     setAlerts((await api.get(`/admin/alerts?${params.toString()}`)).data.results);
   };
 
-  useEffect(() => { loadStats(); loadUsers(); loadAlerts(); api.get("/admin/inbox/summary").then((r) => setInbox(r.data)).catch(() => {}); }, []);
+  useEffect(() => { loadStats(); loadAlerts(); api.get("/admin/inbox/summary").then((r) => setInbox(r.data)).catch(() => {}); }, []);
 
   const exportCSV = async () => {
     setExporting(true);
@@ -67,11 +52,6 @@ export default function Admin() {
       a.href = url; a.download = `neksaathi-alerts-${aDays}d.csv`; a.click();
       URL.revokeObjectURL(url);
     } finally { setExporting(false); }
-  };
-
-  const toggleSuspend = async (u) => {
-    await api.post(`/admin/users/${u.id}/suspend`, { suspended: !u.suspended });
-    loadUsers(q, uSkip, uLimit);
   };
 
   return (
@@ -127,7 +107,7 @@ export default function Admin() {
 
         <div className="grid grid-4" style={{ marginBottom: 16 }}>
           <Stat icon={<Users size={22} />} label="Users" value={stats?.users} color="#e92546"
-            onClick={() => document.getElementById("admin-users-section")?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+            onClick={() => nav("/admin/users")} />
           <Stat icon={<Car size={22} />} label="Vehicles" value={stats?.vehicles} color="#ff4d67" />
           <Stat icon={<Bell size={22} />} label="Alerts (total)" value={stats?.alerts_total} color="#f5a524" />
           <Stat icon={<ShieldAlert size={22} />} label="Alerts 24h" value={stats?.alerts_24h} color="#ff3b5c" />
@@ -139,52 +119,7 @@ export default function Admin() {
           <Stat icon={<Video size={22} />} label="SOS videos" value={stats?.sos_videos} color="#e92546" />
         </div>
 
-        <div className="glass card-pad" id="admin-users-section" style={{ padding: 24, scrollMarginTop: 80 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-            <h2 style={{ fontSize: 22 }}>Users {uTotal ? <span className="muted" style={{ fontSize: 15, fontWeight: 400 }}>({uTotal})</span> : null}</h2>
-            <input className="input" style={{ maxWidth: 280 }} placeholder="Search name / email / phone" value={q}
-              onChange={(e) => { setQ(e.target.value); setUSkip(0); loadUsers(e.target.value, 0, uLimit); }} data-testid="admin-user-search" />
-          </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-              <thead>
-                <tr style={{ textAlign: "left", color: "var(--muted)" }}>
-                  <th style={th}>Name</th><th style={th}>Email</th><th style={th}>Phone</th><th style={th}>Plan</th><th style={th}>Valid till</th><th style={th}>Created</th><th style={th}>Vehicles</th><th style={th}>Status</th><th style={th}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} data-testid={`user-row-${u.email}`} style={{ borderTop: "1px solid rgba(179,18,47,.12)" }}>
-                    <td style={td}>{u.name}{u.is_admin && <span className="chip" style={{ marginLeft: 8, padding: "2px 8px" }}>admin</span>}</td>
-                    <td style={td}>{u.email}</td>
-                    <td style={td}>{u.phone}</td>
-                    <td style={td}>{u.plan_name ? <span className="chip" style={{ padding: "2px 8px" }}>{u.plan_name}</span> : <span className="muted">—</span>}</td>
-                    <td style={td} className="muted">{u.plan_expires_at ? new Date(u.plan_expires_at).toLocaleDateString() : "—"}</td>
-                    <td style={td} className="muted">{u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}</td>
-                    <td style={td}>{u.vehicles}</td>
-                    <td style={td}>
-                      {u.suspended
-                        ? <span style={{ color: "#ff3b5c", fontWeight: 700 }}>Suspended</span>
-                        : <span style={{ color: "#e92546", fontWeight: 700 }}>Active</span>}
-                    </td>
-                    <td style={td}>
-                      {!u.is_admin && (
-                        <button className="btn btn-ghost btn-sm" onClick={() => toggleSuspend(u)} data-testid={`suspend-${u.email}`}>
-                          {u.suspended ? <><CheckCircle2 size={14} /> Reactivate</> : <><Ban size={14} color="#ff3b5c" /> Suspend</>}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Pager skip={uSkip} limit={uLimit} total={uTotal}
-            onSkip={(ns) => { setUSkip(ns); loadUsers(q, ns, uLimit); }}
-            onLimit={(nl) => { setULimit(nl); setUSkip(0); loadUsers(q, 0, nl); }} />
-        </div>
-
-        <div className="glass card-pad" style={{ padding: 24, marginTop: 18 }} data-testid="admin-alerts-section">
+        <div className="glass card-pad" style={{ padding: 24 }} data-testid="admin-alerts-section">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
             <h2 style={{ fontSize: 22 }}><Bell size={18} style={{ verticalAlign: "-3px" }} /> Alerts</h2>
             <button className="btn btn-primary btn-sm" onClick={exportCSV} disabled={exporting} data-testid="export-csv-btn"><Download size={15} /> {exporting ? "Exporting…" : "Export CSV"}</button>

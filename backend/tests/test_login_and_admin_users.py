@@ -97,3 +97,23 @@ def test_admin_users_phone_user_without_email_does_not_crash(monkeypatch):
     by_id = {u["id"]: u for u in res["results"]}
     assert by_id["U_otp"]["email"] == "" and by_id["U_otp"]["name"] == "Nek Sathi User"
     assert by_id["U_bare"]["email"] == "" and by_id["U_bare"]["name"]  # falls back, never crashes
+
+
+def test_admin_users_status_filter(monkeypatch):
+    # The Users-page chips (Active / Suspended / Admins) map to a status filter.
+    db = _db(monkeypatch)
+
+    async def run():
+        await db.users.insert_one({"id": "A", "email": "a@x.com", "name": "A", "phone": "1", "created_at": now_utc()})
+        await db.users.insert_one({"id": "S", "email": "s@x.com", "name": "S", "phone": "2", "created_at": now_utc(), "suspended": True})
+        await db.users.insert_one({"id": "AD", "email": "ad@x.com", "name": "AD", "phone": "3", "created_at": now_utc(), "is_admin": True})
+        return (
+            await au.admin_users(_={}, status="active"),
+            await au.admin_users(_={}, status="suspended"),
+            await au.admin_users(_={}, status="admin"),
+        )
+
+    active, suspended, admins = asyncio.run(run())
+    assert {u["id"] for u in active["results"]} == {"A", "AD"}  # not suspended
+    assert [u["id"] for u in suspended["results"]] == ["S"]
+    assert [u["id"] for u in admins["results"]] == ["AD"]

@@ -12,6 +12,7 @@ import Dashboard from "@/pages/Dashboard";
 import VehicleDetail from "@/pages/VehicleDetail";
 import Alerts from "@/pages/Alerts";
 import Admin from "@/pages/Admin";
+import AdminUsers from "@/pages/AdminUsers";
 import PublicScan from "@/pages/PublicScan";
 import Tags from "@/pages/Tags";
 import TagDetail from "@/pages/TagDetail";
@@ -231,6 +232,7 @@ function Shell() {
           <Route path="/circles" element={<Protected><TemporaryCircles /></Protected>} />
           <Route path="/intruder/:token" element={<IntruderView />} />
           <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
+          <Route path="/admin/users" element={<Protected adminOnly><AdminUsers /></Protected>} />
           <Route path="/admin/qr" element={<Protected adminOnly><AdminQR /></Protected>} />
           <Route path="/admin/dealers" element={<Protected adminOnly><AdminDealers /></Protected>} />
           <Route path="/admin/dealers/:id" element={<Protected adminOnly><AdminVendorView /></Protected>} />

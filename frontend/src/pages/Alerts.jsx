@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { Siren, ParkingCircle, Lock, Flame, Truck, Gauge, Video, Bell, MapPin, Phone, RefreshCw, Ban, Check } from "lucide-react";
+import { Siren, ParkingCircle, Lock, Flame, Truck, Gauge, Video, Bell, MapPin, Phone, RefreshCw, Ban, Check, ChevronDown, Loader2 } from "lucide-react";
+
+// Load a first page, then a few more on "View more" — a user with thousands of
+// alerts never loads them all at once.
+const PAGE = 8;
+const MORE = 4;
 
 const META = {
   emergency: { icon: <Siren size={18} />, color: "#ff3b5c", label: "Emergency" },
@@ -20,19 +25,37 @@ const fmt = (d) => {
 
 export default function Alerts() {
   const [alerts, setAlerts] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [blocked, setBlocked] = useState({}); // phone -> true once blocked this session
 
   const load = async () => {
     setLoading(true);
     try {
-      const r = await api.get("/alerts");
-      setAlerts(r.data);
+      const [r, c] = await Promise.all([
+        api.get("/alerts", { params: { skip: 0, limit: PAGE } }),
+        api.get("/alerts/count").catch(() => ({ data: {} })),
+      ]);
+      const page = Array.isArray(r.data) ? r.data : [];
+      setAlerts(page);
+      setTotal(c.data?.total ?? page.length);
     } finally {
       setLoading(false);
     }
   };
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const r = await api.get("/alerts", { params: { skip: alerts.length, limit: MORE } });
+      const page = Array.isArray(r.data) ? r.data : [];
+      setAlerts((prev) => [...prev, ...page]);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
   useEffect(() => { load(); }, []);
+  const hasMore = alerts.length < total;
 
   const blockNumber = async (phone) => {
     if (!phone || blocked[phone]) return;
@@ -99,6 +122,12 @@ export default function Alerts() {
                 </div>
               );
             })}
+            {hasMore && (
+              <button type="button" onClick={loadMore} disabled={loadingMore} data-testid="alerts-view-more"
+                style={{ width: "100%", padding: "13px 14px", background: "rgba(233,37,70,.06)", border: "none", borderTop: "1px solid var(--panel-brd)", color: "var(--accent)", fontWeight: 700, fontSize: 13.5, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+                {loadingMore ? <><Loader2 size={15} className="spin" /> Loading…</> : <>View more ({total - alerts.length} left) <ChevronDown size={15} /></>}
+              </button>
+            )}
           </div>
         )}
       </div>

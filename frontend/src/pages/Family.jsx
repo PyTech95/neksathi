@@ -110,12 +110,12 @@ function MemberTimeline({ memberId, name, onClose }) {
   const dayLabel = isToday ? "Today" : day.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 
   return (
-    <div className="modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose} data-testid="member-timeline">
-      <div className="glass" style={{ width: "100%", maxWidth: 560, maxHeight: "88vh", borderRadius: "18px 18px 0 0", padding: 18, overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <div style={{ fontWeight: 800, fontSize: 17, display: "inline-flex", alignItems: "center", gap: 8 }}><Activity size={18} className="neon" /> {name}'s timeline</div>
-          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close"><X size={16} /></button>
-        </div>
+    <div style={{ position: "fixed", inset: 0, zIndex: 1200, background: "var(--bg)", display: "flex", flexDirection: "column" }} data-testid="member-timeline">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "max(14px, env(safe-area-inset-top, 0px)) 16px 14px", borderBottom: "1px solid var(--panel-brd)", flexShrink: 0 }}>
+        <div style={{ fontWeight: 800, fontSize: 17, display: "inline-flex", alignItems: "center", gap: 8 }}><Activity size={18} className="neon" /> {name}'s timeline</div>
+        <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close"><X size={16} /></button>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <button className="btn btn-ghost btn-sm" onClick={() => shiftDay(-1)} data-testid="timeline-prev">‹ Prev day</button>
           <span style={{ fontWeight: 700 }}>{dayLabel}</span>
