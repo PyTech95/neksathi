@@ -68,6 +68,7 @@ import FamilyAlarm from "./components/FamilyAlarm";
 import IncomingCall from "./components/IncomingCall";
 import BottomNav from "@/components/BottomNav";
 import Onboarding from "@/components/Onboarding";
+import CrashDetector from "@/components/CrashDetector";
 import More from "@/pages/More";
 import BuyQR from "@/pages/BuyQR";
 import BuyTagQR from "@/pages/BuyTagQR";
@@ -245,6 +246,7 @@ function Shell() {
         </Routes>
         <AppChrome />
         <Onboarding />
+        <CrashDetector />
       </BrowserRouter>
     </>
   );
