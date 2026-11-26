@@ -2,33 +2,35 @@ import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Home, Shield, Users, QrCode, LayoutGrid, User } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useT } from "@/lib/i18n";
 import { maybeAutoOpenCallSetup } from "@/lib/callsetup";
 
 const TABS = [
-  { to: "/dashboard", icon: Home, label: "Home" },
-  { to: "/safety", icon: Shield, label: "Safety" },
-  { to: "/family", icon: Users, label: "Family" },
-  { to: "/scanner", icon: QrCode, label: "Smart QR" },
-  { to: "/more", icon: LayoutGrid, label: "More" },
-  { to: "/settings", icon: User, label: "Profile" },
+  { to: "/dashboard", icon: Home, label: "Home", tkey: "nav.home" },
+  { to: "/safety", icon: Shield, label: "Safety", tkey: "nav.safety" },
+  { to: "/family", icon: Users, label: "Family", tkey: "nav.family" },
+  { to: "/scanner", icon: QrCode, label: "Smart QR", tkey: "nav.smartqr" },
+  { to: "/more", icon: LayoutGrid, label: "More", tkey: "nav.more" },
+  { to: "/settings", icon: User, label: "Profile", tkey: "nav.profile" },
 ];
 
 // A dealer can only use the dealer portal, so they get just Home + Profile.
 const DEALER_TABS = [
-  { to: "/dealer", icon: Home, label: "Home" },
-  { to: "/dealer/profile", icon: User, label: "Profile" },
+  { to: "/dealer", icon: Home, label: "Home", tkey: "nav.home" },
+  { to: "/dealer/profile", icon: User, label: "Profile", tkey: "nav.profile" },
 ];
 
 // An organization is likewise limited to its own portal.
 const ORG_TABS = [
-  { to: "/org", icon: Home, label: "Home" },
-  { to: "/org/profile", icon: User, label: "Profile" },
+  { to: "/org", icon: Home, label: "Home", tkey: "nav.home" },
+  { to: "/org/profile", icon: User, label: "Profile", tkey: "nav.profile" },
 ];
 
 // Fixed bottom tab bar for the mobile app (logged-in users).
 export default function BottomNav() {
   const { pathname } = useLocation();
   const { user } = useAuth();
+  const { t } = useT();
   const tabs = user?.is_dealer ? DEALER_TABS : user?.is_org ? ORG_TABS : TABS;
   // Reserve space at the bottom of pages so content isn't hidden behind the bar.
   useEffect(() => {
@@ -40,7 +42,7 @@ export default function BottomNav() {
     (to === "/dashboard" || to === "/dealer" || to === "/org") ? pathname === to : pathname.startsWith(to);
   return (
     <nav className="bottom-nav" data-testid="bottom-nav">
-      {tabs.map(({ to, icon: Icon, label }) => {
+      {tabs.map(({ to, icon: Icon, label, tkey }) => {
         const active = isActive(to);
         return (
           <Link
@@ -50,7 +52,7 @@ export default function BottomNav() {
             data-testid={`bn-${label.toLowerCase().replace(/\s/g, "-")}`}
           >
             <Icon size={21} />
-            <span>{label}</span>
+            <span>{t(tkey)}</span>
           </Link>
         );
       })}

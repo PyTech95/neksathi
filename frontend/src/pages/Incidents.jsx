@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import api from "@/lib/api";
 import { ParkingCircle, Siren, ShieldAlert, Check, X, CheckCircle2, Clock, MapPin, Phone, RefreshCw, BellRing, Ban, Lightbulb, DoorOpen, AlertTriangle, MessageSquare, Key, Bike, Package, ChevronDown } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 const FIRST = 8;   // show this many, then "View more" reveals a few more
 const MORE = 4;
@@ -22,6 +23,7 @@ const META = {
 const statusLabel = (s) => ({ alert_sent: "Alert sent", coming: "You're coming", no_response: "No response", call_attempted: "Call attempted", resolved: "Resolved" }[s] || s);
 
 export default function Incidents() {
+  const { t } = useT();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(() => new Set()); // which incidents are expanded

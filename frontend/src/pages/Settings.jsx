@@ -9,7 +9,8 @@ import BottomSheet from "@/components/BottomSheet";
 import Modal from "@/components/Modal";
 import { openCallSetup, isNativeApp } from "@/lib/callsetup";
 import { getThemePref, setThemePref } from "@/lib/theme";
-import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink, Phone, Play, Square, Upload, ChevronDown, Check, LogOut, Receipt, ChevronRight, Gift, Sun, Moon, Monitor, Wallet as WalletIcon } from "lucide-react";
+import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink, Phone, Play, Square, Upload, ChevronDown, Check, LogOut, Receipt, ChevronRight, Gift, Sun, Moon, Monitor, Languages, Wallet as WalletIcon } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 const DEFAULT_PREFS = { whatsapp: true, email: true, push: true, incident_alerts: true, speed_alerts: true, marketing: false, ringtone: "classic" };
 
@@ -109,6 +110,7 @@ function ToneRow({ name, active, playing, onPreview, onSelect, testid }) {
 
 export default function Settings() {
   const { user, setUser, logout } = useAuth();
+  const { t, lang, setLang } = useT();
   const navigate = useNavigate();
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
@@ -574,6 +576,29 @@ export default function Settings() {
             })}
           </div>
           <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>System follows your phone's light/dark setting. Default is Light.</p>
+        </div>
+
+        <div className="glass card-pad" style={{ padding: 26, marginBottom: 18 }} data-testid="language-card">
+          <h2 style={{ fontSize: 20, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}><Languages size={18} /> {t("set.language")}</h2>
+          <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>{t("set.language.sub")}</p>
+          <div style={{ display: "grid", gap: 10 }}>
+            {[{ id: "en", label: t("set.lang.en") }, { id: "hi", label: t("set.lang.hi") }].map(({ id, label }) => {
+              const on = lang === id;
+              return (
+                <button key={id} type="button" onClick={() => setLang(id)} data-testid={`lang-${id}`} aria-pressed={on} className="glass"
+                  style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left", padding: "13px 16px", cursor: "pointer", borderRadius: 14,
+                    border: on ? "2px solid var(--accent)" : "1px solid var(--panel-brd)", background: on ? "rgba(233,37,70,.12)" : "var(--panel)", color: "var(--text)" }}>
+                  <span style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center",
+                    background: on ? "rgba(233,37,70,.16)" : "rgba(127,127,140,.12)", color: on ? "var(--accent)" : "var(--muted)",
+                    border: on ? "1px solid rgba(233,37,70,.4)" : "1px solid var(--panel-brd)", fontWeight: 800, fontSize: 13 }}>{id.toUpperCase()}</span>
+                  <span style={{ flex: 1, fontWeight: 700, fontSize: 15 }}>{label}</span>
+                  {on
+                    ? <Check size={20} style={{ color: "var(--accent)", flexShrink: 0 }} />
+                    : <span style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid var(--panel-brd)", flexShrink: 0 }} />}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <RingtoneCard />

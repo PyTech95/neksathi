@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { Siren, ParkingCircle, Lock, Flame, Truck, Gauge, Video, Bell, MapPin, Phone, RefreshCw, Ban, Check, ChevronDown, Loader2, Lightbulb, PhoneMissed, MessageSquare } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 // Load a first page, then a few more on "View more" — a user with thousands of
 // alerts never loads them all at once.
@@ -32,6 +33,7 @@ const fmt = (d) => {
 };
 
 export default function Alerts() {
+  const { t } = useT();
   const [alerts, setAlerts] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -78,10 +80,10 @@ export default function Alerts() {
       <div className="container-nk" style={{ maxWidth: 680 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
           <div>
-            <span className="chip">Activity</span>
-            <h1 style={{ fontSize: 30, marginTop: 10 }}>Alert <span className="neon">feed</span></h1>
+            <span className="chip">{t("alerts.chip")}</span>
+            <h1 style={{ fontSize: 30, marginTop: 10 }}>{t("alerts.title1")} <span className="neon">{t("alerts.title2")}</span></h1>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={load} data-testid="refresh-alerts"><RefreshCw size={15} /> Refresh</button>
+          <button className="btn btn-ghost btn-sm" onClick={load} data-testid="refresh-alerts"><RefreshCw size={15} /> {t("common.refresh")}</button>
         </div>
 
         {loading ? (
@@ -89,8 +91,8 @@ export default function Alerts() {
         ) : alerts.length === 0 ? (
           <div className="glass card-pad center" style={{ padding: 50 }} data-testid="empty-alerts">
             <Bell size={40} color="#e92546" />
-            <h3 style={{ fontSize: 22, margin: "12px 0 6px" }}>No alerts yet</h3>
-            <p className="muted">When someone scans your QR, it'll appear here in real time.</p>
+            <h3 style={{ fontSize: 22, margin: "12px 0 6px" }}>{t("alerts.empty")}</h3>
+            <p className="muted">{t("alerts.empty.sub")}</p>
           </div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
@@ -114,16 +116,16 @@ export default function Alerts() {
                         )}
                         {a.scanner_phone && (
                           blocked[a.scanner_phone] ? (
-                            <span className="muted" style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }} data-testid={`blocked-done-${a.id}`}><Check size={13} /> Blocked</span>
+                            <span className="muted" style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }} data-testid={`blocked-done-${a.id}`}><Check size={13} /> {t("alerts.blocked")}</span>
                           ) : (
                             <button onClick={() => blockNumber(a.scanner_phone)} data-testid={`block-${a.id}`} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4, padding: 0 }}>
-                              <Ban size={13} /> Block
+                              <Ban size={13} /> {t("alerts.block")}
                             </button>
                           )
                         )}
                         {a.scanner_lat != null && a.scanner_lng != null && (
                           <a href={`https://www.openstreetmap.org/?mlat=${a.scanner_lat}&mlon=${a.scanner_lng}#map=17/${a.scanner_lat}/${a.scanner_lng}`} target="_blank" rel="noreferrer" className="muted" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            <MapPin size={13} /> View on map
+                            <MapPin size={13} /> {t("common.viewOnMap")}
                           </a>
                         )}
                       </div>
@@ -135,7 +137,7 @@ export default function Alerts() {
             {hasMore && (
               <button type="button" onClick={loadMore} disabled={loadingMore} data-testid="alerts-view-more"
                 style={{ padding: "12px 14px", background: "rgba(233,37,70,.06)", border: "1px solid var(--panel-brd)", borderRadius: 12, color: "var(--accent)", fontWeight: 700, fontSize: 13.5, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
-                {loadingMore ? <><Loader2 size={15} className="spin" /> Loading…</> : <>View more ({total - alerts.length} left) <ChevronDown size={15} /></>}
+                {loadingMore ? <><Loader2 size={15} className="spin" /> {t("common.loading")}</> : <>{t("common.viewMore")} ({total - alerts.length}) <ChevronDown size={15} /></>}
               </button>
             )}
           </div>
