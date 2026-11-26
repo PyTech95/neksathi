@@ -21,53 +21,38 @@ aur **debug APK (phone pe test)** kaise banayein. Commands exact hain — explan
 
 ## PART A — SERVER UPDATE (VPS pe)
 
-> Backend badla hai, isliye server update **zaroori** hai (web ke saath).
+> Backend badla hai, isliye server update **zaroori** hai. Dhyan: `frontend/build/`
+> git me tracked NAHI hai — isliye `git pull` sirf backend + source laata hai; website
+> (browser) tabhi update hoti hai jab `npm run build` chalaate ho (A3).
 
-### A1. Code pull karo
+### A1 + A2. Code pull + backend restart  *(REQUIRED — backend changed)*
 ```bash
-# VPS pe SSH karke, apne project folder me jao (jahan repo cloned hai)
-cd /path/to/neksathi        # <-- apna actual path
-git pull
+cd /var/www/neksathi && git pull && systemctl restart neksathi-backend
+```
+Naye Python packages nahi aaye, isliye sirf restart — koi `pip install` nahi.
+> Agar kabhi `requirements.txt` badle to restart se pehle:
+> `cd /var/www/neksathi/backend && pip install -r requirements.txt`
+
+**Status / verify:**
+```bash
+systemctl status neksathi-backend --no-pager      # 'active (running)' aana chahiye
+# fail dikhe to error:
+journalctl -u neksathi-backend -n 50 --no-pager
 ```
 
-### A2. Backend restart karo  *(REQUIRED — backend changed)*
-Naye Python packages nahi aaye, isliye bas **restart** karna hai.
-Apne setup ke hisab se inme se **jo chalta hai wahi** use karo:
-
+### A3. Web frontend rebuild  *(web + admin console changed)*
 ```bash
-# systemd (service):
-sudo systemctl restart neksathi        # <-- apne service ka naam
-
-# ya pm2:
-pm2 restart neksathi
-
-# ya manual/screen/tmux (purana uvicorn band karke):
-cd backend
-uvicorn server:app --host 0.0.0.0 --port 8006
-```
-> Agar kabhi `requirements.txt` badle to restart se pehle: `cd backend && pip install -r requirements.txt`
-
-**Verify (OTP/login chal raha hai?):**
-```bash
-# site kholo aur login -> OTP aana chahiye, ya:
-curl -s https://<your-domain>/api/health
-```
-
-### A3. Web frontend rebuild + publish  *(web changed)*
-
-**Option 1 — in place (jahan repo live hai, wahi build karo):**
-```bash
-cd frontend
-# frontend/.env me REACT_APP_BACKEND_URL theek ho (ya khaali rakho to site ka /api proxy use hota hai)
-npm run build
+cd /var/www/neksathi/frontend && npm run build
 # Nginx frontend/build serve karta hai -> site kholke HARD REFRESH (Ctrl+Shift+R)
 ```
+> `frontend/.env` me `REACT_APP_BACKEND_URL` theek ho (ya khaali to site ka /api proxy use hota hai).
+> Yeh step sirf **browser/web + admin** ke liye hai — mobile app ke changes AAB se aate hain (PART B).
 
-**Option 2 — repo ka isolated deploy script (agar live project is checkout se alag folder me hai):**
+### Pura server update ek saath
 ```bash
-bash DEPLOY_VPS.sh /absolute/path/to/live-project https://<your-domain>
-# Yeh alag se build karke live project ke frontend/build me publish karta hai + backup banata hai.
-# (Yeh sirf frontend ke liye hai — backend isse restart NAHI hota, A2 alag se karo.)
+cd /var/www/neksathi && git pull && systemctl restart neksathi-backend
+cd /var/www/neksathi/frontend && npm run build
+systemctl status neksathi-backend --no-pager
 ```
 
 ---
@@ -131,9 +116,12 @@ video call, device locate) test karo.
 
 ## ROLLBACK (kuch galat ho jaaye to)
 
-- **Web:** Option 2 (DEPLOY_VPS.sh) har run pe backup banata hai `.neksathi-backups/` me — wahi tar extract kar do.
-  Ya in-place: `cd frontend && git checkout <purana-commit> && npm run build`.
-- **Backend:** `git checkout <purana-commit>` → backend **restart** (A2).
+- **Backend + Web:** purane commit pe jao, phir restart + rebuild:
+  ```bash
+  cd /var/www/neksathi && git checkout <purana-commit> && systemctl restart neksathi-backend
+  cd /var/www/neksathi/frontend && npm run build
+  ```
+  (Wapas latest pe: `git checkout main`.)
 - **App:** Play Console → release management → previous version pe roll back.
 
 ---
