@@ -5,53 +5,56 @@ import { useAuth } from "@/context/AuthContext";
 import { Car, Plus, Trash2, ShieldAlert, ShieldCheck, ChevronRight, ChevronDown, X, Phone, Bike, Tractor, Truck, CircleHelp, Check, Siren, ScanLine, Users, MapPin, Lock, Radar, AlertTriangle } from "lucide-react";
 import BottomSheet from "@/components/BottomSheet";
 import VehicleFields, { tidyVehicle } from "@/components/VehicleFields";
+import { useT } from "@/lib/i18n";
 
 // Top strip — the four things people reach for first. Each points at a real page.
+// `label` stays English (data-testid); `tkey` drives the display.
 const QUICK_ACTIONS = [
-  { to: "/theft-protection", icon: Lock, label: "Anti-Theft" },
-  { to: "/family", icon: MapPin, label: "Live Location" },
-  { to: "/scanner", icon: ScanLine, label: "Scan QR" },
-  { to: "/safety", icon: Siren, label: "SOS", primary: true },
+  { to: "/theft-protection", icon: Lock, label: "Anti-Theft", tkey: "home.q.antitheft" },
+  { to: "/family", icon: MapPin, label: "Live Location", tkey: "home.q.live" },
+  { to: "/scanner", icon: ScanLine, label: "Scan QR", tkey: "home.q.scan" },
+  { to: "/safety", icon: Siren, label: "SOS", tkey: "home.q.sos", primary: true },
 ];
 
 // Clean services grid (like the "More" tiles) — every card opens its real page.
 const SERVICES = [
-  { to: "/safety", icon: AlertTriangle, title: "Accident Safety", desc: "Auto-alert on a crash" },
-  { to: "/theft-protection", icon: Lock, title: "Anti-Theft", desc: "Lock, siren & intruder" },
-  { to: "/safe-zones", icon: Radar, title: "Safe Zones", desc: "Geo-fence alerts" },
-  { to: "/family", icon: Users, title: "Family", desc: "Live location & trail" },
-  { to: "/tags", icon: ScanLine, title: "Smart QR / Tags", desc: "Bags, pets & luggage" },
-  { to: "/helplines", icon: Phone, title: "Helplines", desc: "Police, ambulance, fire" },
+  { to: "/safety", icon: AlertTriangle, title: "Accident Safety", tkey: "svc.accident", dkey: "svc.accident.sub" },
+  { to: "/theft-protection", icon: Lock, title: "Anti-Theft", tkey: "svc.antitheft", dkey: "svc.antitheft.sub" },
+  { to: "/safe-zones", icon: Radar, title: "Safe Zones", tkey: "svc.zones", dkey: "svc.zones.sub" },
+  { to: "/family", icon: Users, title: "Family", tkey: "svc.family", dkey: "svc.family.sub" },
+  { to: "/tags", icon: ScanLine, title: "Smart QR / Tags", tkey: "svc.tags", dkey: "svc.tags.sub" },
+  { to: "/helplines", icon: Phone, title: "Helplines", tkey: "svc.helplines", dkey: "svc.helplines.sub" },
 ];
 
-function greeting() {
+function greetingKey() {
   const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  if (h < 21) return "Good evening";
-  return "Good night";
+  if (h < 12) return "greet.morning";
+  if (h < 17) return "greet.afternoon";
+  if (h < 21) return "greet.evening";
+  return "greet.night";
 }
 
 const VEHICLE_TYPES = ["car", "bike", "tractor", "commercial", "other"];
 const VEHICLE_TYPE_META = {
-  car: { label: "Car", icon: Car },
-  bike: { label: "Bike / Two-wheeler", icon: Bike },
-  tractor: { label: "Tractor", icon: Tractor },
-  commercial: { label: "Commercial / Truck", icon: Truck },
-  other: { label: "Other", icon: CircleHelp },
+  car: { labelKey: "vtype.car", icon: Car },
+  bike: { labelKey: "vtype.bike", icon: Bike },
+  tractor: { labelKey: "vtype.tractor", icon: Tractor },
+  commercial: { labelKey: "vtype.commercial", icon: Truck },
+  other: { labelKey: "vtype.other", icon: CircleHelp },
 };
 
 // Small status pill for a vehicle card.
-function vehicleStatus(v) {
-  if (!v.qr_ordered) return { text: "Set up QR", cls: "pill-warn" };
-  if (v.plan_status === "active") return { text: `Active · ${v.plan_days_left}d`, cls: "pill-ok" };
-  if (v.plan_status === "grace") return { text: "Expired (grace)", cls: "pill-warn" };
-  if (v.plan_status === "expired" || v.plan_status === "none") return { text: "Expired", cls: "pill-danger" };
-  return { text: "Active", cls: "pill-ok" };
+function vehicleStatus(v, t) {
+  if (!v.qr_ordered) return { text: t("dash.setupQR"), cls: "pill-warn" };
+  if (v.plan_status === "active") return { text: t("dash.activeDays", { n: v.plan_days_left }), cls: "pill-ok" };
+  if (v.plan_status === "grace") return { text: t("dash.expiredGrace"), cls: "pill-warn" };
+  if (v.plan_status === "expired" || v.plan_status === "none") return { text: t("dash.expired"), cls: "pill-danger" };
+  return { text: t("dash.active"), cls: "pill-ok" };
 }
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { t } = useT();
   const [vehicles, setVehicles] = useState([]);
   const [shared, setShared] = useState([]);
   const [summary, setSummary] = useState({ family: 0, zones: 0 });
@@ -92,14 +95,14 @@ export default function Dashboard() {
       setForm({ number_plate: "", vehicle_type: "car", brand: "", model: "", color: "", speed_limit_kmh: 80 });
       load();
     } catch (e) {
-      setErr(e?.response?.data?.detail || "Could not add vehicle");
+      setErr(e?.response?.data?.detail || t("dash.addErr"));
     } finally {
       setBusy(false);
     }
   };
 
   const remove = async (id) => {
-    if (!window.confirm("Delete this vehicle and all its data?")) return;
+    if (!window.confirm(t("dash.deleteConfirm"))) return;
     await api.delete(`/vehicles/${id}`);
     load();
   };
@@ -119,17 +122,17 @@ export default function Dashboard() {
             {user?.avatar_base64 ? <img src={user.avatar_base64} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (user?.name?.[0] || "?")}
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="muted" style={{ fontSize: 12.5 }}>{greeting()},</div>
+            <div className="muted" style={{ fontSize: 12.5 }}>{t(greetingKey())},</div>
             <h1 style={{ fontSize: 21, margin: "1px 0 0", lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.name?.split(" ")[0] || "there"}</h1>
           </div>
           <span data-testid="protection-status" className="pill" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5, ...(isProtected ? { background: "rgba(52,211,153,.14)", borderColor: "rgba(52,211,153,.4)", color: "#34d399" } : { background: "rgba(245,165,36,.14)", borderColor: "rgba(245,165,36,.4)", color: "#f5a524" }) }}>
-            {isProtected ? <><ShieldCheck size={13} /> Protected</> : <><ShieldAlert size={13} /> Set up</>}
+            {isProtected ? <><ShieldCheck size={13} /> {t("common.protected")}</> : <><ShieldAlert size={13} /> {t("common.setup")}</>}
           </span>
         </div>
 
         {/* Quick actions strip */}
         <div className="glass" data-testid="home-quick-actions" style={{ padding: "14px 8px", borderRadius: 18, display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6, marginBottom: 18 }}>
-          {QUICK_ACTIONS.map(({ to, icon: Icon, label, primary }) => (
+          {QUICK_ACTIONS.map(({ to, icon: Icon, label, tkey, primary }) => (
             <Link key={label} to={to} data-testid={`quick-${label.toLowerCase().replace(/\s+/g, "-")}`}
               style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 7, textDecoration: "none", color: "var(--text)", padding: "4px 2px" }}>
               <span style={{ width: 48, height: 48, borderRadius: 15, display: "grid", placeItems: "center",
@@ -139,7 +142,7 @@ export default function Dashboard() {
                 boxShadow: primary ? "0 6px 16px rgba(233,37,70,.35)" : "none" }}>
                 <Icon size={22} />
               </span>
-              <span style={{ fontSize: 11.5, fontWeight: 600, textAlign: "center", lineHeight: 1.15, color: primary ? "#ff5a74" : "var(--text)" }}>{label}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, textAlign: "center", lineHeight: 1.15, color: primary ? "#ff5a74" : "var(--text)" }}>{t(tkey)}</span>
             </Link>
           ))}
         </div>
@@ -152,16 +155,16 @@ export default function Dashboard() {
             <span style={{ position: "absolute", right: 18, top: "50%", transform: "translateY(-50%)", width: 72, height: 72, borderRadius: 18, background: "rgba(255,255,255,.16)", border: "1px solid rgba(255,255,255,.35)", display: "grid", placeItems: "center" }}>
               <ScanLine size={34} color="#fff" />
             </span>
-            <h2 style={{ fontSize: 21, lineHeight: 1.15, fontWeight: 800, margin: 0, maxWidth: 240 }}>Every journey, protected.</h2>
-            <p style={{ margin: "7px 0 0", fontSize: 13, opacity: 0.92, maxWidth: 230, lineHeight: 1.4 }}>A QR on your vehicle — the moment someone scans it, you get an instant alert with live location.</p>
-            <span style={{ marginTop: 14, display: "inline-flex", alignItems: "center", gap: 7, background: "#fff", color: "#b3122f", fontWeight: 700, fontSize: 13, padding: "9px 15px", borderRadius: 11 }}>Learn more <ChevronRight size={15} /></span>
+            <h2 style={{ fontSize: 21, lineHeight: 1.15, fontWeight: 800, margin: 0, maxWidth: 240 }}>{t("home.hero.title")}</h2>
+            <p style={{ margin: "7px 0 0", fontSize: 13, opacity: 0.92, maxWidth: 230, lineHeight: 1.4 }}>{t("home.hero.sub")}</p>
+            <span style={{ marginTop: 14, display: "inline-flex", alignItems: "center", gap: 7, background: "#fff", color: "#b3122f", fontWeight: 700, fontSize: 13, padding: "9px 15px", borderRadius: 11 }}>{t("home.hero.cta")} <ChevronRight size={15} /></span>
           </div>
         </Link>
 
         {/* My Vehicles */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "24px 2px 12px" }}>
-          <h2 style={{ fontSize: 18, margin: 0, fontWeight: 800 }}>My Vehicles</h2>
-          <button className="btn btn-ghost btn-sm" onClick={() => setShowAdd(true)} data-testid="add-vehicle-btn" style={{ color: "#ff5a74", fontWeight: 700 }}><Plus size={15} /> Add</button>
+          <h2 style={{ fontSize: 18, margin: 0, fontWeight: 800 }}>{t("home.vehicles")}</h2>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowAdd(true)} data-testid="add-vehicle-btn" style={{ color: "#ff5a74", fontWeight: 700 }}><Plus size={15} /> {t("common.add")}</button>
         </div>
 
         {user && !user.phone_verified && (
@@ -169,8 +172,8 @@ export default function Dashboard() {
             <div className="glass card-pad glass-hover" style={{ padding: 14, marginBottom: 14, borderColor: "rgba(245,165,36,.5)", display: "flex", alignItems: "center", gap: 12 }}>
               <ShieldAlert size={20} style={{ color: "#f5a524", flexShrink: 0 }} />
               <div style={{ flex: 1 }}>
-                <b style={{ fontSize: 14.5 }}>Verify your mobile number</b>
-                <div className="muted" style={{ fontSize: 13 }}>Needed before ordering a QR, and keeps your login linked to your number. Tap to verify.</div>
+                <b style={{ fontSize: 14.5 }}>{t("dash.verify")}</b>
+                <div className="muted" style={{ fontSize: 13 }}>{t("dash.verify.sub")}</div>
               </div>
               <ChevronRight size={18} className="muted" />
             </div>
@@ -182,16 +185,16 @@ export default function Dashboard() {
         ) : vehicles.length === 0 ? (
           <div className="glass card-pad center" style={{ padding: 40 }} data-testid="empty-vehicles">
             <Car size={40} color="#e92546" />
-            <h3 style={{ fontSize: 20, margin: "12px 0 6px" }}>No vehicles yet</h3>
-            <p className="muted" style={{ marginBottom: 18 }}>Add your first vehicle to generate a QR safety sticker.</p>
-            <button className="btn btn-primary" onClick={() => setShowAdd(true)} data-testid="empty-add-btn"><Plus size={18} /> Add vehicle</button>
+            <h3 style={{ fontSize: 20, margin: "12px 0 6px" }}>{t("home.noVehicles")}</h3>
+            <p className="muted" style={{ marginBottom: 18 }}>{t("home.noVehicles.sub")}</p>
+            <button className="btn btn-primary" onClick={() => setShowAdd(true)} data-testid="empty-add-btn"><Plus size={18} /> {t("home.addVehicle")}</button>
           </div>
         ) : (
           <div className="vrow" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "2px 2px 6px", scrollbarWidth: "none" }}>
             {vehicles.map((v) => {
               const M = VEHICLE_TYPE_META[v.vehicle_type] || VEHICLE_TYPE_META.car;
               const VIcon = M.icon;
-              const st = vehicleStatus(v);
+              const st = vehicleStatus(v, t);
               // Whole card is tappable → opens that vehicle (order page if no QR yet).
               const to = v.qr_ordered ? `/vehicle/${v.id}` : `/buy-qr/${v.id}`;
               return (
@@ -199,7 +202,7 @@ export default function Dashboard() {
                   className="glass glass-hover" style={{ flex: "0 0 180px", padding: 15, borderRadius: 18, textDecoration: "none", color: "var(--text)", position: "relative" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ width: 42, height: 42, borderRadius: 12, display: "grid", placeItems: "center", background: "rgba(233,37,70,.12)", border: "1px solid rgba(233,37,70,.32)", color: "#ff5a74" }}><VIcon size={21} /></span>
-                    {v.lost_mode ? <span className="chip" style={{ background: "rgba(255,59,92,.16)", borderColor: "rgba(255,59,92,.4)", color: "#ffb3c0" }}><ShieldAlert size={12} /> Lost</span> : <ChevronRight size={18} className="muted" />}
+                    {v.lost_mode ? <span className="chip" style={{ background: "rgba(255,59,92,.16)", borderColor: "rgba(255,59,92,.4)", color: "#ffb3c0" }}><ShieldAlert size={12} /> {t("dash.lost")}</span> : <ChevronRight size={18} className="muted" />}
                   </div>
                   <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: ".03em", margin: "13px 0 3px" }}>{v.number_plate}</div>
                   <div className="muted" style={{ fontSize: 12.5, textTransform: "capitalize", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.vehicle_type}{v.make_model ? ` · ${v.make_model}` : ""}</div>
@@ -211,37 +214,37 @@ export default function Dashboard() {
             <button onClick={() => setShowAdd(true)} data-testid="add-vehicle-card"
               style={{ flex: "0 0 128px", borderRadius: 18, border: "1.6px dashed var(--panel-brd)", background: "transparent", color: "#ff5a74", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 9, cursor: "pointer" }}>
               <span style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(233,37,70,.12)", display: "grid", placeItems: "center" }}><Plus size={20} /></span>
-              <span style={{ fontSize: 12.5, fontWeight: 700 }}>Add vehicle</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700 }}>{t("home.addVehicle")}</span>
             </button>
           </div>
         )}
 
         {/* Safety services */}
-        <h2 style={{ fontSize: 18, fontWeight: 800, margin: "26px 2px 12px" }}>Safety services</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 800, margin: "26px 2px 12px" }}>{t("home.services")}</h2>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          {SERVICES.map(({ to, icon: Icon, title, desc }) => (
+          {SERVICES.map(({ to, icon: Icon, title, tkey, dkey }) => (
             <Link key={title} to={to} className="glass glass-hover" data-testid={`service-${title.toLowerCase().replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "")}`}
               style={{ padding: 15, borderRadius: 16, textDecoration: "none", color: "var(--text)", display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ width: 42, height: 42, borderRadius: 12, display: "grid", placeItems: "center", background: "rgba(233,37,70,.12)", border: "1px solid rgba(233,37,70,.32)", color: "#ff5a74", marginBottom: 9 }}>
                 <Icon size={21} />
               </span>
-              <b style={{ fontSize: 14.5 }}>{title}</b>
-              <small className="muted" style={{ fontSize: 11.5, lineHeight: 1.3 }}>{desc}</small>
+              <b style={{ fontSize: 14.5 }}>{t(tkey)}</b>
+              <small className="muted" style={{ fontSize: 11.5, lineHeight: 1.3 }}>{t(dkey)}</small>
             </Link>
           ))}
         </div>
 
         {shared.length > 0 && (
           <div style={{ marginTop: 34 }} data-testid="shared-section">
-            <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Shared with me</h2>
-            <p className="muted" style={{ marginBottom: 14, fontSize: 13 }}>Vehicles family members invited you to follow.</p>
+            <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>{t("dash.shared")}</h2>
+            <p className="muted" style={{ marginBottom: 14, fontSize: 13 }}>{t("dash.shared.sub")}</p>
             <div className="grid grid-3">
               {shared.map((v) => (
                 <div key={v.id} className="glass card-pad" data-testid={`shared-card-${v.number_plate}`}>
                   <div className="brand-badge" style={{ borderRadius: 12 }}><Car size={18} /></div>
                   <h3 style={{ fontSize: 22, margin: "14px 0 4px" }}>{v.number_plate}</h3>
                   <p className="muted" style={{ fontSize: 14, textTransform: "capitalize" }}>{v.vehicle_type}{v.make_model ? ` · ${v.make_model}` : ""}</p>
-                  <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>Owner: {v.owner_name || "—"} · role {v.role}</p>
+                  <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>{t("dash.owner", { name: v.owner_name || "—", role: v.role })}</p>
                 </div>
               ))}
             </div>
@@ -249,27 +252,27 @@ export default function Dashboard() {
         )}
 
         {/* Protection summary — a clean "you're covered" panel (replaced the old recent-calls list) */}
-        <h2 style={{ fontSize: 18, fontWeight: 800, margin: "30px 2px 12px" }}>Your protection</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 800, margin: "30px 2px 12px" }}>{t("home.protection")}</h2>
         <div className="glass" style={{ padding: 16, borderRadius: 18 }} data-testid="protection-summary">
           <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
             <span style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: isProtected ? "rgba(52,211,153,.14)" : "rgba(245,165,36,.14)", color: isProtected ? "#34d399" : "#f5a524", border: `1px solid ${isProtected ? "rgba(52,211,153,.4)" : "rgba(245,165,36,.4)"}` }}>
               <ShieldCheck size={20} />
             </span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 800, fontSize: 15 }}>{isProtected ? "You're protected" : "Finish setting up"}</div>
-              <div className="muted" style={{ fontSize: 12.5 }}>{isProtected ? "Your vehicles & family are being watched." : "Add a QR plan to activate protection."}</div>
+              <div style={{ fontWeight: 800, fontSize: 15 }}>{isProtected ? t("home.protected") : t("home.setup")}</div>
+              <div className="muted" style={{ fontSize: 12.5 }}>{isProtected ? t("home.protected.sub") : t("home.setup.sub")}</div>
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
             {[
-              { to: "/dashboard", icon: Car, n: vehicles.length, l: "Vehicles" },
-              { to: "/family", icon: Users, n: summary.family, l: "Family" },
-              { to: "/safe-zones", icon: Radar, n: summary.zones, l: "Safe zones" },
-            ].map(({ to, icon: Icon, n, l }) => (
+              { to: "/dashboard", icon: Car, n: vehicles.length, l: "Vehicles", lk: "home.stat.vehicles" },
+              { to: "/family", icon: Users, n: summary.family, l: "Family", lk: "home.stat.family" },
+              { to: "/safe-zones", icon: Radar, n: summary.zones, l: "Safe zones", lk: "home.stat.zones" },
+            ].map(({ to, icon: Icon, n, l, lk }) => (
               <Link key={l} to={to} data-testid={`summary-${l.toLowerCase().replace(/\s+/g, "-")}`} style={{ textDecoration: "none", color: "var(--text)", background: "rgba(233,37,70,.06)", border: "1px solid var(--panel-brd)", borderRadius: 14, padding: "13px 10px", textAlign: "center" }}>
                 <Icon size={18} style={{ color: "#ff5a74" }} />
                 <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6, lineHeight: 1 }}>{n}</div>
-                <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>{l}</div>
+                <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>{t(lk)}</div>
               </Link>
             ))}
           </div>
@@ -280,16 +283,16 @@ export default function Dashboard() {
         <div style={overlay} onClick={() => setShowAdd(false)} data-testid="add-vehicle-modal">
           <div className="glass card-pad" style={{ width: "100%", maxWidth: 460, padding: 28 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h2 style={{ fontSize: 24 }}>Add vehicle</h2>
+              <h2 style={{ fontSize: 24 }}>{t("home.addVehicle")}</h2>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowAdd(false)} data-testid="close-add-modal" style={{ padding: 8 }}><X size={16} /></button>
             </div>
             <form onSubmit={addVehicle}>
               <div className="field">
-                <label>Number plate</label>
+                <label>{t("dash.plate")}</label>
                 <input className="input" value={form.number_plate} onChange={set("number_plate")} required data-testid="vehicle-plate" placeholder="MH12 AB 1234" />
               </div>
               <div className="field">
-                <label>Vehicle type</label>
+                <label>{t("dash.vtype")}</label>
                 <button
                   type="button"
                   className="input"
@@ -302,7 +305,7 @@ export default function Dashboard() {
                     const I = M.icon;
                     return (<>
                       <I size={18} style={{ color: "#ff5a74", flexShrink: 0 }} />
-                      <span style={{ flex: 1 }}>{M.label}</span>
+                      <span style={{ flex: 1 }}>{t(M.labelKey)}</span>
                       <ChevronDown size={16} className="muted" style={{ flexShrink: 0 }} />
                     </>);
                   })()}
@@ -314,28 +317,28 @@ export default function Dashboard() {
                 idPrefix="vehicle"
               />
               <div className="field">
-                <label>Speed limit (km/h)</label>
+                <label>{t("dash.speed")}</label>
                 <input className="input" type="number" min={10} max={300} value={form.speed_limit_kmh} onChange={set("speed_limit_kmh")} data-testid="vehicle-speed" />
               </div>
               {err && <p style={{ color: "var(--danger)", fontSize: 14, marginBottom: 12 }} data-testid="add-vehicle-error">{err}</p>}
-              <button className="btn btn-primary btn-block" disabled={busy} data-testid="submit-vehicle"><Plus size={17} /> {busy ? "Adding…" : "Add vehicle"}</button>
+              <button className="btn btn-primary btn-block" disabled={busy} data-testid="submit-vehicle"><Plus size={17} /> {busy ? t("dash.adding") : t("home.addVehicle")}</button>
             </form>
           </div>
         </div>
       )}
 
-      <BottomSheet open={typePicker} onClose={() => setTypePicker(false)} title="Select vehicle type">
+      <BottomSheet open={typePicker} onClose={() => setTypePicker(false)} title={t("dash.selectVtype")}>
         <div style={{ display: "grid", gap: 8 }}>
-          {VEHICLE_TYPES.map((t) => {
-            const M = VEHICLE_TYPE_META[t];
+          {VEHICLE_TYPES.map((vt) => {
+            const M = VEHICLE_TYPE_META[vt];
             const I = M.icon;
-            const active = form.vehicle_type === t;
+            const active = form.vehicle_type === vt;
             return (
               <button
-                key={t}
+                key={vt}
                 type="button"
-                data-testid={`vtype-${t}`}
-                onClick={() => { setForm((f) => ({ ...f, vehicle_type: t })); setTypePicker(false); }}
+                data-testid={`vtype-${vt}`}
+                onClick={() => { setForm((f) => ({ ...f, vehicle_type: vt })); setTypePicker(false); }}
                 style={{
                   display: "flex", alignItems: "center", gap: 14, padding: "13px 14px", borderRadius: 14, cursor: "pointer",
                   background: active ? "rgba(233,37,70,.16)" : "rgba(255,255,255,.04)",
@@ -343,7 +346,7 @@ export default function Dashboard() {
                 }}
               >
                 <span style={{ width: 40, height: 40, borderRadius: 11, display: "grid", placeItems: "center", background: "rgba(233,37,70,.14)", color: "#ff5a74", flexShrink: 0 }}><I size={20} /></span>
-                <span style={{ flex: 1, textAlign: "left", fontWeight: 600 }}>{M.label}</span>
+                <span style={{ flex: 1, textAlign: "left", fontWeight: 600 }}>{t(M.labelKey)}</span>
                 {active && <Check size={18} style={{ color: "#ff5a74", flexShrink: 0 }} />}
               </button>
             );

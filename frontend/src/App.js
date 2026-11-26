@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { getThemePref, resolveTheme, applyTheme } from "@/lib/theme";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { I18nProvider } from "@/lib/i18n";
 import TopNav from "@/components/TopNav";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
@@ -292,10 +293,12 @@ function SplashGate({ children }) {
 
 export default function App() {
   return (
-    <SplashGate>
-      <AuthProvider>
-        <Shell />
-      </AuthProvider>
-    </SplashGate>
+    <I18nProvider>
+      <SplashGate>
+        <AuthProvider>
+          <Shell />
+        </AuthProvider>
+      </SplashGate>
+    </I18nProvider>
   );
 }
