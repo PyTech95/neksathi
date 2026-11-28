@@ -3,6 +3,7 @@ import api from "@/lib/api";
 import { Siren, ParkingCircle, Lock, Flame, Truck, Gauge, Video, Bell, MapPin, Phone, RefreshCw, Ban, Check, ChevronDown, Loader2, Lightbulb, PhoneMissed, MessageSquare } from "lucide-react";
 import IncidentCard from "@/components/IncidentCard";
 import { useT } from "@/lib/i18n";
+import { cacheGet, cacheSet } from "@/lib/cache";
 
 // Load a first page, then a few more on "View more" — a user with thousands of
 // alerts never loads them all at once.
@@ -59,16 +60,26 @@ export default function Alerts() {
   const extend = async (id) => { await api.post(`/incidents/${id}/extend`); loadIncidents(); };
 
   const load = async () => {
-    setLoading(true);
+    // Show the last view instantly (if any); otherwise show the spinner.
+    const cached = cacheGet("alerts:v1");
+    if (cached) { setAlerts(cached.alerts); setTotal(cached.total); setIncMap(cached.incMap); setLoading(false); }
+    else setLoading(true);
     try {
-      const [r, c] = await Promise.all([
+      // Fetch alerts + count + incidents together, so an alert that carries an
+      // incident renders as its full IncidentCard immediately (no late "pop-in").
+      const [r, c, inc] = await Promise.all([
         api.get("/alerts", { params: { skip: 0, limit: PAGE } }),
         api.get("/alerts/count").catch(() => ({ data: {} })),
+        api.get("/incidents").catch(() => ({ data: { results: [] } })),
       ]);
       const page = Array.isArray(r.data) ? r.data : [];
+      const total = c.data?.total ?? page.length;
+      const map = {};
+      (inc.data?.results || []).forEach((i) => { map[i.id] = i; });
       setAlerts(page);
-      setTotal(c.data?.total ?? page.length);
-      loadIncidents();
+      setTotal(total);
+      setIncMap(map);
+      cacheSet("alerts:v1", { alerts: page, total, incMap: map });
     } finally {
       setLoading(false);
     }

@@ -200,13 +200,24 @@ export default function Family() {
       const d = (await api.get("/family")).data;
       setData(d); snap.data = d;
       if (d.in_family) {
-        try { snap.placeEvents = (await api.get("/family/place-events")).data.items || []; setPlaceEvents(snap.placeEvents); } catch (_) {}
-        try { snap.rules = (await api.get("/family/alert-rules")).data; setRules(snap.rules); } catch (_) {}
-        try { snap.zones = (await api.get("/family/zones")).data.items || []; setZones(snap.zones); } catch (_) {}
-        try { snap.checkIns = (await api.get("/family/check-ins")).data; setCheckIns(snap.checkIns); } catch (_) {}
-        try { snap.activeSos = (await api.get("/family/active-sos")).data.items || []; setActiveSos(snap.activeSos); } catch (_) {}
-        try { snap.intruders = (await api.get("/family/intruder-alerts")).data.items || []; setIntruders(snap.intruders); } catch (_) {}
-        try { snap.digest = (await api.get("/family/digest")).data; setDigest(snap.digest); } catch (_) {}
+        // Fire all secondary panels in PARALLEL (was sequential — the main cause
+        // of the slow Family load). Each keeps its previous value on failure.
+        const [pe, rl, zn, ci, asos, intr, dg] = await Promise.all([
+          api.get("/family/place-events").then((r) => r.data.items || []).catch(() => snap.placeEvents),
+          api.get("/family/alert-rules").then((r) => r.data).catch(() => snap.rules),
+          api.get("/family/zones").then((r) => r.data.items || []).catch(() => snap.zones),
+          api.get("/family/check-ins").then((r) => r.data).catch(() => snap.checkIns),
+          api.get("/family/active-sos").then((r) => r.data.items || []).catch(() => snap.activeSos),
+          api.get("/family/intruder-alerts").then((r) => r.data.items || []).catch(() => snap.intruders),
+          api.get("/family/digest").then((r) => r.data).catch(() => snap.digest),
+        ]);
+        snap.placeEvents = pe; setPlaceEvents(pe);
+        snap.rules = rl; setRules(rl);
+        snap.zones = zn; setZones(zn);
+        snap.checkIns = ci; setCheckIns(ci);
+        snap.activeSos = asos; setActiveSos(asos);
+        snap.intruders = intr; setIntruders(intr);
+        snap.digest = dg; setDigest(dg);
       }
       cacheSet("family:v1", snap); // remember this view for instant re-entry
     } catch (_) { /* keep showing the last good data */ }
