@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "@/lib/api";
 import { TAG_META } from "@/pages/Tags";
-import { PackageSearch, Siren, Lock, AlertTriangle, MessageCircle, CheckCircle2, MapPin, HeartPulse, Phone, Loader2, ShieldPlus, Bell, Baby } from "lucide-react";
+import InAppCall from "@/components/InAppCall";
+import { PackageSearch, Siren, Lock, AlertTriangle, MessageCircle, CheckCircle2, MapPin, HeartPulse, Phone, Video, Loader2, ShieldPlus, Bell, Baby } from "lucide-react";
 
 // Every finder action maps to a backend alert type the owner understands.
 const ACTION_DEFS = {
@@ -52,6 +53,7 @@ export default function PublicTag() {
   const [busy, setBusy] = useState(false);
   const [call, setCall] = useState(null);
   const [calling, setCalling] = useState(false);
+  const [inCall, setInCall] = useState(null); // in-app WebRTC call: { video } or null
 
   useEffect(() => {
     api.get(`/public/tag/${qrId}`).then((r) => setTag(r.data)).catch(() => setNotFound(true)).finally(() => setLoading(false));
@@ -128,6 +130,15 @@ export default function PublicTag() {
           <div style={{ marginTop: 10, fontSize: 13 }} className="muted"><MapPin size={13} style={{ verticalAlign: "-2px" }} /> {coords ? "Location ready" : "Location unavailable (optional)"}</div>
         </div>
 
+        <div className="glass card-pad" style={{ padding: 18, marginBottom: 22 }} data-testid="tag-call-card">
+          <b style={{ fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}><Phone size={16} /> Call the owner</b>
+          <p className="muted" style={{ fontSize: 12.5, margin: "4px 0 12px" }}>Talk to {tag.owner_first_name} in-app — their phone number stays private.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <button className="btn btn-primary" onClick={() => setInCall({ video: false })} data-testid="tag-audio-call"><Phone size={16} /> Audio call</button>
+            <button className="btn btn-ghost" onClick={() => setInCall({ video: true })} data-testid="tag-video-call"><Video size={16} /> Video call</button>
+          </div>
+        </div>
+
         <div className="grid" style={{ gap: 12, marginBottom: 22 }}>
           {actionsFor(tag.tag_type).map((a) => (
             <button key={a.type} className="big-action" style={{ background: a.bg, fontSize: 20 }} disabled={busy} onClick={() => send(a.type)} data-testid={`tag-alert-${a.type}`}>{a.icon} {a.label}</button>
@@ -139,6 +150,7 @@ export default function PublicTag() {
         </div>
         <p className="center muted" style={{ marginTop: 26, fontSize: 12 }}>Powered by Nek Sathi</p>
       </div>
+      {inCall && <InAppCall qrId={qrId} kind="tag" video={inCall.video} onClose={() => setInCall(null)} />}
     </div>
   );
 }

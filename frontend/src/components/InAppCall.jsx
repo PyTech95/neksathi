@@ -21,7 +21,7 @@ function CallBtn({ onClick, on, danger, icon: Icon, label, testid }) {
 
 // Anonymous scanner side of the in-app live voice call. Places a real WebRTC
 // call to the vehicle owner — connects inside the app, no phone numbers shared.
-export default function InAppCall({ qrId, onClose, video = false }) {
+export default function InAppCall({ qrId, onClose, video = false, kind = "qr" }) {
   const [status, setStatus] = useState("connecting"); // connecting | ringing | connected | ended | missed | rejected | error | denied
   // Human reason + raw detail (stage · error) so a failed call says exactly WHY.
   const [reason, setReason] = useState("");
@@ -118,7 +118,7 @@ export default function InAppCall({ qrId, onClose, video = false }) {
         };
 
         stageRef.current = "start";
-        const { call_id } = (await api.post(`/public/qr/${qrId}/call/start${video ? "?video=1" : ""}`)).data;
+        const { call_id } = (await api.post(`/public/${kind}/${qrId}/call/start${video ? "?video=1" : ""}`)).data;
         callIdRef.current = call_id;
         // Remember OUR outgoing call so this same device's incoming-call poller
         // never treats it as a call to answer (e.g. owner testing with their own

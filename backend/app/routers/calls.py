@@ -64,6 +64,53 @@ async def rtc_call_start(request: Request, qr_id: str, video: bool = False):
     return {"call_id": call["id"], "video": bool(video)}
 
 
+@router.post("/public/tag/{qr_id}/call/start")
+@rate_limit("15/minute")
+async def rtc_tag_call_start(request: Request, qr_id: str, video: bool = False):
+    """In-app audio/video call from a tag scanner to the tag owner + the owner's
+    family circle (same WebRTC flow as a vehicle QR call). First to answer wins."""
+    tag = await db.tags.find_one({"qr_id": qr_id})
+    if not tag:
+        raise HTTPException(status_code=404, detail="QR not found or tag removed")
+    await _expire_stale_calls()
+    now = now_utc()
+    # Ring the tag owner + the owner's family circle.
+    ids = [tag["owner_id"]]
+    fm = await db.family_members.find_one({"user_id": tag["owner_id"]})
+    if fm:
+        async for m in db.family_members.find({"family_id": fm["family_id"]}):
+            if m.get("user_id"):
+                ids.append(m["user_id"])
+    seen, callee_ids = set(), []
+    for i in ids:
+        if i and i not in seen:
+            seen.add(i)
+            callee_ids.append(i)
+    label = tag.get("name") or "a tag"
+    call = {
+        "id": new_id(), "qr_id": qr_id, "tag_id": tag["id"], "number_plate": label,
+        "owner_id": tag["owner_id"], "callee_ids": callee_ids, "answered_by": None, "rejected_by": [],
+        "status": "ringing",
+        "video": bool(video),
+        "caller_offer": None, "callee_answer": None,
+        "caller_candidates": [], "callee_candidates": [],
+        "created_at": now, "updated_at": now, "answered_at": None, "ended_at": None,
+    }
+    await db.webrtc_calls.insert_one(dict(call))
+    try:
+        await send_push(recipients=callee_ids, data={
+            "type": "incoming_call",
+            "call_id": call["id"],
+            "number_plate": label,
+            "video": "1" if video else "0",
+            "title": ("📹 Incoming video call" if video else "📞 Incoming call"),
+            "message": f"Someone is {'video-' if video else ''}calling about {label}",
+            "action_url": "/tags"}, idempotency_key="ring-" + call["id"], data_only=True)
+    except Exception:
+        pass
+    return {"call_id": call["id"], "video": bool(video)}
+
+
 @router.post("/public/call/{call_id}/offer")
 async def rtc_caller_offer(call_id: str, payload: RTCDescriptionIn):
     r = await db.webrtc_calls.update_one(
