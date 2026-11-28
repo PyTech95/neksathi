@@ -319,6 +319,19 @@ async def _theft_event_fanout(user: dict, device: dict, event: dict):
                 "action_url": "/family"}, idempotency_key="fam-" + event["id"], data_only=True)
         except Exception:
             pass
+    # Mirror into the alert feed (bell + Alerts page) for the owner + family, so a
+    # SIM-removed / power-off event also shows up in notifications. (pt 9)
+    try:
+        now2 = now_utc()
+        feed = [{"id": new_id(), "user_id": uid, "type": "theft", "number_plate": "",
+                 "scanner_note": f"{title}: {msg}",
+                 "scanner_lat": event.get("latitude"), "scanner_lng": event.get("longitude"),
+                 "actor_id": user["id"], "created_at": now2}
+                for uid in ([user["id"]] + fam_ids)]
+        if feed:
+            await db.alerts.insert_many(feed)
+    except Exception:
+        pass
     body = f"🚨 Nek Sathi — {title}: {msg} Open Nek Sathi for details."
     for p in set(phones):
         try:

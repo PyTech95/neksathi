@@ -175,6 +175,19 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
         }, idempotency_key="sos-" + doc["id"], data_only=True)
     except Exception as _e:
         log.warning("sos family push failed: %s", _e)
+    # Mirror the SOS into the alert feed (bell + Alerts page) for the sender + the
+    # chosen recipients, so a crash/volume/button SOS also shows in notifications. (pt 8/9)
+    try:
+        note = f"{who} raised an SOS." + (f" {payload.message}" if payload.message else "")
+        now2 = now_utc()
+        feed = [{"id": new_id(), "user_id": uid, "type": "sos", "number_plate": "",
+                 "scanner_note": note, "scanner_lat": payload.latitude, "scanner_lng": payload.longitude,
+                 "sos_id": doc["id"], "actor_id": user["id"], "created_at": now2}
+                for uid in ([user["id"]] + chosen)]
+        if feed:
+            await db.alerts.insert_many(feed)
+    except Exception as _e:
+        log.warning("sos feed insert failed: %s", _e)
     return SOSEventOut(**{k: v for k, v in clean(doc).items() if k != "photo_base64"})
 
 
