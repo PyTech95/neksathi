@@ -48,12 +48,6 @@ class ErrorBoundary extends React.Component {
             >
               Reload
             </button>
-            {/* DIAGNOSTIC (temporary): show the real error so a tester can screenshot it. */}
-            <pre data-testid="crash-detail" style={{ textAlign: "left", background: "#13131f", color: "#ff9db0", fontSize: 11, lineHeight: 1.4, padding: 12, borderRadius: 10, marginTop: 18, maxHeight: 300, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word", border: "1px solid rgba(255,255,255,.08)" }}>
-              {String((this.state.err && this.state.err.message) || this.state.err || "unknown error")}
-              {"\n\n"}
-              {String((this.state.err && this.state.err.stack) || "").slice(0, 1600)}
-            </pre>
           </div>
         </div>
       );

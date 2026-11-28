@@ -66,10 +66,10 @@ export default function Incidents() {
             <div className="glass card-pad" style={{ padding: 16, marginBottom: 16 }} data-testid="reason-breakdown">
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}><BellRing size={15} color="#b3122f" /> {t("inc.breakdown")}</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {Object.entries(items.reduce((a, it) => { a[it.type] = (a[it.type] || 0) + 1; return a; }, {})).sort((x, y) => y[1] - x[1]).map(([t, c]) => {
-                  const m = META[t] || META.wrong_parking;
+                {Object.entries(items.reduce((a, it) => { a[it.type] = (a[it.type] || 0) + 1; return a; }, {})).sort((x, y) => y[1] - x[1]).map(([type, c]) => {
+                  const m = META[type] || META.wrong_parking;
                   return (
-                    <span key={t} className="chip" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${m.color}1f`, borderColor: `${m.color}66`, color: "var(--text)" }} data-testid={`reason-stat-${t}`}>
+                    <span key={type} className="chip" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${m.color}1f`, borderColor: `${m.color}66`, color: "var(--text)" }} data-testid={`reason-stat-${type}`}>
                       <span style={{ color: m.color, display: "inline-flex" }}>{m.icon}</span> {metaLabel(t, m)} · <b style={{ color: m.color }}>{c}</b>
                     </span>
                   );
