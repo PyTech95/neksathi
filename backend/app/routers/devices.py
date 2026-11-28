@@ -12,7 +12,6 @@ from app.ratelimit import rate_limit
 from app.schemas import DeviceIn, DeviceOut, DevicePingIn, IntruderEventOut, IntruderIn, SimSwapIn, SirenIn
 from app.security import _prefs, current_user
 from app.services.fcm import send_push
-from app.services.gdrive import _gdrive_autobackup
 from app.services.notify import notify_whatsapp, send_sms
 from app.utils import clean, new_id, now_utc
 
@@ -387,8 +386,6 @@ async def report_intruder(request: Request, device_id: str, payload: IntruderIn,
     front = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
     public_link = f"{front}/intruder/{event['view_token']}"
     await _theft_fanout(user, device, event, public_link)
-    if payload.photo_base64:
-        asyncio.create_task(_gdrive_autobackup(user["id"], payload.photo_base64, f"intruder-{event['id']}.jpg", "image/jpeg"))
     out = {k: v for k, v in clean(event).items() if k in IntruderEventOut.model_fields}
     out["has_photo"] = bool(payload.photo_base64)
     return IntruderEventOut(**out)

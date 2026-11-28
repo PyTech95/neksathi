@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api, { PUBLIC_WEB } from "@/lib/api";
-import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Link2, ShieldCheck, ShieldX, Search, Building2, Navigation, FileScan, Upload, Smartphone, ChevronRight, Camera, Mic, Play, Radar } from "lucide-react";
+import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Building2, Navigation, Smartphone, ChevronRight, Camera, Mic, Play, Radar } from "lucide-react";
 import { loadLeaflet } from "@/lib/leaflet";
 import { getPosition, captureSosPhoto, startSosTracking, stopSosTracking } from "@/lib/native";
 import { Link } from "react-router-dom";
@@ -345,62 +345,6 @@ function LiveShare() {
   );
 }
 
-function LinkChecker() {
-  const { t } = useT();
-  const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [res, setRes] = useState(null);
-  const [err, setErr] = useState("");
-
-  const check = async (e) => {
-    e.preventDefault(); setErr(""); setRes(null); setBusy(true);
-    try {
-      const r = await api.post("/safety/link-check", { url });
-      setRes(r.data);
-    } catch (e) { setErr(e?.response?.data?.detail || t("sf.lc.err")); }
-    finally { setBusy(false); }
-  };
-
-  return (
-    <div className="glass" style={{ padding: 22, borderRadius: 18, marginTop: 18 }} data-testid="link-checker-panel">
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-        <Link2 size={20} className="neon" />
-        <div>
-          <h2 style={{ margin: 0, fontSize: 18 }}>{t("sf.lc.title")}</h2>
-          <p className="muted" style={{ margin: "2px 0 0", fontSize: 12.5 }}>{t("sf.lc.sub")}</p>
-        </div>
-      </div>
-      <form onSubmit={check} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder={t("sf.lc.ph")} data-testid="link-checker-input" style={{ flex: "1 1 260px", minWidth: 0 }} />
-        <button className="btn btn-primary" disabled={busy} type="submit" data-testid="link-checker-btn">
-          {busy ? <Loader2 className="spin" size={16} /> : <><Search size={16} /> {t("sf.lc.check")}</>}
-        </button>
-      </form>
-      {err && <div style={{ color: "#ff7591", fontSize: 13, marginTop: 12 }} data-testid="link-checker-error">{err}</div>}
-      {res && res.configured === false && (
-        <div className="muted" style={{ marginTop: 12, fontSize: 13 }} data-testid="link-checker-unconfigured">{t("sf.lc.unconfigured")}</div>
-      )}
-      {res?.verdict === "pending" && <div className="muted" style={{ marginTop: 12, fontSize: 13 }} data-testid="link-checker-pending">{t("sf.lc.pending")}</div>}
-      {(res?.verdict === "safe" || res?.verdict === "unsafe") && (
-        <div data-testid="link-checker-result" className="glass" style={{ marginTop: 14, padding: 16, borderRadius: 12, borderColor: res.verdict === "unsafe" ? "rgba(255,59,92,.5)" : "rgba(52,211,153,.5)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, color: res.verdict === "unsafe" ? "#ff7591" : "#34d399", fontWeight: 800, fontSize: 16 }}>
-            {res.verdict === "unsafe" ? <><ShieldX size={22} /> {t("sf.lc.unsafe")}</> : <><ShieldCheck size={22} /> {t("sf.lc.safe")}</>}
-          </div>
-          {res.stats && (
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, fontSize: 12.5 }} className="muted">
-              <span style={{ color: "#ff7591" }}>{t("sf.lc.malicious")} {res.stats.malicious ?? 0}</span>
-              <span style={{ color: "#f5a524" }}>{t("sf.lc.suspicious")} {res.stats.suspicious ?? 0}</span>
-              <span style={{ color: "#34d399" }}>{t("sf.lc.harmless")} {res.stats.harmless ?? 0}</span>
-              <span>{t("sf.lc.undetected")} {res.stats.undetected ?? 0}</span>
-            </div>
-          )}
-          <p className="muted" style={{ fontSize: 11.5, marginTop: 10, marginBottom: 0 }}>{t("sf.lc.powered")}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function NearbyPolice() {
   const { t } = useT();
   const [busy, setBusy] = useState(false);
@@ -474,85 +418,6 @@ function NearbyPolice() {
             </div>
           )}
         </>
-      )}
-    </div>
-  );
-}
-
-function FileChecker() {
-  const { t } = useT();
-  const [busy, setBusy] = useState(false);
-  const [res, setRes] = useState(null);
-  const [err, setErr] = useState("");
-  const [fname, setFname] = useState("");
-  const fileRef = useRef(null);
-  const pollRef = useRef(null);
-
-  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
-
-  const onPick = async (e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    setErr(""); setRes(null); setFname(f.name);
-    if (f.size > 30 * 1024 * 1024) { setErr(t("sf.fc.tooLarge")); return; }
-    setBusy(true);
-    try {
-      const fd = new FormData(); fd.append("file", f);
-      const r = await api.post("/safety/file-check", fd, { headers: { "Content-Type": "multipart/form-data" } });
-      setRes(r.data);
-      if (r.data.verdict === "pending" && r.data.sha256) startPoll(r.data.sha256);
-    } catch (e) { setErr(e?.response?.data?.detail || t("sf.fc.err")); }
-    finally { setBusy(false); if (fileRef.current) fileRef.current.value = ""; }
-  };
-
-  const startPoll = (sha) => {
-    let tries = 0;
-    pollRef.current = setInterval(async () => {
-      tries += 1;
-      try {
-        const r = await api.get(`/safety/file-status/${sha}`);
-        if (r.data.verdict === "safe" || r.data.verdict === "unsafe") {
-          setRes((p) => ({ ...p, verdict: r.data.verdict, stats: r.data.stats }));
-          clearInterval(pollRef.current);
-        }
-      } catch (_) {}
-      if (tries >= 12) clearInterval(pollRef.current);
-    }, 6000);
-  };
-
-  return (
-    <div className="glass" style={{ padding: 22, borderRadius: 18, marginTop: 18 }} data-testid="file-checker-panel">
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-        <FileScan size={20} className="neon" />
-        <div>
-          <h2 style={{ margin: 0, fontSize: 18 }}>{t("sf.fc.title")}</h2>
-          <p className="muted" style={{ margin: "2px 0 0", fontSize: 12.5 }}>{t("sf.fc.sub")}</p>
-        </div>
-      </div>
-      <label className="btn btn-primary" style={{ cursor: "pointer" }} data-testid="file-checker-label">
-        {busy ? <Loader2 className="spin" size={16} /> : <><Upload size={16} /> {t("sf.fc.choose")}</>}
-        <input ref={fileRef} type="file" onChange={onPick} disabled={busy} style={{ display: "none" }} data-testid="file-checker-input" />
-      </label>
-      {fname && <span className="muted" style={{ marginLeft: 12, fontSize: 13 }}>{fname}</span>}
-      {err && <div style={{ color: "#ff7591", fontSize: 13, marginTop: 12 }} data-testid="file-checker-error">{err}</div>}
-      {res && res.configured === false && (
-        <div className="muted" style={{ marginTop: 12, fontSize: 13 }} data-testid="file-checker-unconfigured">{t("sf.lc.unconfigured")}</div>
-      )}
-      {res?.verdict === "pending" && <div className="muted" style={{ marginTop: 12, fontSize: 13 }} data-testid="file-checker-pending"><Loader2 className="spin" size={14} style={{ verticalAlign: "middle" }} /> {t("sf.fc.analysing")}</div>}
-      {(res?.verdict === "safe" || res?.verdict === "unsafe") && (
-        <div data-testid="file-checker-result" className="glass" style={{ marginTop: 14, padding: 16, borderRadius: 12, borderColor: res.verdict === "unsafe" ? "rgba(255,59,92,.5)" : "rgba(52,211,153,.5)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, color: res.verdict === "unsafe" ? "#ff7591" : "#34d399", fontWeight: 800, fontSize: 16 }}>
-            {res.verdict === "unsafe" ? <><ShieldX size={22} /> {t("sf.fc.unsafe")}</> : <><ShieldCheck size={22} /> {t("sf.lc.safe")}</>}
-          </div>
-          {res.stats && (
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, fontSize: 12.5 }} className="muted">
-              <span style={{ color: "#ff7591" }}>{t("sf.lc.malicious")} {res.stats.malicious ?? 0}</span>
-              <span style={{ color: "#f5a524" }}>{t("sf.lc.suspicious")} {res.stats.suspicious ?? 0}</span>
-              <span style={{ color: "#34d399" }}>{t("sf.lc.harmless")} {res.stats.harmless ?? 0}</span>
-              <span>{t("sf.lc.undetected")} {res.stats.undetected ?? 0}</span>
-            </div>
-          )}
-          <p className="muted" style={{ fontSize: 11.5, marginTop: 10, marginBottom: 0 }}>{t("sf.lc.powered")}</p>
-        </div>
       )}
     </div>
   );
@@ -823,14 +688,8 @@ export default function Safety() {
       {/* Live location sharing */}
       <LiveShare />
 
-      {/* Safe link checker */}
-      <LinkChecker />
-
       {/* Nearby police */}
       <NearbyPolice />
-
-      {/* Unsafe file checker */}
-      <FileChecker />
 
       {/* Surround audio recording */}
       <AudioRecorder />

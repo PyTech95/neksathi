@@ -16,7 +16,6 @@ from app.ratelimit import rate_limit
 from app.schemas import AudioEvidenceIn, AudioEvidenceOut, EmergencyContactIn, EmergencyContactOut, LinkCheckIn, LiveShareOut, LiveShareStartIn, SOSEventOut, SOSTriggerIn, UserLocationIn
 from app.security import _prefs, current_user, require_admin
 from app.services.fcm import send_push
-from app.services.gdrive import _gdrive_autobackup
 from app.services.geo import _evaluate_geofences, _haversine_km
 from app.services.notify import notify_whatsapp, send_sms
 from app.utils import _aware, clean, new_id, now_utc
@@ -176,8 +175,6 @@ async def trigger_sos(request: Request, payload: SOSTriggerIn, user: dict = Depe
         }, idempotency_key="sos-" + doc["id"], data_only=True)
     except Exception as _e:
         log.warning("sos family push failed: %s", _e)
-    if payload.photo_base64:
-        asyncio.create_task(_gdrive_autobackup(user["id"], payload.photo_base64, f"sos-{doc['id']}.jpg", "image/jpeg"))
     return SOSEventOut(**{k: v for k, v in clean(doc).items() if k != "photo_base64"})
 
 
@@ -286,7 +283,6 @@ async def attach_sos_photo(request: Request, event_id: str, payload: SosPhotoIn,
     if not await _attach_sos_photo(user["id"], event_id, payload.photo_base64):
         raise HTTPException(status_code=404, detail="SOS event not found")
     # Family sees it the moment their active-SOS poll next flips has_photo=True.
-    asyncio.create_task(_gdrive_autobackup(user["id"], payload.photo_base64, f"sos-{event_id}.jpg", "image/jpeg"))
     return {"ok": True, "has_photo": True}
 
 
@@ -361,7 +357,6 @@ async def add_audio_evidence(request: Request, payload: AudioEvidenceIn, user: d
            "duration_ms": payload.duration_ms, "mime": payload.mime or "audio/webm",
            "sos_event_id": payload.sos_event_id, "created_at": now_utc()}
     await db.audio_evidence.insert_one(dict(doc))
-    asyncio.create_task(_gdrive_autobackup(user["id"], payload.audio_base64, f"sos-audio-{doc['id']}.webm", "audio/webm"))
     return AudioEvidenceOut(**{k: v for k, v in clean(doc).items() if k != "audio_base64"})
 
 

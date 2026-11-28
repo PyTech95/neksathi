@@ -10,7 +10,7 @@ import Modal from "@/components/Modal";
 import { openCallSetup, isNativeApp } from "@/lib/callsetup";
 import { getThemePref, setThemePref } from "@/lib/theme";
 import { useT, LANGS } from "@/lib/i18n";
-import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, HardDrive, Link2, Unlink, Phone, Play, Square, Upload, ChevronDown, Check, LogOut, Receipt, ChevronRight, Gift, Sun, Moon, Monitor, Wallet as WalletIcon, Languages } from "lucide-react";
+import { UserCog, Save, Loader2, CheckCircle2, MessageSquare, Mail, Bell, ShieldAlert, Gauge, Megaphone, KeyRound, Camera, Trash2, Phone, Play, Square, Upload, ChevronDown, Check, LogOut, Receipt, ChevronRight, Gift, Sun, Moon, Monitor, Wallet as WalletIcon, Languages } from "lucide-react";
 
 const DEFAULT_PREFS = { whatsapp: true, email: true, push: true, incident_alerts: true, speed_alerts: true, marketing: false, ringtone: "classic" };
 
@@ -30,60 +30,6 @@ function Toggle({ on, onClick, testid }) {
         background: on ? "linear-gradient(100deg,#b3122f,#e92546)" : "rgba(255,255,255,.14)", position: "relative", transition: "background .2s" }}>
       <span style={{ position: "absolute", top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left .2s" }} />
     </button>
-  );
-}
-
-function GoogleDriveCard() {
-  const [status, setStatus] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  const load = async () => { try { setStatus((await api.get("/google-drive/status")).data); } catch (_) {} };
-  useEffect(() => {
-    load();
-    const p = new URLSearchParams(window.location.search).get("drive");
-    if (p === "connected") setMsg("Google Drive connected — evidence will back up automatically.");
-    else if (p === "denied") setMsg("Connection cancelled.");
-    else if (p === "norefresh") setMsg("Google didn't return a refresh token. Please remove Nek Sathi's access in your Google account and reconnect.");
-    else if (p === "error") setMsg("Something went wrong connecting Drive. Please try again.");
-    if (p) window.history.replaceState({}, "", "/settings");
-  }, []);
-
-  const connect = async () => {
-    setBusy(true); setMsg("");
-    try {
-      const r = await api.get("/google-drive/connect-ticket");
-      window.location.assign(`${API}/google-drive/connect?ticket=${encodeURIComponent(r.data.ticket)}`);
-    } catch (e) { setMsg(e?.response?.data?.detail || "Could not start Google connection."); setBusy(false); }
-  };
-  const disconnect = async () => {
-    if (!window.confirm("Disconnect Google Drive? Future evidence won't be backed up.")) return;
-    setBusy(true);
-    try { await api.delete("/google-drive/disconnect"); await load(); setMsg("Google Drive disconnected."); }
-    finally { setBusy(false); }
-  };
-
-  if (!status) return null;
-  const connected = status.connected;
-
-  return (
-    <div className="glass card-pad" style={{ padding: 26, marginBottom: 18 }} data-testid="gdrive-card">
-      <h2 style={{ fontSize: 20, marginBottom: 6 }}><HardDrive size={18} style={{ verticalAlign: "-3px" }} /> Google Drive backup</h2>
-      <p className="muted" style={{ fontSize: 13.5, marginTop: 0 }}>Connect your own Google Drive so SOS photos and audio evidence are safely backed up to a private "Nek Sathi" folder.</p>
-
-      {!status.configured ? (
-        <div className="glass" style={{ padding: "12px 14px", borderRadius: 10, fontSize: 13 }} data-testid="gdrive-unconfigured">Google Drive isn't set up on this server yet.</div>
-      ) : connected ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#34d399", fontWeight: 700 }} data-testid="gdrive-connected"><CheckCircle2 size={18} /> Connected</span>
-          <button className="btn btn-ghost btn-sm" onClick={disconnect} disabled={busy} data-testid="gdrive-disconnect-btn"><Unlink size={15} /> Disconnect</button>
-        </div>
-      ) : (
-        <button className="btn btn-primary" onClick={connect} disabled={busy} data-testid="gdrive-connect-btn">{busy ? <Loader2 size={16} className="spin" /> : <><Link2 size={16} /> Connect Google Drive</>}</button>
-      )}
-      {status.status === "reauth_required" && <p style={{ color: "#f5a524", fontSize: 13, marginTop: 10 }} data-testid="gdrive-reauth">Access expired — please reconnect.</p>}
-      {msg && <p style={{ color: "#e92546", fontSize: 13, marginTop: 10 }} data-testid="gdrive-msg">{msg}</p>}
-    </div>
   );
 }
 
@@ -505,40 +451,40 @@ export default function Settings() {
 
           {notice && <p style={{ color: "#e92546", fontWeight: 600, marginTop: 14 }} data-testid="settings-notice"><CheckCircle2 size={15} style={{ verticalAlign: "-2px" }} /> {notice}</p>}
           {err && <p style={{ color: "var(--danger)", fontSize: 13, marginTop: 14 }} data-testid="settings-error">{err}</p>}
-          <button className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16 }} data-testid="save-settings">{busy ? <Loader2 size={16} className="spin" /> : <Save size={16} />} {busy ? t("common.saving") : t("common.save")}</button>
+          <button className="btn btn-primary btn-block" disabled={busy} style={{ marginTop: 16, borderRadius: 14 }} data-testid="save-settings">{busy ? <Loader2 size={16} className="spin" /> : <Save size={16} />} {busy ? t("common.saving") : t("common.save")}</button>
         </form>
 
         {/* Wallet / transactions / refer — placed below "Your details" so the user reaches them after their profile. */}
         <button type="button" className="glass glass-hover" onClick={() => navigate("/wallet")} data-testid="go-wallet"
-          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
+          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "11px 14px", borderRadius: 14, marginBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(245,165,36,.16)", border: "1px solid rgba(245,165,36,.4)", color: "#f5a524" }}><WalletIcon size={18} /></span>
-          <span style={{ flex: 1 }}><b>{t("sett.wallet")}</b><div className="muted" style={{ fontSize: 13 }}>{t("sett.wallet.d")}</div></span>
+          <span style={{ flex: 1 }}><b>{t("sett.wallet")}</b></span>
           <ChevronRight size={18} className="muted" />
         </button>
 
         <button type="button" className="glass glass-hover" onClick={() => navigate("/transactions")} data-testid="go-transactions"
-          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
+          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "11px 14px", borderRadius: 14, marginBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(233,37,70,.14)", border: "1px solid rgba(233,37,70,.4)", color: "#ff5a74" }}><Receipt size={18} /></span>
-          <span style={{ flex: 1 }}><b>{t("sett.transactions")}</b><div className="muted" style={{ fontSize: 13 }}>{t("sett.transactions.d")}</div></span>
+          <span style={{ flex: 1 }}><b>{t("sett.transactions")}</b></span>
           <ChevronRight size={18} className="muted" />
         </button>
 
         <button type="button" className="glass glass-hover" onClick={() => navigate("/referral")} data-testid="go-referral"
-          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "14px 16px", borderRadius: 14, marginBottom: 18, display: "flex", alignItems: "center", gap: 12 }}>
+          style={{ width: "100%", textAlign: "left", cursor: "pointer", color: "inherit", border: "1px solid var(--panel-brd)", padding: "11px 14px", borderRadius: 14, marginBottom: 18, display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(233,37,70,.14)", border: "1px solid rgba(233,37,70,.4)", color: "#ff5a74" }}><Gift size={18} /></span>
-          <span style={{ flex: 1 }}><b>{t("sett.refer")}</b><div className="muted" style={{ fontSize: 13 }}>{t("sett.refer.d")}</div></span>
+          <span style={{ flex: 1 }}><b>{t("sett.refer")}</b></span>
           <ChevronRight size={18} className="muted" />
         </button>
 
-        <div className="glass card-pad" style={{ padding: 26, marginBottom: 18 }} data-testid="appearance-card">
+        <div className="glass card-pad" style={{ padding: 18, marginBottom: 18 }} data-testid="appearance-card">
           <h2 style={{ fontSize: 20, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}><Sun size={18} /> {t("sett.appearance")}</h2>
           <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>{t("sett.appearanceSub")}</p>
           <div style={{ display: "grid", gap: 10 }}>
             {[
-              { id: "light", lkey: "sett.themeLight", dkey: "sett.themeLight.d", Icon: Sun },
-              { id: "dark", lkey: "sett.themeDark", dkey: "sett.themeDark.d", Icon: Moon },
-              { id: "system", lkey: "sett.themeSystem", dkey: "sett.themeSystem.d", Icon: Monitor },
-            ].map(({ id, lkey, dkey, Icon }) => {
+              { id: "light", lkey: "sett.themeLight", Icon: Sun },
+              { id: "dark", lkey: "sett.themeDark", Icon: Moon },
+              { id: "system", lkey: "sett.themeSystem", Icon: Monitor },
+            ].map(({ id, lkey, Icon }) => {
               const on = theme === id;
               return (
                 <button
@@ -550,7 +496,7 @@ export default function Settings() {
                   className="glass"
                   style={{
                     display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left",
-                    padding: "13px 16px", cursor: "pointer", borderRadius: 14,
+                    padding: "10px 14px", cursor: "pointer", borderRadius: 14,
                     border: on ? "2px solid var(--accent)" : "1px solid var(--panel-brd)",
                     background: on ? "rgba(233,37,70,.12)" : "var(--panel)",
                     color: "var(--text)",
@@ -566,7 +512,6 @@ export default function Settings() {
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontWeight: 700, fontSize: 15, display: "block" }}>{t(lkey)}</span>
-                    <span className="muted" style={{ fontSize: 12.5 }}>{t(dkey)}</span>
                   </span>
                   {on
                     ? <Check size={20} style={{ color: "var(--accent)", flexShrink: 0 }} />
@@ -578,7 +523,7 @@ export default function Settings() {
           <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>{t("sett.themeNote")}</p>
         </div>
 
-        <div className="glass card-pad" style={{ padding: 26, marginBottom: 18 }} data-testid="language-card">
+        <div className="glass card-pad" style={{ padding: 18, marginBottom: 18 }} data-testid="language-card">
           <h2 style={{ fontSize: 20, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}><Languages size={18} /> {t("set.language")}</h2>
           <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>{t("set.language.sub")}</p>
           <div style={{ display: "grid", gap: 10 }}>
@@ -586,7 +531,7 @@ export default function Settings() {
               const on = lang === id;
               return (
                 <button key={id} type="button" onClick={() => setLang(id)} data-testid={`lang-${id}`} aria-pressed={on} className="glass"
-                  style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left", padding: "13px 16px", cursor: "pointer", borderRadius: 14,
+                  style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left", padding: "10px 14px", cursor: "pointer", borderRadius: 14,
                     border: on ? "2px solid var(--accent)" : "1px solid var(--panel-brd)", background: on ? "rgba(233,37,70,.12)" : "var(--panel)", color: "var(--text)" }}>
                   <span style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center",
                     background: on ? "rgba(233,37,70,.16)" : "rgba(127,127,140,.12)", color: on ? "var(--accent)" : "var(--muted)",
@@ -595,8 +540,7 @@ export default function Settings() {
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontWeight: 700, fontSize: 15, display: "block" }}>{label}</span>
-                    <span className="muted" style={{ fontSize: 12.5 }}>{id === "hi" ? "ऐप हिंदी में दिखेगा" : "Show the app in English"}</span>
-                  </span>
+                    </span>
                   {on
                     ? <Check size={20} style={{ color: "var(--accent)", flexShrink: 0 }} />
                     : <span style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid var(--panel-brd)", flexShrink: 0 }} />}
@@ -607,8 +551,6 @@ export default function Settings() {
         </div>
 
         <RingtoneCard />
-
-        <GoogleDriveCard />
 
         <form onSubmit={changePassword} className="glass card-pad" style={{ padding: 26 }}>
           <h2 style={{ fontSize: 20, marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}><KeyRound size={18} /> {t("sett.changePwd")}</h2>

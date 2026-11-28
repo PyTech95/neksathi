@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useT } from "@/lib/i18n";
-import { QrCode, CreditCard, Lock, MapPin, Bell, Clock, FileWarning, Users, LifeBuoy, Settings as SettingsIcon, ShieldAlert, Car, Package, Receipt, Gift } from "lucide-react";
+import { QrCode, CreditCard, Lock, MapPin, Bell, Users, LifeBuoy, Settings as SettingsIcon, ShieldAlert, Car, Package, Receipt, Gift } from "lucide-react";
 
 // `title` stays English (used for the data-testid); tkey/dkey drive the display.
 const LINKS = [
@@ -11,8 +11,6 @@ const LINKS = [
   { to: "/theft-protection", icon: Lock, title: "Anti-Theft", tkey: "more.antitheft", dkey: "more.antitheft.sub" },
   { to: "/safe-zones", icon: MapPin, title: "Safe Zones", tkey: "more.zones", dkey: "more.zones.sub" },
   { to: "/alerts", icon: Bell, title: "Alerts", tkey: "more.alerts", dkey: "more.alerts.sub" },
-  { to: "/circles", icon: Clock, title: "Temporary circles", tkey: "more.circles", dkey: "more.circles.sub" },
-  { to: "/incidents", icon: FileWarning, title: "Incidents", tkey: "more.incidents", dkey: "more.incidents.sub" },
   { to: "/community", icon: Users, title: "Community", tkey: "more.community", dkey: "more.community.sub" },
   { to: "/subscription", icon: QrCode, title: "Plans", tkey: "more.plans", dkey: "more.plans.sub" },
   { to: "/orders", icon: Package, title: "My orders", tkey: "more.orders", dkey: "more.orders.sub" },
