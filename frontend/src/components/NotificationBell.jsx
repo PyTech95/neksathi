@@ -18,6 +18,7 @@ const META = {
   speed_alert: { icon: <Gauge size={16} />, color: "#f5a524", label: "Overspeed" },
   sos: { icon: <Siren size={16} />, color: "#ff3b5c", label: "SOS" },
   sos_video: { icon: <Video size={16} />, color: "#ff3b5c", label: "SOS video" },
+  geofence: { icon: <MapPin size={16} />, color: "#2fcf7a", label: "Safe zone" },
 };
 
 const fmt = (d) => {

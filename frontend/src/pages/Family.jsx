@@ -354,7 +354,7 @@ export default function Family() {
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
         <Users size={26} className="neon" /><h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>{t("fam.title")}</h1>
       </div>
-      <p className="muted" style={{ marginTop: 0 }}>{t("fam.sub", { n: data.max_members || 5 })}</p>
+      <p className="muted" style={{ marginTop: 0 }}>{t("fam.sub")}</p>
 
       {!data.in_family ? (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="family-start">
@@ -375,7 +375,7 @@ export default function Family() {
       ) : (
         <>
           <div className="glass" style={{ padding: "14px 18px", borderRadius: 14, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <div><div style={{ fontWeight: 800, fontSize: 18 }}>{data.name}</div><div className="muted" style={{ fontSize: 12.5 }}>{t("fam.membersCount", { n: data.members.length, max: data.max_members })}{data.is_guardian ? t("fam.youGuardian") : ""}</div></div>
+            <div><div style={{ fontWeight: 800, fontSize: 18 }}>{data.name}</div><div className="muted" style={{ fontSize: 12.5 }}>{t("fam.membersCount", { n: data.members.length })}{data.is_guardian ? t("fam.youGuardian") : ""}</div></div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               {data.is_guardian && data.invite_code && (
                 <button className="btn btn-ghost btn-sm" onClick={copyCode} data-testid="family-invite-copy">{copied ? <><CheckCircle2 size={14} /> {t("common.copied")}</> : <><Copy size={14} /> {t("fam.inviteCode", { code: data.invite_code })}</>}</button>

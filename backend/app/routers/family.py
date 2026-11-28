@@ -17,7 +17,7 @@ from app.utils import _aware, clean, new_id, now_utc
 router = APIRouter()
 
 
-FAMILY_MAX = 5
+FAMILY_MAX = 1000  # effectively unlimited; a sane upper bound to prevent abuse
 
 
 async def _my_family(user_id: str) -> Optional[dict]:
@@ -47,7 +47,7 @@ async def join_family(payload: FamilyJoinIn, user: dict = Depends(current_user))
     fam = await db.families.find_one({"invite_code": payload.invite_code.strip().upper()})
     if not fam:
         raise HTTPException(status_code=404, detail="Invalid invite code.")
-    if await db.family_members.count_documents({"family_id": fam["id"]}) >= fam.get("max_members", FAMILY_MAX):
+    if await db.family_members.count_documents({"family_id": fam["id"]}) >= FAMILY_MAX:
         raise HTTPException(status_code=400, detail="This family circle is full.")
     await db.family_members.insert_one({"id": new_id(), "family_id": fam["id"], "user_id": user["id"],
                                         "role": "member", "name": user.get("name", "Member"),
@@ -64,7 +64,7 @@ async def family_add_by_phone(payload: FamilyAddByPhoneIn, user: dict = Depends(
     fam = await _my_family(user["id"])
     if not fam or fam["guardian_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Only the guardian can add family members.")
-    if await db.family_members.count_documents({"family_id": fam["id"]}) >= fam.get("max_members", FAMILY_MAX):
+    if await db.family_members.count_documents({"family_id": fam["id"]}) >= FAMILY_MAX:
         raise HTTPException(status_code=400, detail="This family circle is full.")
     raw = payload.phone.strip()
     digits = "".join(ch for ch in raw if ch.isdigit())

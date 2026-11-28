@@ -25,6 +25,7 @@ const META = {
   missed_call: { icon: <PhoneMissed size={17} />, color: "#ff4d67", label: "Missed call", lkey: "rtype.missed_call" },
   card_message: { icon: <MessageSquare size={17} />, color: "#ff8fa3", label: "Card message", lkey: "rtype.card_message" },
   found: { icon: <MapPin size={17} />, color: "#34d399", label: "Tag found", lkey: "rtype.found" },
+  geofence: { icon: <MapPin size={17} />, color: "#2fcf7a", label: "Safe zone", lkey: "rtype.geofence" },
 };
 // Pretty fallback so an unknown raw type never shows as "some_type".
 const pretty = (t) => (t || "alert").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
