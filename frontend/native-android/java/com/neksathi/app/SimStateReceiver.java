@@ -58,8 +58,13 @@ public class SimStateReceiver extends BroadcastReceiver {
         sp.edit().putBoolean("present", present).apply();
         // Fire only on a genuine present -> absent transition, and only if armed.
         if (wasPresent && !present && TheftEventSender.enabled(ctx)) {
-            Log.i(TAG, "SIM removed -> theft event");
+            Log.i(TAG, "SIM removed -> theft event + front-camera capture");
             TheftEventSender.send(ctx, "sim_removed");
+            // Also grab a front-camera photo + location and alert the family
+            // (best-effort — reuses the proven intruder-capture engine; a locked
+            // screen / Android 12+ background limits may skip the photo, in which
+            // case the SIM-removed siren + family alert still go out on their own).
+            try { IntruderCaptureService.start(ctx, 0); } catch (Exception e) { Log.w(TAG, "sim capture start failed: " + e); }
         }
     }
 }

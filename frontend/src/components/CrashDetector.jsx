@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, ShieldCheck, Siren, Loader2, CheckCircle2 } from "lucide-react";
 import api from "@/lib/api";
-import { getPosition } from "@/lib/native";
+import { getPosition, captureSosPhoto } from "@/lib/native";
 import { startCrashWatch, ensureMotionPermission } from "@/lib/crash";
 
 const KEY = "nk_crash_on";
@@ -64,7 +64,17 @@ export default function CrashDetector() {
     setPhase("sending");
     let coords = {};
     try { const p = await getPosition({ timeout: 6000 }); coords = { latitude: p.latitude, longitude: p.longitude }; } catch (_) {}
-    try { await api.post("/me/sos", coords); } catch (_) {}
+    try {
+      const r = await api.post("/me/sos", coords);
+      const ev = r.data;
+      // Attach a front-camera photo to the crash SOS (best-effort). Native
+      // captures + uploads it; on web we grab a selfie. Never blocks the alert.
+      if (ev?.id) {
+        captureSosPhoto(ev.id, "user").then((webPhoto) => {
+          if (webPhoto) api.post(`/me/sos-events/${ev.id}/photo`, { photo_base64: webPhoto }).catch(() => {});
+        }).catch(() => {});
+      }
+    } catch (_) {}
     setPhase("sent");
     setTimeout(() => setPhase("idle"), 6000);
   };

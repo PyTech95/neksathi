@@ -136,10 +136,13 @@ async def recover_device(device_id: str, user: dict = Depends(current_user)):
 
 async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str):
     who = user.get("name") or "A Nek Sathi user"
+    _att = event.get("attempt_count", 0) or 0
+    lead = f"{_att} failed unlock attempts" if _att > 0 else "Possible tampering detected"
+    lead_s = f"{_att} failed unlocks" if _att > 0 else "Possible tampering"
     loc = ""
     if event.get("latitude") is not None:
         loc = f" Location: https://maps.google.com/?q={event['latitude']},{event['longitude']}."
-    body = (f"🚨 Nek Sathi THEFT ALERT: {event['attempt_count']} failed unlock attempts on {who}'s "
+    body = (f"🚨 Nek Sathi THEFT ALERT: {lead} on {who}'s "
             f"phone '{device.get('name','device')}'."
             f"{' The phone is now LOCKED.' if event.get('triggered_lock') else ''}"
             f"{loc} View intruder photo: {public_link}")
@@ -166,7 +169,7 @@ async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str)
         try:
             await send_push(recipients=admin_ids, data={
                 "type": "intruder", "title": "🚨 Intruder alert (admin)",
-                "message": f"{event['attempt_count']} failed unlocks on {who}'s phone '{device.get('name','device')}'."
+                "message": f"{lead_s} on {who}'s phone '{device.get('name','device')}'."
                            + (" Location attached." if event.get("latitude") is not None else ""),
                 "action_url": "/admin/intruder"}, idempotency_key="adm-" + event["id"])
         except Exception:
@@ -183,7 +186,7 @@ async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str)
     try:
         if _prefs(user).get("push"):
             await send_push(recipients=[user["id"]], data={
-                "title": "🚨 Intruder detected", "message": f"{event['attempt_count']} failed unlocks on {device.get('name','your device')}.",
+                "title": "🚨 Intruder detected", "message": f"{lead_s} on {device.get('name','your device')}.",
                 "action_url": "/theft-protection"}, idempotency_key=event["id"])
     except Exception:
         pass
@@ -203,7 +206,7 @@ async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str)
                 async for mu in db.users.find({"id": {"$in": fam_user_ids}}):
                     if mu.get("phone"):
                         fam_phones.append(mu["phone"])
-            fam_body = (f"🚨 Nek Sathi FAMILY ALERT: {event['attempt_count']} failed unlock attempts on "
+            fam_body = (f"🚨 Nek Sathi FAMILY ALERT: {lead} on "
                         f"{who}'s phone '{device.get('name','device')}'."
                         f"{' The phone is now LOCKED.' if event.get('triggered_lock') else ''}"
                         f"{loc} Open Nek Sathi → Family to see the intruder photo & location.")
@@ -224,7 +227,7 @@ async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str)
                     await send_push(recipients=fam_user_ids, data={
                         "type": "theft_siren",
                         "title": "🚨 Family alert — intruder detected",
-                        "message": f"{event['attempt_count']} failed unlocks on {who}'s phone. Tap to see the photo & location.",
+                        "message": f"{lead_s} on {who}'s phone. Tap to see the photo & location.",
                         "sender_name": who, "location": loc_str,
                         "action_url": "/family"}, idempotency_key="fam-" + event["id"], data_only=True)
                 except Exception:
@@ -238,7 +241,7 @@ async def _theft_fanout(user: dict, device: dict, event: dict, public_link: str)
         if not img.startswith("data:"):
             img = "data:image/jpeg;base64," + img
         html = (f"<div style='font-family:sans-serif'><h2>🚨 Theft alert</h2>"
-                f"<p>{event['attempt_count']} failed unlock attempts on <b>{who}'s</b> phone "
+                f"<p>{lead} on <b>{who}'s</b> phone "
                 f"'<b>{device.get('name','device')}</b>'.{' The phone has been locked.' if event.get('triggered_lock') else ''}</p>"
                 f"<p><img src='{img}' style='max-width:320px;border-radius:8px'/></p>"
                 f"<p><a href='{public_link}'>Open the intruder capture</a></p></div>")

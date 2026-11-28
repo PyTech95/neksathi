@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import api, { PUBLIC_WEB } from "@/lib/api";
 import { ShieldAlert, Plus, Trash2, Pencil, X, Phone, Siren, Volume2, VolumeX, Users, MapPin, Star, Loader2, CheckCircle2, Ambulance, Flame, Shield, Baby, VenetianMask, Landmark, Train, ShieldQuestion, RadioTower, Copy, Share2, Square, Building2, Navigation, Smartphone, ChevronRight, Camera, Mic, Play, Radar } from "lucide-react";
 import { loadLeaflet } from "@/lib/leaflet";
-import { getPosition, captureSosPhoto, startSosTracking, stopSosTracking } from "@/lib/native";
+import { getPosition, captureSelfie, captureSosPhoto, startSosTracking, stopSosTracking } from "@/lib/native";
 import { Link } from "react-router-dom";
 import SosActions from "@/components/SosActions";
 import { API } from "@/lib/api";
@@ -127,67 +127,83 @@ function useSiren() {
 
 function Sos({ recipientCount, inFamily, onSent }) {
   const { t } = useT();
-  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState("idle");   // idle | capturing | sending | done
+  const [prog, setProg] = useState(0);          // ring fill 0..1
+  const [gotLoc, setGotLoc] = useState(false);
+  const [gotPhoto, setGotPhoto] = useState(false);
   const [result, setResult] = useState(null);
-  const [arming, setArming] = useState(false);
-  const [count, setCount] = useState(3);
-  const timer = useRef(null);
-  const firedRef = useRef(false);
+  const [acked, setAcked] = useState(false);
+  const cancelRef = useRef(false);
+  const rafRef = useRef(null);
   // Which camera the auto SOS photo uses — the person's choice, remembered.
   const [cam, setCam] = useState(() => { try { return localStorage.getItem("nk_sos_cam") || "user"; } catch { return "user"; } });
   const setCamPref = (v) => { setCam(v); try { localStorage.setItem("nk_sos_cam", v); } catch { /* ignore */ } };
 
-  const fire = async () => {
-    setBusy(true); setResult(null);
-    let coords = {};
-    try {
-      const pos = await getPosition({ timeout: 6000, enableHighAccuracy: true });
-      coords = { latitude: pos.latitude, longitude: pos.longitude };
-    } catch (_) { /* location optional */ }
-    try {
-      // Send the alert first — it must never wait on the camera.
-      const r = await api.post("/me/sos", { ...coords });
-      const ev = r.data;
-      setResult({ ...ev });
-      onSent && onSent();
-      // Keep sharing live location with responders while the SOS is active.
-      startSosTracking((p) => api.post("/me/location", p));
-      // Auto silent front photo, fire-and-forget. Native captures + uploads it
-      // itself and only when the phone is unlocked; web grabs a selfie and we
-      // attach it here. Either way it never delays or blocks the SOS.
-      captureSosPhoto(ev.id, cam).then((webPhoto) => {
-        if (webPhoto) {
-          api.post(`/me/sos-events/${ev.id}/photo`, { photo_base64: webPhoto })
-            .then(() => setResult((x) => (x && x.id === ev.id ? { ...x, _photo: webPhoto } : x)))
-            .catch(() => {});
-        }
-      }).catch(() => {});
-    } catch (e) {
-      setResult({ error: e?.response?.data?.detail || t("sf.sosErr") });
-    } finally { setBusy(false); }
-  };
+  // Ring cap: capture location + photo, and SEND with whatever we have by this
+  // point. The SOS alert is never blocked waiting on a slow/absent camera.
+  const CAP_MS = 5000;
+  const stopRing = () => { if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; } };
 
-  const beginArm = () => {
-    if (arming) return;
+  const start = async () => {
+    if (phase !== "idle") return;
     if (!inFamily) { setResult({ error: t("sf.needFamily") }); return; }
     if (recipientCount === 0) { setResult({ error: t("sf.needRecipients") }); return; }
-    firedRef.current = false;
-    setArming(true); setCount(3);
-    let c = 3;
-    timer.current = setInterval(() => {
-      c -= 1;
-      setCount(c);
-      if (c <= 0) {
-        clearInterval(timer.current);
-        setArming(false);
-        if (!firedRef.current) { firedRef.current = true; fire(); }
+    cancelRef.current = false;
+    setResult(null); setAcked(false); setGotLoc(false); setGotPhoto(false);
+    setPhase("capturing"); setProg(0);
+    try { navigator.vibrate && navigator.vibrate(40); } catch (_) {}
+
+    // Clockwise ring fills over the cap window.
+    const t0 = performance.now();
+    const tick = (now) => {
+      setProg(Math.min((now - t0) / CAP_MS, 1));
+      if (!cancelRef.current && (now - t0) < CAP_MS) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+
+    // Capture location + (web) photo in parallel.
+    let coords = {};
+    let webPhoto = null;
+    const locP = getPosition({ timeout: CAP_MS, enableHighAccuracy: true })
+      .then((p) => { coords = { latitude: p.latitude, longitude: p.longitude }; setGotLoc(true); })
+      .catch(() => {});
+    const photoP = isNativeApp()
+      ? Promise.resolve()                       // native captures + uploads after the event exists
+      : captureSelfie(cam).then((d) => { if (d) { webPhoto = d; setGotPhoto(true); } }).catch(() => {});
+
+    // Send as soon as both are ready, or at the cap — whichever comes first.
+    await Promise.race([Promise.all([locP, photoP]), new Promise((r) => setTimeout(r, CAP_MS))]);
+    if (cancelRef.current) { stopRing(); setPhase("idle"); setProg(0); return; }
+
+    stopRing(); setProg(1); setPhase("sending");
+    try {
+      const r = await api.post("/me/sos", { ...coords });
+      const ev = r.data;
+      setResult({ ...ev }); onSent && onSent();
+      startSosTracking((p) => api.post("/me/location", p));
+      if (webPhoto) {
+        api.post(`/me/sos-events/${ev.id}/photo`, { photo_base64: webPhoto })
+          .then(() => setResult((x) => (x && x.id === ev.id ? { ...x, _photo: webPhoto } : x))).catch(() => {});
+      } else {
+        // native: capture + upload the front photo (best-effort, only when unlocked)
+        captureSosPhoto(ev.id, cam).then((wp) => {
+          if (wp) api.post(`/me/sos-events/${ev.id}/photo`, { photo_base64: wp })
+            .then(() => setResult((x) => (x && x.id === ev.id ? { ...x, _photo: wp } : x))).catch(() => {});
+        }).catch(() => {});
       }
-    }, 1000);
+      setPhase("done");
+    } catch (e) {
+      setResult({ error: e?.response?.data?.detail || t("sf.sosErr") });
+      setPhase("idle");
+    } finally { setProg(0); }
   };
-  const cancel = () => { clearInterval(timer.current); firedRef.current = false; setArming(false); setCount(3); };
-  const [acked, setAcked] = useState(false);
+
+  const cancelCapture = () => { cancelRef.current = true; stopRing(); setPhase("idle"); setProg(0); };
   const ackSafe = async () => { try { await api.post(`/me/sos-events/${result.id}/ack`); setAcked(true); stopSosTracking(); } catch (_) {} };
-  useEffect(() => () => { stopSosTracking(); }, []);
+  useEffect(() => () => { stopRing(); stopSosTracking(); }, []);
+
+  const capturing = phase === "capturing" || phase === "sending";
+  const RING = 2 * Math.PI * 92; // r = 92
 
   return (
     <div className="glass" style={{ padding: 28, borderRadius: 20, textAlign: "center", position: "relative", overflow: "hidden" }} data-testid="sos-panel">
@@ -195,33 +211,40 @@ function Sos({ recipientCount, inFamily, onSent }) {
       <p className="muted" style={{ marginTop: 0, fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>{t("sf.sosTitle")}</p>
       <p className="muted" style={{ marginTop: 4, fontSize: 14 }}>{t("sf.sosSub")}</p>
 
-      {!arming ? (
+      <div style={{ position: "relative", width: 196, height: 196, margin: "18px auto 8px" }}>
+        {capturing && (
+          <svg width="196" height="196" viewBox="0 0 196 196" style={{ position: "absolute", inset: 0, transform: "rotate(-90deg)" }} aria-hidden="true">
+            <circle cx="98" cy="98" r="92" fill="none" stroke="rgba(255,255,255,.14)" strokeWidth="8" />
+            <circle cx="98" cy="98" r="92" fill="none" stroke={phase === "sending" ? "#34d399" : "#fff"} strokeWidth="8" strokeLinecap="round"
+              strokeDasharray={RING} strokeDashoffset={RING * (1 - prog)} style={{ transition: "stroke .3s" }} />
+          </svg>
+        )}
         <button
           data-testid="sos-trigger-btn"
-          onClick={beginArm}
-          disabled={busy}
+          onClick={start}
+          disabled={capturing}
           style={{
-            width: 168, height: 168, borderRadius: "50%", border: "none", cursor: "pointer", margin: "18px auto 8px",
+            position: "absolute", inset: 14, borderRadius: "50%", border: "none", cursor: capturing ? "default" : "pointer",
             display: "grid", placeItems: "center", color: "#fff", fontWeight: 900, fontSize: 26, letterSpacing: 2,
             background: "radial-gradient(circle at 30% 30%, #ff5a75, #e11d48)",
             boxShadow: "0 0 0 10px rgba(255,59,92,.12), 0 20px 50px -10px rgba(255,59,92,.7)",
-            animation: busy ? "none" : "sosPulse 1.8s ease-in-out infinite",
+            animation: capturing ? "none" : "sosPulse 1.8s ease-in-out infinite",
           }}>
-          {busy ? <Loader2 className="spin" size={40} /> : <><ShieldAlert size={44} /><span style={{ marginTop: 6, fontSize: 22 }}>SOS</span></>}
+          {phase === "sending" ? <Loader2 className="spin" size={40} />
+            : capturing ? (<div data-testid="sos-capturing" style={{ textAlign: "center" }}><Camera size={34} /><div style={{ fontSize: 12, opacity: .9, marginTop: 4 }}>{t("sf.sosCapturing")}</div></div>)
+            : (<><ShieldAlert size={44} /><span style={{ marginTop: 6, fontSize: 22 }}>SOS</span></>)}
         </button>
-      ) : (
-        <div style={{ margin: "18px auto 8px", width: 168, height: 168, borderRadius: "50%", display: "grid", placeItems: "center",
-          background: "radial-gradient(circle at 30% 30%, #ff5a75, #e11d48)", boxShadow: "0 0 0 10px rgba(255,59,92,.18)" }}>
-          <div style={{ textAlign: "center", color: "#fff" }} data-testid="sos-countdown">
-            <div style={{ fontSize: 56, fontWeight: 900, lineHeight: 1 }}>{count}</div>
-            <div style={{ fontSize: 12, opacity: .9 }}>{t("sf.sending")}</div>
-          </div>
-        </div>
-      )}
+      </div>
 
-      {arming ? (
-        <button className="btn btn-ghost" data-testid="sos-cancel-btn" onClick={cancel} style={{ margin: "6px auto 0" }}>{t("common.cancel")}</button>
-      ) : (
+      {capturing ? (
+        <>
+          <div style={{ display: "flex", gap: 16, justifyContent: "center", fontSize: 12.5, marginTop: 4 }} data-testid="sos-capture-status">
+            <span style={{ color: gotLoc ? "#34d399" : "var(--muted)", fontWeight: 600 }}>{gotLoc ? "✓" : "…"} {t("sf.sosLoc")}</span>
+            <span style={{ color: gotPhoto ? "#34d399" : "var(--muted)", fontWeight: 600 }}>{gotPhoto ? "✓" : "…"} {t("sf.sosPhoto")}</span>
+          </div>
+          <button className="btn btn-ghost" data-testid="sos-cancel-btn" onClick={cancelCapture} style={{ margin: "12px auto 0" }}>{t("common.cancel")}</button>
+        </>
+      ) : phase === "idle" && (
         <>
           <p className="muted" data-testid="sos-photo-note" style={{ fontSize: 12.5, marginTop: 10, display: "flex", alignItems: "flex-start", justifyContent: "center", gap: 6, maxWidth: 330, marginLeft: "auto", marginRight: "auto", textAlign: "left" }}>
             <Camera size={14} style={{ flexShrink: 0, marginTop: 1 }} /> <span>{t("sf.photoNote", { side: cam === "environment" ? t("sf.backLower") : t("sf.frontLower") })}</span>
